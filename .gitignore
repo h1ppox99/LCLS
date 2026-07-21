@@ -1,6 +1,6 @@
 # --- LCLS data mirror (large, not source) ---
 /calib/
-/xtc/
+/xtc
 /hdf5/
 /stats/
 /results/
