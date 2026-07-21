@@ -98,7 +98,7 @@ def extract(run: int = 475, max_events: int = 200, out: str | None = None) -> st
         i0 = None
 
     if out is None:
-        cache = os.path.join(ROOT, "src", "automask", "outputs", "cache")
+        cache = os.path.join(ROOT, "automask", "outputs", "cache")
         os.makedirs(cache, exist_ok=True)
         out = os.path.join(cache, f"xtc_run{run:04d}_frames.h5")
 
