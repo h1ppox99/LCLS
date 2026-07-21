@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "automask"
+version = "0.1.0"
+description = "Automatic Jungfrau1M detector masking for LCLS experiment xppl1016922 (XPP/SLAC)"
+requires-python = ">=3.7"
+# Runtime deps. psana is NOT here: it ships via the ana conda env (see psana_env.sh),
+# so install this package with `pip install -e . --no-deps` inside that env to avoid
+# pip touching numpy/scipy and breaking psana. The list mirrors requirements.txt.
+dependencies = [
+    "numpy",
+    "h5py",
+    "scipy",
+    "scikit-image",   # stats/blackhat.py
+    "tifffile",       # review.py TIFF input
+    "hydra-core",     # studies/sweep_hyperparameters.py
+    "pyFAI",          # optional azimuthal cross-check
+]
+
+[tool.setuptools.packages.find]
+include = ["automask*"]
+namespaces = false

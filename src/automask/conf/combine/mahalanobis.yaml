@@ -1,0 +1,6 @@
+name: mahalanobis
+params:
+  k: 3.0
+  pad: 2
+  keep_frac: 0.8
+  iters: 5

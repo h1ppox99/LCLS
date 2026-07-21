@@ -1,0 +1,42 @@
+# --- LCLS data mirror (large, not source) ---
+/calib/
+/xtc/
+/hdf5/
+/stats/
+/results/
+
+# --- automask frozen inputs & generated outputs (regenerable) ---
+src/automask/data/
+src/automask/outputs/
+automask/data/
+automask/outputs/
+/outputs/
+
+# --- external corpus downloads (regenerable via corpus.py --download) ---
+/data/.downloads/
+*.tar
+*.tar.gz
+*.cxi
+
+# --- lab reference heavy assets ---
+xpp_sharing/Image_data/
+
+# --- harness / editor ---
+.claude/
+.DS_Store
+
+# --- binary / data blobs anywhere ---
+*.xtc
+*.h5
+*.hdf5
+*.npy
+*.npz
+
+# --- python ---
+__pycache__/
+*.pyc
+*.egg-info/
+.ipynb_checkpoints/
+build/
+dist/
+.venv/

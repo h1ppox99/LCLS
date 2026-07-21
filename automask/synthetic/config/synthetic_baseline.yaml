@@ -1,0 +1,42 @@
+# Synthetic-artifact evaluation baseline (automask.synthetic).
+#
+# Run:  python -m automask.synthetic.evaluate --config automask/synthetic/config/synthetic_baseline.yaml
+#
+# image / mask may be dataset names (resolved via automask.dataset) or .npy paths.
+# masker is a "module:function" single-image masker (True == masked).
+# A scalar artifact param is used as-is; a [lo, hi] pair is sampled uniformly per
+# example (ints stay ints). 'center' is a fractional [row, col] passed through.
+
+image: sum_calib_run0475          # (1064, 1030) run-sum image
+mask: human_Mask                  # bool ground-truth, True == masked/invalid
+masker: automask.masking:mask_image
+output_dir: automask/outputs/synthetic
+seed: 0
+n_per_artifact: 3
+rotations: [0, 90, 180, 270]      # image + ground-truth rotated together (deg, x90)
+
+artifacts:
+  # 1. straight Gaussian streak
+  streak:
+    # center: [0.5, 0.5]         # optional fractional centre; omitted -> random
+    angle_deg: [0.0, 180.0]
+    width: [1.5, 3.5]            # Gaussian sigma (px)
+    amplitude_sigma: [6.0, 12.0]  # amplitude in robust-std units of the source
+    band_sigmas: 1.0             # injected footprint = within this many sigma
+
+  # 2. beam-stop-like shadow (elliptical or rectangular, size varies per example)
+  beamstop:
+    # center: [0.5, 0.5]         # optional fractional centre; omitted -> random
+    shape: random                # ellipse | rect | random (coin flip per example)
+    radius: [30.0, 100.0]        # row half-extent (px) -- varies the size
+    axis_ratio: [0.6, 1.6]       # col half-extent / row half-extent (1.0 = square/circle)
+    transmission: [0.05, 0.30]   # intensity multiplier inside the core
+    softness: 0.15               # soft-boundary ramp width (fraction of extent)
+
+  # 3. small beam-stop shadow -- half the radius -> ~1/4 the injected footprint.
+  beamstop_small:
+    shape: random
+    radius: [15.0, 50.0]         # half of the beamstop radius range
+    axis_ratio: [0.6, 1.6]
+    transmission: [0.05, 0.30]
+    softness: 0.15

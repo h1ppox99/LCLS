@@ -1,0 +1,4 @@
+name: variance
+params:
+  k: 3.5
+  mode: low

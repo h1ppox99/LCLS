@@ -1,0 +1,46 @@
+# Synthetic-artifact evaluation, PIPELINE mode (automask.synthetic).
+#
+# Run:  python -m automask.synthetic.evaluate --config automask/synthetic/config/synthetic_pipeline.yaml
+#
+# Unlike the "image" baseline (which scores a single-image module:function masker),
+# this mode corrupts a full run-level Sample (sumimg/umean/ustd) via the adapter and
+# scores the PRODUCTION Pipeline -- so the variance channel is present. Physics:
+#   * beamstop  -- multiplicative attenuation lowers mean AND variance -> the
+#                  low-variance / dark-speck detectors catch it (recall should jump
+#                  vs image mode, where one frame has no local contrast to key on).
+#   * streak    -- additive bright line raises mean but not the low-variance signal
+#                  the production stats key on -> expected to stay near-zero (out of
+#                  polarity). Kept in the sweep so that limitation is measured, not hidden.
+
+mode: pipeline
+runs: [389, 475]                  # both runs have a per-run ground-truth human mask
+combiner: union
+output_dir: automask/outputs/synthetic_pipeline
+seed: 0
+n_per_artifact: 3
+rotations: [0, 180]               # 90/270 transpose the (non-square) grid; 0/180 keep it
+
+artifacts:
+  # 1. straight Gaussian streak (additive; out of the production polarity)
+  streak:
+    angle_deg: [0.0, 180.0]
+    width: [1.5, 3.5]             # Gaussian sigma (px)
+    amplitude_sigma: [6.0, 12.0]  # amplitude in robust-std units
+    band_sigmas: 1.0              # injected footprint = within this many sigma
+
+  # 2. beam-stop-like shadow (multiplicative; in the production polarity)
+  beamstop:
+    shape: random                 # ellipse | rect | random (coin flip per example)
+    radius: [30.0, 100.0]         # row half-extent (px)
+    axis_ratio: [0.6, 1.6]        # col half-extent / row half-extent
+    transmission: [0.05, 0.30]    # intensity multiplier inside the core
+    softness: 0.15                # soft-boundary ramp width (fraction of extent)
+
+  # 3. small beam-stop shadow -- half the radius -> ~1/4 the injected footprint,
+  #    to cover small shadows the full-size sweep never produces.
+  beamstop_small:
+    shape: random
+    radius: [15.0, 50.0]          # half of the beamstop radius range
+    axis_ratio: [0.6, 1.6]
+    transmission: [0.05, 0.30]
+    softness: 0.15

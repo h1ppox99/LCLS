@@ -1,0 +1,22 @@
+# @package _global_
+# The live production recipe: TV variance + TV+pad window-median + TV+pad black-hat
+# on the geometry+calib floor, unioned. Regression anchor (matches masking.main()).
+# Use combine=weighted_sum to reproduce combo_sum instead.
+detectors:
+  - stat: variance
+    stat_params: {k: 3.5, mode: low}
+    field_reg: tv
+    field_reg_params: {weight: 4.0}
+    mask_reg: null
+  - stat: window_median
+    stat_params: {win: 21, k: 5.0, mode: low}
+    field_reg: tv
+    field_reg_params: {weight: 1.0}
+    mask_reg: pad
+    mask_reg_params: {pad: 2}
+  - stat: blackhat
+    stat_params: {radius: 5, k: 6.0, mode: high}
+    field_reg: tv
+    field_reg_params: {weight: 1.0}
+    mask_reg: pad
+    mask_reg_params: {pad: 2}

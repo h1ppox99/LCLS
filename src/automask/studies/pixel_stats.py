@@ -1,0 +1,135 @@
+#!/usr/bin/env python3
+"""
+pixel_stats.py -- per-pixel statistics for the Jungfrau1M masking dataset.
+
+Builds the mean and RMS (sqrt variance) maps that are the natural feature space
+for detector masking, and plots the RMS map next to the mean image and the
+reference masks.  Numpy-only (reads the frozen ./data arrays via dataset.py).
+
+Statistics come from the *cleaned* run sums (per-event outliers already dropped):
+    mean(x)     = Sum_dropped        / N
+    mean(x^2)   = Sum_dropped_square / N
+    var(x)      = mean(x^2) - mean(x)^2          (>= 0, verified)
+    rms(x)      = sqrt(var)
+where N is the number of events in the run (from data/manifest.json).
+
+Why RMS for masking:
+    * dead / disconnected pixels   -> rms ~ 0
+    * hot / noisy / unstable pixels-> rms very large
+    * good pixels                  -> rms in a narrow physical band
+  This is the same signal the calibration `pixel_status` is built from, and it
+  is far less sensitive to the per-ASIC additive offsets that dominate the raw
+  sum image.
+
+Outputs:
+    data/features/{mean,rms}_run<NNNN>_{panel,asm}.npy
+    images/rms_run<NNNN>_{gray,viridis}.png
+Run:  python pixel_stats.py     (from src/automask/)
+"""
+from __future__ import annotations
+import os, sys
+import numpy as np
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
+
+AUTOMASK = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # .../automask
+sys.path.insert(0, AUTOMASK)
+from dataset import load_image, load_mask, manifest
+
+FEAT = os.path.join(AUTOMASK, "data", "features")
+IMG_OUT = os.path.join(AUTOMASK, "outputs", "figures")
+os.makedirs(FEAT, exist_ok=True)
+os.makedirs(IMG_OUT, exist_ok=True)
+
+RUNS = (389, 475)
+OVERLAY = mcolors.ListedColormap([(1, 1, 1, 0), (1, 0, 0, 0.6)])
+
+
+def mean_rms(run: int, form: str):
+    """Per-pixel (mean, rms) from the cleaned sums; N = events in the run."""
+    N = manifest()["n_events"][str(run)]
+    sx = load_image(f"sum_calib_dropped_run{run:04d}", form).astype(np.float64)
+    sxx = load_image(f"sum_calib_dropped_square_run{run:04d}", form).astype(np.float64)
+    mean = sx / N
+    var = np.clip(sxx / N - mean**2, 0, None)   # clip float round-off below 0
+    return mean, np.sqrt(var)
+
+
+def summarize(run: int):
+    """Print per-pixel RMS statistics on the native panel geometry."""
+    mean, rms = mean_rms(run, "panel")
+    status = load_mask(f"statusMask_run{run:04d}", "panel")   # True == flagged bad
+    r = rms.ravel()
+    finite = r[np.isfinite(r)]
+    med = np.median(finite)
+    # simple physical bands relative to the median good-pixel RMS
+    dead = rms < 0.05 * med
+    hot = rms > 20 * med
+    print(f"\n--- run {run}  (N={manifest()['n_events'][str(run)]} events, "
+          f"panel {rms.shape}) ---")
+    print(f"  RMS   median {med:.3g}   p1 {np.percentile(finite,1):.3g}   "
+          f"p99 {np.percentile(finite,99):.3g}   max {finite.max():.3g}")
+    print(f"  candidate dead (<0.05*med): {dead.sum():6d} "
+          f"({100*dead.mean():.3f}%)")
+    print(f"  candidate hot  (>20*med)  : {hot.sum():6d} "
+          f"({100*hot.mean():.3f}%)")
+    cand = dead | hot
+    inter = int((cand & status).sum())
+    print(f"  reference statusMask bad  : {int(status.sum()):6d} "
+          f"({100*status.mean():.3f}%)")
+    print(f"  of statusMask-bad pixels, {100*inter/max(status.sum(),1):.1f}% "
+          f"are extreme-RMS (dead|hot) -> RMS is a strong bad-pixel signal")
+
+
+def save_features(run: int):
+    for form in ("panel", "asm"):
+        mean, rms = mean_rms(run, form)
+        np.save(os.path.join(FEAT, f"mean_run{run:04d}_{form}.npy"),
+                mean.astype(np.float32))
+        np.save(os.path.join(FEAT, f"rms_run{run:04d}_{form}.npy"),
+                rms.astype(np.float32))
+
+
+def plot_rms(run: int, cmap: str):
+    mean, rms = mean_rms(run, "asm")
+    status = load_mask(f"statusMask_run{run:04d}")            # asm
+    human = load_mask("human_Mask")
+
+    # robust display ranges from the real (non-gap) pixels
+    m = mean[mean != 0]
+    mvmin, mvmax = np.percentile(m, 30), np.percentile(m, 99)
+    rpos = rms[rms > 0]
+    rnorm = mcolors.LogNorm(vmin=np.percentile(rpos, 5),
+                            vmax=np.percentile(rpos, 99.5))
+
+    fig, ax = plt.subplots(1, 4, figsize=(20, 5.2))
+    ax[0].imshow(mean, vmin=mvmin, vmax=mvmax, cmap=cmap)
+    ax[0].set_title(f"run {run}  mean")
+    im = ax[1].imshow(rms, norm=rnorm, cmap="magma")
+    ax[1].set_title("RMS (sqrt variance, log)")
+    fig.colorbar(im, ax=ax[1], fraction=0.046, pad=0.04)
+    ax[2].imshow(rms, norm=rnorm, cmap="magma")
+    ax[2].imshow(status, cmap=OVERLAY)
+    ax[2].set_title(f"RMS + statusMask ({100*status.mean():.2f}%)")
+    ax[3].imshow(rms, norm=rnorm, cmap="magma")
+    ax[3].imshow(human, cmap=OVERLAY)
+    ax[3].set_title(f"RMS + human_Mask ({100*human.mean():.2f}%)")
+    for a in ax:
+        a.axis("off")
+    fig.suptitle(f"xppl1016922 run {run} — Jungfrau1M per-pixel statistics [{cmap}]",
+                 fontsize=13)
+    fig.tight_layout(rect=[0, 0, 1, 0.95])
+    out = os.path.join(IMG_OUT, f"rms_run{run:04d}_{cmap}.png")
+    fig.savefig(out, dpi=110, bbox_inches="tight")
+    plt.close(fig)
+    print(f"[saved] {out}")
+
+
+if __name__ == "__main__":
+    for run in RUNS:
+        summarize(run)
+        save_features(run)
+        for cmap in ("gray", "viridis"):
+            plot_rms(run, cmap)
