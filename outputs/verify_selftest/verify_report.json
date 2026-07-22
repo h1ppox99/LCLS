@@ -1,0 +1,70 @@
+{
+  "iteration": 1,
+  "overall": "fail",
+  "criteria": [
+    {
+      "id": "iq_rings",
+      "pass": true,
+      "measured": {
+        "367": {
+          "found_px": 367,
+          "contrast": 0.647
+        },
+        "531": {
+          "found_px": 531,
+          "contrast": 0.0244
+        },
+        "734": {
+          "found_px": 737,
+          "contrast": 0.1034
+        },
+        "847": {
+          "found_px": 846,
+          "contrast": 2.0251
+        }
+      },
+      "threshold": {
+        "delta_px_max": 5,
+        "contrast_min": {
+          "367": 0.3,
+          "531": 0.01,
+          "734": 0.045,
+          "847": 1.0
+        }
+      },
+      "note": "all rings present with per-ring contrast"
+    },
+    {
+      "id": "iq_background",
+      "pass": false,
+      "measured": {
+        "neg_bin_fraction": 0.00351,
+        "rel_noise": 0.01494,
+        "bump_max_sigma": 212076.05
+      },
+      "threshold": {
+        "neg_bin_fraction_max": 0.02,
+        "rel_noise_max": 0.03,
+        "bump_max_sigma_max": 10.0
+      },
+      "note": "background violation"
+    },
+    {
+      "id": "iq_coverage",
+      "pass": true,
+      "measured": {
+        "panel_mask_fraction": 0.07851501739066578,
+        "valid_bins": 1350
+      },
+      "threshold": {
+        "panel_mask_fraction_max": 0.25,
+        "valid_bins_min": 1200
+      },
+      "note": "coverage in bounds"
+    }
+  ],
+  "feedback": {
+    "target_phase": "mask",
+    "message": "background: neg_bin_fraction=0.00351 (max 0.02), rel_noise=0.01494 (max 0.03), bump_max_sigma=212076.05 (max 10.0)"
+  }
+}

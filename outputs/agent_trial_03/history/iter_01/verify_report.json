@@ -1,0 +1,31 @@
+{
+  "iteration": 1,
+  "overall": "pass",
+  "criteria": [
+    {
+      "id": "iq_quality",
+      "pass": true,
+      "measured": {
+        "rings_found": [367, 531, 735, 846],
+        "ring_deltas_px": [0, 0, 1, -1],
+        "ring_contrasts": {"367": 0.6499, "531": 0.0291, "734": 0.096, "847": 2.0177},
+        "neg_bin_fraction": 0.0,
+        "rel_noise": 0.01198,
+        "bump_max_sigma": 4.73,
+        "panel_mask_fraction": 0.0638,
+        "valid_bins": 1352
+      },
+      "threshold": {
+        "ring_delta_px_max": 5,
+        "ring_contrast_min": {"367": 0.30, "531": 0.010, "734": 0.045, "847": 1.0},
+        "neg_bin_fraction_max": 0.02,
+        "rel_noise_max": 0.03,
+        "bump_max_sigma_max": 10.0,
+        "panel_mask_fraction_max": 0.25,
+        "valid_bins_min": 1200
+      },
+      "note": "All 4 LaB6 rings found within ±1 px of expected positions; all contrasts well above minima (weakest ring 734 at 0.096 vs 0.045 threshold); background clean with zero negative bins, low noise (0.012), and no parasitic bumps (4.73σ); mask fraction 6.4% with 1352 valid radial bins."
+    }
+  ],
+  "feedback": null
+}

@@ -1,0 +1,67 @@
+{
+  "iteration": 1,
+  "overall": "pass",
+  "criteria": [
+    {
+      "id": "iq_quality",
+      "pass": true,
+      "sub_checks": {
+        "C1_ring_presence": {
+          "pass": true,
+          "measured": {
+            "367": {"found": true, "found_px": 367, "delta_px": 0},
+            "531": {"found": true, "found_px": 531, "delta_px": 0},
+            "734": {"found": true, "found_px": 735, "delta_px": 1},
+            "847": {"found": true, "found_px": 847, "delta_px": 0}
+          },
+          "threshold": {"ring_delta_px_max": 5, "all_four_found": true},
+          "note": "All 4 LaB6 rings found within ±5 px of expected positions (max delta = 1 px at ring 734)."
+        },
+        "C2_ring_contrast": {
+          "pass": true,
+          "measured": {
+            "367": 0.6551,
+            "531": 0.0303,
+            "734": 0.0994,
+            "847": 1.4707
+          },
+          "threshold": {
+            "367": 0.30,
+            "531": 0.010,
+            "734": 0.045,
+            "847": 1.0
+          },
+          "note": "All ring contrasts exceed per-ring minimums; weakest margin is ring 734 at 0.0994 vs 0.045 threshold (2.2x headroom)."
+        },
+        "C3_background_sanity": {
+          "pass": true,
+          "measured": {
+            "neg_bin_fraction": 0.0,
+            "rel_noise": 0.01289,
+            "bump_max_sigma": 4.68
+          },
+          "threshold": {
+            "neg_bin_fraction_max": 0.02,
+            "rel_noise_max": 0.03,
+            "bump_max_sigma_max": 10.0
+          },
+          "note": "Background is clean: zero negative bins, rel_noise 0.013 well below 0.03, bump_max_sigma 4.68 well below 10.0 — consistent with validated runs (4.3–4.7)."
+        },
+        "C4_coverage": {
+          "pass": true,
+          "measured": {
+            "panel_mask_fraction": 0.0586,
+            "valid_bins": 1354
+          },
+          "threshold": {
+            "panel_mask_fraction_max": 0.25,
+            "valid_bins_min": 1200
+          },
+          "note": "Mask covers only 5.9% of panel (well under 25% cap); 1354 valid radial bins (above 1200 minimum), consistent with validated runs (1335–1352)."
+        }
+      },
+      "note": "All four sub-checks (ring presence, ring contrast, background sanity, coverage) pass with comfortable margins."
+    }
+  ],
+  "feedback": null
+}

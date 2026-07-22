@@ -1,0 +1,62 @@
+{
+  "0_zero_dead_dilation": {
+    "pixels": 75583,
+    "pct_of_image": 6.897,
+    "detail": {
+      "gap_pixels_exact_zero": 47369,
+      "negative_pixels": 15937,
+      "gap_dilated": 59713
+    }
+  },
+  "1_status_bad": {
+    "pixels": 2597,
+    "pct_of_image": 0.237,
+    "total_raw_bad": 4565,
+    "mapped_to_assembled": 4565
+  },
+  "2_beamstop_shadow": {
+    "pixels": 31121,
+    "pct_of_image": 2.84,
+    "row_range": "970-1006"
+  },
+  "3_asic_boundary": {
+    "pixels": 0,
+    "pct_of_image": 0.0,
+    "note": "double-bright ASIC-boundary columns; mostly absorbed by layer-0 dilation",
+    "cols": [
+      255,
+      258,
+      513,
+      516,
+      771,
+      774
+    ]
+  },
+  "4_azimuthal_residual_blob": {
+    "pixels": 3750,
+    "pct_of_image": 0.342,
+    "components_kept": 1,
+    "refinement": [
+      {
+        "component": 0,
+        "status": "refined",
+        "center": [
+          686.4271617146054,
+          389.58236023569106
+        ],
+        "sigma_true": [
+          12.639825487628856,
+          13.052081874864703
+        ],
+        "amplitude_frac": 0.7507206781870449,
+        "contour_radius_px": 2.6926943294227823,
+        "ellipse_area_px": 3757
+      }
+    ]
+  },
+  "_total": {
+    "pixels": 113051,
+    "pct_of_image": 10.316,
+    "pct_of_panels": 6.264
+  }
+}

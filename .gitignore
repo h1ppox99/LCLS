@@ -1,0 +1,20 @@
+# Secrets — never commit
+.env
+
+# Raw XTC data (~1.4 GB each, exceeds GitHub limits)
+*.xtc
+
+# Large intermediate arrays
+npy/frames_raw.npy
+
+# Generated data arrays in outputs (reports/plots are kept)
+outputs/**/*.npy
+outputs/**/*.npz
+outputs/**/*.h5
+
+# Python
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store

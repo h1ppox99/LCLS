@@ -1,0 +1,11 @@
+{
+  "n_events": 3201,
+  "streams": [
+    "xppl1016922-r0475-s00-c00.xtc",
+    "xppl1016922-r0475-s01-c00.xtc",
+    "xppl1016922-r0475-s02-c00.xtc",
+    "xppl1016922-r0475-s03-c00.xtc",
+    "xppl1016922-r0475-s04-c00.xtc"
+  ],
+  "elapsed_s": 125.3
+}

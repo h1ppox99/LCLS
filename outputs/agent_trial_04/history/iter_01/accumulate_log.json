@@ -1,0 +1,35 @@
+{
+  "n_events": 3201,
+  "kept": 2746,
+  "rejected": 455,
+  "ipm2_offset": 4.5,
+  "weights_range": [
+    1.0,
+    1.0
+  ],
+  "ratio_of_sums_divisor": 17180155.125,
+  "sum_total_keV": -216641042701.67633,
+  "elapsed_s": 34.9,
+  "decisions_echo": {
+    "selection": {
+      "require_xray_on": true,
+      "low_ipm_exclusion": {
+        "run": true,
+        "threshold": 200.0,
+        "rationale": "Near-zero pile of 398 shots (12.5% of xray-on) with ipm2c<200; photon_px median 41 vs 7205 for normal shots \u2014 noise-dominated with no usable diffraction signal. Exclusion mandatory: normalization is planned and 321+ of these shots would have near-zero or negative monitor values. Threshold at 200 per operator hint (gap between pile and main body); mid-band 200-3000 retained."
+      },
+      "high_ipm_exclusion": {
+        "run": true,
+        "percentile": 99.0,
+        "rationale": "Operator hint: apply p99 cut to match human baseline convention. 32 shots above p99 (ipm2>31221) dropped. Linearity evidence: det/ipm2c ratio shows slight upturn at top bin (23.6 vs ~20.8 mid-range) but no droop \u2014 evidence for harm is weak. Cut applied for baseline compatibility, not nonlinearity correction."
+      }
+    },
+    "normalization": {
+      "run": true,
+      "monitor": "ipm2",
+      "form": "ratio_of_sums",
+      "offset": "auto",
+      "rationale": "Chronological-bin CV drops 14.79%->3.14% with ratio_of_sums (r(det,ipm2c)=0.893). Per-shot division is contraindicated: CV rises to 16.20% because the 200-3000 mid-band (retained per operator hint) sits below the linear plateau where det/ipm2c ratio is biased +50% (29.8 at p0-p10 vs 20.8 at p50-p75). Ratio-of-sums avoids per-shot division and is robust to this nonlinearity. Offset auto = 4.50 (median of 24 xray-off shots)."
+    }
+  }
+}

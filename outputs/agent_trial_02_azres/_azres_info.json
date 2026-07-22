@@ -1,0 +1,19 @@
+{
+  "skill": "skills/masking/05_azimuthal_residual.md",
+  "params": {
+    "sigma_smooth": 8.0,
+    "z_seed": 5.0,
+    "z_grow": 3.0,
+    "min_size": 150,
+    "off_ring_only": true,
+    "ring_margin": 60,
+    "r_min": 100.0,
+    "beam_center": [
+      992.0,
+      35.0
+    ]
+  },
+  "layer_pixels": 905,
+  "base_mask_pixels": 164506,
+  "new_mask_pixels": 165411
+}

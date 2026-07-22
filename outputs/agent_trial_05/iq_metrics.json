@@ -1,0 +1,129 @@
+{
+  "beam_center": [
+    992.0,
+    35.0
+  ],
+  "geometry": {
+    "dist_m": 0.19,
+    "pixel_m": 7.5e-05,
+    "lambda_A": 1.2915
+  },
+  "expected_rings_px": [
+    367,
+    531,
+    734,
+    847
+  ],
+  "rings": [
+    {
+      "expected_px": 367,
+      "found": true,
+      "found_px": 367,
+      "delta_px": 0,
+      "I_peak": 657.7498736560672,
+      "I_bg_local": 397.4100364721819,
+      "contrast": 0.6551
+    },
+    {
+      "expected_px": 531,
+      "found": true,
+      "found_px": 531,
+      "delta_px": 0,
+      "I_peak": 390.0718745078321,
+      "I_bg_local": 378.6179268294061,
+      "contrast": 0.0303
+    },
+    {
+      "expected_px": 734,
+      "found": true,
+      "found_px": 735,
+      "delta_px": 1,
+      "I_peak": 389.74247481676565,
+      "I_bg_local": 354.4901551055881,
+      "contrast": 0.0994
+    },
+    {
+      "expected_px": 847,
+      "found": true,
+      "found_px": 847,
+      "delta_px": 0,
+      "I_peak": 798.1609328191709,
+      "I_bg_local": 323.05003860852156,
+      "contrast": 1.4707
+    }
+  ],
+  "background": {
+    "windows_px": [
+      [
+        150,
+        330
+      ],
+      [
+        410,
+        500
+      ],
+      [
+        570,
+        700
+      ],
+      [
+        770,
+        820
+      ],
+      [
+        880,
+        1000
+      ]
+    ],
+    "n_bins": 570,
+    "neg_bin_fraction": 0.0,
+    "rel_noise": 0.01289,
+    "bump_max_sigma": 4.68,
+    "median_level": 342.19
+  },
+  "coverage": {
+    "unmasked_pixels": 987093,
+    "valid_bins": 1354,
+    "bins_total": 1405,
+    "panel_mask_fraction": 0.058612313564147096
+  },
+  "azimuthal_uniformity": {
+    "grid": {
+      "dr_px": 15,
+      "dtheta_deg": 2.0,
+      "min_px": 60,
+      "z_seed": 4.5,
+      "z_grow": 2.5,
+      "min_cells": 2,
+      "ring_margin_px": 25
+    },
+    "cell_sigma_adu": 19.8,
+    "n_offring_clusters": 3,
+    "n_positive": 0,
+    "n_negative": 3,
+    "max_offring_abs_z": 5.69,
+    "clusters": [
+      {
+        "cells": 7,
+        "r_px": 281.8,
+        "theta_deg": -44.7,
+        "max_abs_z": 5.22,
+        "sign": -1
+      },
+      {
+        "cells": 13,
+        "r_px": 907.5,
+        "theta_deg": -49.0,
+        "max_abs_z": 4.53,
+        "sign": -1
+      },
+      {
+        "cells": 4,
+        "r_px": 1001.2,
+        "theta_deg": -25.0,
+        "max_abs_z": 5.69,
+        "sign": -1
+      }
+    ]
+  }
+}

@@ -1,0 +1,90 @@
+{
+  "beam_center": [
+    992.0,
+    35.0
+  ],
+  "geometry": {
+    "dist_m": 0.19,
+    "pixel_m": 7.5e-05,
+    "lambda_A": 1.2915
+  },
+  "expected_rings_px": [
+    367,
+    531,
+    734,
+    847
+  ],
+  "rings": [
+    {
+      "expected_px": 367,
+      "found": true,
+      "found_px": 367,
+      "delta_px": 0,
+      "I_peak": 656.2313377197555,
+      "I_bg_local": 397.7357435822163,
+      "contrast": 0.6499
+    },
+    {
+      "expected_px": 531,
+      "found": true,
+      "found_px": 531,
+      "delta_px": 0,
+      "I_peak": 390.3957985698913,
+      "I_bg_local": 379.3686613954861,
+      "contrast": 0.0291
+    },
+    {
+      "expected_px": 734,
+      "found": true,
+      "found_px": 735,
+      "delta_px": 1,
+      "I_peak": 390.8066167470658,
+      "I_bg_local": 356.56687655775795,
+      "contrast": 0.096
+    },
+    {
+      "expected_px": 847,
+      "found": true,
+      "found_px": 846,
+      "delta_px": -1,
+      "I_peak": 982.393374905481,
+      "I_bg_local": 325.5458211627839,
+      "contrast": 2.0177
+    }
+  ],
+  "background": {
+    "windows_px": [
+      [
+        150,
+        330
+      ],
+      [
+        410,
+        500
+      ],
+      [
+        570,
+        700
+      ],
+      [
+        770,
+        820
+      ],
+      [
+        880,
+        1000
+      ]
+    ],
+    "n_bins": 570,
+    "neg_bin_fraction": 0.0,
+    "rel_noise": 0.01198,
+    "bump_max_sigma": 4.73,
+    "median_level": 345.05
+  },
+  "coverage": {
+    "unmasked_pixels": 981697,
+    "valid_bins": 1352,
+    "bins_total": 1405,
+    "panel_mask_fraction": 0.06375846286923574
+  }
+}

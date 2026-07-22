@@ -1,0 +1,42 @@
+{
+  "layer1_core_le0": 63306,
+  "layer1_dilation_added": 56325,
+  "layer1_total": 119631,
+  "layer2_status_total": 4565,
+  "layer2_new": 2162,
+  "layer3_shadow_rows": "972-1005",
+  "layer3_shadow_n_rows": 34,
+  "layer3_shadow_band_cells": 35020,
+  "layer3_extreme_pixels": 547,
+  "layer3_total": 60713,
+  "layer3_new": 37987,
+  "layer4_edge_cols": [
+    0,
+    255,
+    258,
+    512,
+    513,
+    516,
+    771,
+    774,
+    1029
+  ],
+  "layer4_edge_rows": [
+    0,
+    255,
+    258,
+    513,
+    550,
+    805,
+    808,
+    1063
+  ],
+  "layer4_total": 17744,
+  "layer4_new": 4726,
+  "final_total": 164506,
+  "final_fraction_of_image": 0.1501076720928535,
+  "panel_pixels_masked": 117162,
+  "panel_pixels_total": 1048576,
+  "panel_fraction_masked": 0.11173439025878906,
+  "unmasked_panel_pixels": 931414
+}

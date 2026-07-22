@@ -1,0 +1,124 @@
+{
+  "iteration": 1,
+  "overall": "pass",
+  "criteria": [
+    {
+      "id": "iq_quality",
+      "pass": true,
+      "sub_checks": [
+        {
+          "name": "C1_ring_presence_367",
+          "pass": true,
+          "measured": {"found": true, "found_px": 367, "delta_px": 0},
+          "threshold": {"ring_delta_px_max": 5},
+          "note": "Ring 367 found at 367 px (delta=0); within ±5 px tolerance."
+        },
+        {
+          "name": "C1_ring_presence_531",
+          "pass": true,
+          "measured": {"found": true, "found_px": 531, "delta_px": 0},
+          "threshold": {"ring_delta_px_max": 5},
+          "note": "Ring 531 found at 531 px (delta=0); within ±5 px tolerance."
+        },
+        {
+          "name": "C1_ring_presence_734",
+          "pass": true,
+          "measured": {"found": true, "found_px": 735, "delta_px": 1},
+          "threshold": {"ring_delta_px_max": 5},
+          "note": "Ring 734 found at 735 px (delta=1); within ±5 px tolerance."
+        },
+        {
+          "name": "C1_ring_presence_847",
+          "pass": true,
+          "measured": {"found": true, "found_px": 846, "delta_px": -1},
+          "threshold": {"ring_delta_px_max": 5},
+          "note": "Ring 847 found at 846 px (delta=-1); within ±5 px tolerance."
+        },
+        {
+          "name": "C2_ring_contrast_367",
+          "pass": true,
+          "measured": {"contrast": 0.6511},
+          "threshold": {"ring_contrast_min": 0.30},
+          "note": "Contrast 0.6511 >= 0.30 required; strong first-order ring."
+        },
+        {
+          "name": "C2_ring_contrast_531",
+          "pass": true,
+          "measured": {"contrast": 0.0299},
+          "threshold": {"ring_contrast_min": 0.010},
+          "note": "Contrast 0.0299 >= 0.010 required; weak but clearly above threshold."
+        },
+        {
+          "name": "C2_ring_contrast_734",
+          "pass": true,
+          "measured": {"contrast": 0.0953},
+          "threshold": {"ring_contrast_min": 0.045},
+          "note": "Contrast 0.0953 >= 0.045 required; well above minimum."
+        },
+        {
+          "name": "C2_ring_contrast_847",
+          "pass": true,
+          "measured": {"contrast": 2.0126},
+          "threshold": {"ring_contrast_min": 1.0},
+          "note": "Contrast 2.0126 >= 1.0 required; very strong ring."
+        },
+        {
+          "name": "C3_neg_bin_fraction",
+          "pass": true,
+          "measured": {"neg_bin_fraction": 0.0},
+          "threshold": {"neg_bin_fraction_max": 0.02},
+          "note": "Zero negative bins in background windows; no unmasked shadow/dead regions."
+        },
+        {
+          "name": "C3_rel_noise",
+          "pass": true,
+          "measured": {"rel_noise": 0.012},
+          "threshold": {"rel_noise_max": 0.03},
+          "note": "Relative noise 0.012 <= 0.03 required; matches validated-run level (0.012)."
+        },
+        {
+          "name": "C3_bump_max_sigma",
+          "pass": true,
+          "measured": {"bump_max_sigma": 4.71},
+          "threshold": {"bump_max_sigma_max": 10.0},
+          "note": "Max excursion 4.71 sigma <= 10.0 required; consistent with ordinary weak structure (validated: 4.3-4.7)."
+        },
+        {
+          "name": "C4_panel_mask_fraction",
+          "pass": true,
+          "measured": {"panel_mask_fraction": 0.0626},
+          "threshold": {"panel_mask_fraction_max": 0.25},
+          "note": "Mask fraction 0.063 <= 0.25 required; well within bounds (validated: 0.06-0.11)."
+        },
+        {
+          "name": "C4_valid_bins",
+          "pass": true,
+          "measured": {"valid_bins": 1354},
+          "threshold": {"valid_bins_min": 1200},
+          "note": "1354 valid bins >= 1200 required; full radial range usable (validated: 1335-1352)."
+        }
+      ],
+      "measured": {
+        "rings_found": 4,
+        "ring_deltas_px": [0, 0, 1, -1],
+        "ring_contrasts": [0.6511, 0.0299, 0.0953, 2.0126],
+        "neg_bin_fraction": 0.0,
+        "rel_noise": 0.012,
+        "bump_max_sigma": 4.71,
+        "panel_mask_fraction": 0.0626,
+        "valid_bins": 1354
+      },
+      "threshold": {
+        "ring_delta_px_max": 5,
+        "ring_contrast_min": {"367": 0.30, "531": 0.010, "734": 0.045, "847": 1.0},
+        "neg_bin_fraction_max": 0.02,
+        "rel_noise_max": 0.03,
+        "bump_max_sigma_max": 10.0,
+        "panel_mask_fraction_max": 0.25,
+        "valid_bins_min": 1200
+      },
+      "note": "All 13 sub-checks pass. Rings at correct positions with strong contrast; background is clean (zero negative bins, low noise, no parasitic bumps); coverage is excellent."
+    }
+  ],
+  "feedback": null
+}

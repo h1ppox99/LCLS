@@ -1,0 +1,32 @@
+{
+  "zero_dead_dilated": {
+    "new_pixels": 75654,
+    "raw_pixels": 75654,
+    "new_pct_of_image": 6.9032411124899635
+  },
+  "status_bad": {
+    "new_pixels": 2593,
+    "raw_pixels": 4565,
+    "new_pct_of_image": 0.23660486166873496
+  },
+  "beamstop_shadow": {
+    "new_pixels": 31114,
+    "raw_pixels": 38111,
+    "new_pct_of_image": 2.8390758449521862
+  },
+  "asic_boundary": {
+    "new_pixels": 3963,
+    "raw_pixels": 16688,
+    "new_pct_of_image": 0.36161398642236664
+  },
+  "azimuthal_blob": {
+    "new_pixels": 899,
+    "raw_pixels": 899,
+    "new_pct_of_image": 0.082031535148551
+  },
+  "TOTAL": {
+    "pixels": 114223,
+    "pct_of_image": 10.422567340681802,
+    "pct_of_panel": 6.375846286923574
+  }
+}

@@ -1,0 +1,88 @@
+{
+  "iteration": 99,
+  "overall": "fail",
+  "criteria": [
+    {
+      "id": "iq_rings",
+      "pass": true,
+      "measured": {
+        "367": {
+          "found_px": 367,
+          "contrast": 0.6511
+        },
+        "531": {
+          "found_px": 531,
+          "contrast": 0.0299
+        },
+        "734": {
+          "found_px": 735,
+          "contrast": 0.0953
+        },
+        "847": {
+          "found_px": 846,
+          "contrast": 2.0126
+        }
+      },
+      "threshold": {
+        "delta_px_max": 5,
+        "contrast_min": {
+          "367": 0.3,
+          "531": 0.01,
+          "734": 0.045,
+          "847": 1.0
+        }
+      },
+      "note": "all rings present with per-ring contrast"
+    },
+    {
+      "id": "iq_background",
+      "pass": true,
+      "measured": {
+        "neg_bin_fraction": 0.0,
+        "rel_noise": 0.012,
+        "bump_max_sigma": 4.71
+      },
+      "threshold": {
+        "neg_bin_fraction_max": 0.02,
+        "rel_noise_max": 0.03,
+        "bump_max_sigma_max": 10.0
+      },
+      "note": "background sane"
+    },
+    {
+      "id": "iq_coverage",
+      "pass": true,
+      "measured": {
+        "panel_mask_fraction": 0.06264072992157749,
+        "valid_bins": 1354
+      },
+      "threshold": {
+        "panel_mask_fraction_max": 0.25,
+        "valid_bins_min": 1200
+      },
+      "note": "coverage in bounds"
+    },
+    {
+      "id": "azimuthal_uniformity",
+      "pass": false,
+      "measured": {
+        "n_positive": 0,
+        "n_negative": 2,
+        "max_offring_abs_z": 5.62,
+        "screening_report_present": false
+      },
+      "threshold": {
+        "id": "azimuthal_uniformity",
+        "positive_offring_clusters_max": 0,
+        "negative_offring_clusters_max": 4,
+        "screening_report_file": "_itheta_screen.json",
+        "require_clusters_key": true
+      },
+      "note": "uniformity/screening violation"
+    }
+  ],
+  "feedback": {
+    "target_phase": "mask",
+    "message": "screening report _itheta_screen.json missing/invalid: run skills/masking/06_azimuthal_sector_itheta.md on the summed image, write the report per its contract, classify every cluster (positive compact -> mask via method 05; negative block-aligned -> document as calibration systematics in mask_rationale.md), then re-apply the mask"
+  }
+}

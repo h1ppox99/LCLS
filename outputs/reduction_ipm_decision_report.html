@@ -1,0 +1,1146 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reduction Agent — ipm2 Selection Decisions, Full Conversation (Run 475)</title>
+<style>
+  :root {
+    --ink:#1a2233; --mut:#5b6575; --line:#dfe4ec; --bg:#f4f6fa;
+    --think:#f7f3e8; --thinkb:#d9c893; --agent:#eef4ff; --agentb:#4a7bd0;
+    --tool:#1e2430; --res:#f2f7f2; --resb:#69a56e; --hard:#c25555;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font:15px/1.62 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; }
+  .wrap { max-width:1000px; margin:0 auto; padding:34px 22px 80px; }
+  h1 { font-size:25px; line-height:1.3; margin:0 0 6px; }
+  h2 { font-size:19px; margin:44px 0 12px; padding-bottom:6px; border-bottom:2px solid var(--line); }
+  h3 { font-size:16px; margin:0 0 4px; }
+  .sub { color:var(--mut); margin:0 0 22px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:10px; padding:18px 20px; margin:14px 0; }
+  .answer { border-left:5px solid var(--agentb); }
+  .answer .yes { font-weight:700; color:#2c5cad; }
+  table { border-collapse:collapse; width:100%; font-size:13.5px; }
+  th,td { border:1px solid var(--line); padding:7px 10px; text-align:left; vertical-align:top; }
+  th { background:#eef1f6; }
+  td code, p code, li code { background:#eef1f6; border-radius:4px; padding:1px 5px;
+        font:12.5px ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .chip { display:inline-block; background:#2c5cad; color:#fff; border-radius:20px;
+           padding:1px 10px; font-size:12px; font-weight:600; margin-right:6px; }
+  .chip.skip { background:#8a93a5; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  @media (max-width:760px) { .grid2 { grid-template-columns:1fr; } }
+  pre { background:#10151f; color:#dce4f2; border-radius:8px; padding:12px 14px; overflow-x:auto;
+         font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace; margin:8px 0 2px; white-space:pre; }
+  .toolres pre, .prompt pre { background:#f7f9fc; color:#22304a; border:1px solid var(--line); }
+  details summary { cursor:pointer; color:#2c5cad; font-size:13px; margin:6px 0 2px; }
+  .ev { background:#fff; border:1px solid var(--line); border-radius:10px; padding:12px 16px; margin:12px 0; }
+  .evhead { display:flex; align-items:center; gap:10px; margin-bottom:6px; }
+  .evno { color:#a0a8b8; font:11px ui-monospace,Menlo,monospace; }
+  .ts { color:#a0a8b8; font:11px ui-monospace,Menlo,monospace; }
+  .tag { font-size:11px; font-weight:700; letter-spacing:.4px; text-transform:uppercase;
+          border-radius:4px; padding:2px 8px; }
+  .tag-think { background:var(--think); color:#8a6d1a; border:1px solid var(--thinkb); }
+  .tag-agent { background:var(--agent); color:#2c5cad; }
+  .tag-tool  { background:#252c3b; color:#9fc3ff; }
+  .tag-res   { background:var(--res); color:#3d7a44; border:1px solid #cfe3d0; }
+  .tag-final { background:#2c5cad; color:#fff; }
+  .thinking { background:var(--think); border-color:var(--thinkb); }
+  .think-body { font-style:italic; color:#5d5237; white-space:pre-wrap; font-size:13.5px; }
+  .atext { border-left:4px solid var(--agentb); }
+  .atext-body { white-space:pre-wrap; }
+  .tooluse { border-left:4px solid #39415a; }
+  .toolres { border-left:4px solid var(--resb); background:#fbfdfb; }
+  .toolres.err { border-left-color:var(--hard); }
+  .final { border:2px solid var(--agentb); background:var(--agent); }
+  .fp { font:12.5px ui-monospace,Menlo,monospace; color:#4a5468; background:#eef1f6;
+         border-radius:5px; padding:4px 8px; display:inline-block; }
+  .phase { margin:34px 0 4px; padding:10px 16px; background:#e8edf7; border-radius:8px;
+            border-left:5px solid #2c5cad; }
+  .phase p { margin:2px 0 0; color:var(--mut); font-size:13.5px; }
+  .prompt { border-left:4px solid #7a4ac0; }
+  .tag-user { background:#f0e9fb; color:#7a4ac0; }
+  .note { font-size:13px; color:var(--mut); }
+  .prov { font:12.5px ui-monospace,Menlo,monospace; }
+</style></head><body>
+
+<div class="wrap">
+<h1>Reduction Agent — Low-ipm / High-ipm Selection Decisions<br>Full Conversation Record</h1>
+<p class="sub">LCLS run 475 · Jungfrau1M · LaB6 &nbsp;|&nbsp; trial <code>agent_trial_02</code> &nbsp;|&nbsp;
+XTC_Agent npy pipeline, step 1 (reduction phase)</p>
+
+<div class="card answer">
+<h3>Is this content present in the agent's conversation input / output? — <span class="yes">Yes.</span></h3>
+<p>Every element of the low-ipm and high-ipm decision — the method definitions, the measured
+evidence, the chosen parameters, and the rationale — appears explicitly in the recorded
+conversation stream. Where each piece lives:</p>
+<table>
+<tr><th>Content</th><th>Where it appears in the conversation I/O</th></tr>
+<tr><td><b>Task &amp; method selection instruction</b></td>
+<td><b>Input prompt</b> (shown below). It names the two skill files
+<code>01a_low_ipm_exclusion.md</code> and <code>01b_high_ipm_exclusion.md</code> and requires an
+evidence-backed run/skip + parameter decision for each. Note: the prompt itself is not stored in
+<code>events.jsonl</code> — it is generated by <code>reduction_prompt()</code> in
+<code>agent/entrypoint.py</code>; it is reproduced verbatim below from that source.</td></tr>
+<tr><td><b>Method definitions (decision rules, thresholds)</b></td>
+<td><b>Tool results</b> of the agent's <code>Read</code> calls (events #02–#07): the full skill-file
+texts, including the operator hint “exclude only the near-zero pile: threshold ipm2c &lt; 200”.</td></tr>
+<tr><td><b>Measured evidence</b></td>
+<td><b>Tool calls + results</b> (events #14–#27): ipm2 offset = 4.5, near-zero pile = 398 shots
+(12.5%), photon_px 41 vs 7205, decile linearity table, p99 = 31,221, CV tests
+13.02% → 16.61% (per-shot) vs 13.02% → 3.13% (ratio_of_sums).</td></tr>
+<tr><td><b>Chosen parameters</b></td>
+<td><b>Agent output</b>: the <code>Write</code> tool call producing <code>decisions.json</code>
+(event #32) carries <code>threshold: 200.0</code>, <code>percentile: 99.0</code>,
+<code>form: "ratio_of_sums"</code> with one-line rationales quoting the measured numbers.</td></tr>
+<tr><td><b>Final decision statement</b></td>
+<td><b>Agent output</b>: the closing assistant message (events #40–#41) restates all three
+decisions with their evidence; also echoed into <code>accumulate_log.json → decisions_echo</code>
+by deterministic step 2.</td></tr>
+</table>
+</div>
+
+<h2>1 · The decisions and parameters this trial produced</h2>
+<div class="card">
+<table>
+<tr><th>Decision</th><th>Outcome</th><th>Parameter</th><th>Rationale (verbatim from decisions.json)</th></tr>
+<tr><td><b>Low-ipm exclusion</b><br><span class="note">skills/selection/01a</span></td>
+<td><span class="chip">RUN</span></td>
+<td><code>threshold = 200.0</code> (offset-corrected ipm2c)</td>
+<td>Near-zero pile of 398 shots (12.5% of xray-on) with ipm2c&lt;200; photon_px median 41 vs 7205 normal; normalization planned so exclusion mandatory</td></tr>
+<tr><td><b>High-ipm exclusion</b><br><span class="note">skills/selection/01b</span></td>
+<td><span class="chip">RUN</span></td>
+<td><code>percentile = 99.0</code> (cut at ipm2 &gt; 31,221)</td>
+<td>Baseline convention p99 cut: 32 shots dropped (ipm2&gt;31221); ratio ~24 at top vs ~21 mid-range (slight upturn); matches human baseline</td></tr>
+<tr><td><b>Flux normalization</b><br><span class="note">skills/normalization/01</span></td>
+<td><span class="chip">RUN</span></td>
+<td><code>monitor = ipm2</code>, <code>form = ratio_of_sums</code>, <code>offset = auto</code> (4.5)</td>
+<td>Chrono-bin CV 13.02%-&gt;3.13% with ratio_of_sums; per-shot division harmful (13%-&gt;16.6%) due to biased ratio below ipm2c~3000; r(det,ipm2c)=0.89; ratio_of_sums chosen because 200-3000 mid-band kept per operator hint</td></tr>
+</table>
+<p class="note">Net keep-mask: 3201 total − 24 xray-off − 399 low-ipm − 32 high-ipm =
+<b>2746 shots kept (85.8%)</b> — verified by the agent against <code>accumulate_log.json</code>.</p>
+</div>
+
+<div class="card">
+<h3>Cross-trial contrast: the other agent run decided differently</h3>
+<p class="note">The same prompt, evidence, and skill files were given to
+<code>agent_trial_01</code>. Both trials agree on the evidence, but weigh the operator hint vs.
+the plateau rule differently — exactly the decision-stability question
+<code>test_stability.py</code> measures.</p>
+<div class="grid2">
+<div>
+<b>agent_trial_02 (this transcript)</b>
+<ul>
+<li>Low-ipm: <b>RUN, threshold 200</b> (follows the operator hint; keeps the 200–3000 mid-band)</li>
+<li>High-ipm: <b>RUN, p99</b> (baseline-compatibility)</li>
+<li>Normalization: <b>ratio_of_sums</b> (reconciles keeping mid-band shots with the linearity rule)</li>
+</ul>
+</div>
+<div>
+<b>agent_trial_01</b>
+<ul>
+<li>Low-ipm: <b>RUN, threshold 3000</b> — “Near-zero pile of 398 shots at ipm2c&lt;200 (median photon_px=41 vs 8815 normal); normalization planned so threshold raised to linear-plateau start at 3000 (0.81x median 3695); 1781 of 3177 xray-on shots kept.”</li>
+<li>High-ipm: <b>SKIP</b> — “det_total/ipm2c ratio flat across deciles (20.5–22.0); top-1% ratio 23.6 within scatter of bulk (std 12.7); no droop or gain switching evidence — cutting discards highest-SNR frames for no benefit.”</li>
+<li>Normalization: <b>per_shot</b> — “Chrono-bin CV 9.33%-&gt;3.42% with normalization; det~ipm2c r=0.895; per-shot division safe because low-ipm cut at 3000 ensures all kept shots on linear plateau.”</li>
+</ul>
+</div>
+</div>
+</div>
+
+<h2>2 · Input — the prompt the agent received</h2>
+<div class="ev prompt"><div class="evhead"><span class="tag tag-user">input prompt (harness → agent)</span>
+<span class="note">reconstructed verbatim from <code>agent/entrypoint.py :: reduction_prompt()</code></span></div>
+<pre>You are the REDUCTION agent for LCLS run 475 (Jungfrau1M, LaB6).
+Working directory: /Users/carrot/Desktop/Summer2026/XTC_Agent
+
+Inputs (already produced by deterministic step 0 — do NOT touch the .xtc files):
+- npy/shot_table.npz  — per-shot scalars; columns documented in npy/README_npy.md
+- npy/frames_raw.npy  — raw frames memmap; step 2 will read it for you
+
+Your job — make TWO decisions, each governed by its skill file. Read the skill
+files first; they define the evidence to gather and the decision rules:
+1. skills/selection/01a_low_ipm_exclusion.md   (run or skip? threshold?)
+2. skills/selection/01b_high_ipm_exclusion.md  (run or skip? percentile?)
+3. skills/normalization/01_per_shot_flux_ipm2.md (normalize or not? form?)
+
+Gather the evidence with small Python scripts (Bash tool) against shot_table.npz
+ONLY — never load frames_raw.npy fully into memory. Then:
+
+4. Write /Users/carrot/Desktop/Summer2026/XTC_Agent/outputs/agent_trial_02/decisions.json exactly matching the schema documented at the
+   top of pipeline/step2_accumulate.py (read it). Every decision must carry a
+   one-line "rationale" quoting the numbers you measured.
+5. Run:  python3 pipeline/step2_accumulate.py --out-dir /Users/carrot/Desktop/Summer2026/XTC_Agent/outputs/agent_trial_02
+6. Verify accumulate_log.json is sane (kept-count matches your decisions) and
+   state your final decisions in one short paragraph.
+
+Autonomy contract: skipping a cut or skipping normalization is allowed — but only
+as an explicit, evidence-backed entry in decisions.json. No silent defaults.</pre></div>
+
+<h2>3 · Output — the full recorded conversation (42 events, reduction phase)</h2>
+<p class="note">Reproduced verbatim from <code>outputs/agent_trial_02/events.jsonl</code> (types:
+extended thinking, assistant text, tool calls, tool results, final result). Nothing related to the
+ipm decisions has been omitted; long file dumps are collapsed but complete inside the fold-outs.</p>
+
+<div class="phase"><h3>Phase 1 · Reading the governing skill files and the schema</h3><p>The agent begins by loading the three decision-governing skill files, the shot-table documentation, and the decisions.json schema. This is where the low-ipm and high-ipm method definitions enter the conversation as tool results.</p></div>
+<div class="ev thinking"><div class="evhead"><span class="evno">#00</span><span class="ts">19:47:13 UTC</span><span class="tag tag-think">extended thinking</span></div><div class="think-body">Let me break down the task:
+
+1. Read skill files to understand decision rules
+2. Read the shot_table.npz data and npy/README_npy.md
+3. Read pipeline/step2_accumulate.py for the decisions.json schema
+4. Gather evidence with Python scripts
+5. Write decisions.json
+6. Run the accumulate step
+7. Verify results
+
+Let me start by reading all the necessary files in parallel.</div></div>
+<div class="ev atext"><div class="evhead"><span class="evno">#01</span><span class="ts">19:47:14 UTC</span><span class="tag tag-agent">agent → user</span></div><div class="atext-body">I'll start by reading all the skill files, the NPY README, and the step2 pipeline script in parallel to understand the decision rules and schema.</div></div>
+<div class="ev tooluse"><div class="evhead"><span class="evno">#02</span><span class="ts">19:47:14 UTC</span><span class="tag tag-tool">tool call · Read</span></div><div class="fp">/Users/carrot/Desktop/Summer2026/XTC_Agent/skills/selection/01a_low_ipm_exclusion.md</div></div>
+<div class="ev toolres"><div class="evhead"><span class="evno">#03</span><span class="ts">19:47:14 UTC</span><span class="tag tag-res">tool result</span></div><details><summary>show full result (5,070 chars)</summary><pre>1	---
+2	name: xray-selection-low-ipm-exclusion
+3	description: Low-flux (small ipm2) shot exclusion — an AGENT-DECIDED step. The agent examines the ipm2 distribution and downstream plan, then decides whether to exclude near-zero-flux shots and where to place the threshold. Mandatory before any per-shot flux normalization (division by a near-zero, noise-dominated monitor value explodes); optional but recommended for plain sums (pure SNR gain). Grounded in Run0475 evidence.
+4	---
+5	
+6	# Selection · Method 1a — Low-ipm2 exclusion (agent decides)
+7	
+8	**Level:** whole shots. **Part of:** [selection](README.md).
+9	**Split from** the old `01_shot_flux_quality.md`: low-side and high-side cuts are separate
+10	decisions with different physics — do not couple them.
+11	
+12	## The decision the agent owns
+13	
+14	&gt; **Run this exclusion or not? And if yes, where does the threshold go?**
+15	&gt;
+16	&gt; This is not a fixed pipeline stage. The agent gathers the evidence below, decides, and
+17	&gt; records the decision with its rationale. Skipping is a valid outcome — but must be an
+18	&gt; *explicit, recorded* choice, never a default.
+19	
+20	## Principle
+21	
+22	Shots with near-zero incident flux carry detector readout noise but almost no photons.
+23	Adding them to a sum adds variance without signal; dividing by their monitor value
+24	(normalization) amplifies noise unboundedly, because at zero beam the monitor reading is
+25	its own electronic noise — small, often **negative**.
+26	
+27	## Evidence to gather before deciding (all cheap, smalldata-only)
+28	
+29	1. **ipm2 histogram** — look for a near-zero pile separated by a gap from the main body.
+30	2. **`lightStatus/xray`** — dropped (x-ray off) shots always go; the question is the
+31	   remaining "nominally on but near-zero" shots.
+32	3. **Monitor zero offset** — median ipm2 over x-ray-off shots (Run0475: +4.5, i.e. 0.12 %
+33	   of the median; subtract before any thresholding or ratio).
+34	4. **Photon-yield spot check** — photon pixels (7–12 keV) per shot for a few low vs
+35	   normal shots.
+36	5. **Downstream plan** — will any step divide by a per-shot monitor (normalization,
+37	   weighting)? If yes, this exclusion stops being optional.
+38	
+39	## Evidence from Run0475 (why the default is RUN)
+40	
+41	394 shots (12.3 % of the run) had xray on but ipm2 &lt; 200:
+42	
+43	| Metric | low group (394) | normal group (394 sampled) |
+44	|---|---|---|
+45	| photon pixels / shot (median) | **41** (mostly fake — fixed hot-ish pixels) | **6448** |
+46	| total photon yield | 0.73 % of the normal group | — |
+47	| sample_diode | median **−0.0002**; ≤ 0 in **321/394** | +0.0019 |
+48	| group mean I(q) | no rings; systematic negative high-q tail (pedestal drift) | LaB6 rings |
+49	
+50	Removing them: signal −0.3 %, noise variance −12.3 % → **~6 % SNR gain for free**, and it
+51	removes a *systematic* (q-dependent) contamination, not just white noise.
+52	
+53	## Decision rules
+54	
+55	**Decide RUN when any of these hold**
+56	- The histogram shows a near-zero pile (it does on Run0475);
+57	- any downstream step divides by ipm2 or sample_diode → **mandatory** (321/394 low shots
+58	  have diode ≤ 0; one such shot can destroy a whole bin);
+59	- per-shot ratios/weights will be formed → threshold should move up to the start of the
+60	  monitor's **linear plateau** (Run0475: det/ipm2 ratio is flat only above ipm2 ≈ 3000;
+61	  below, the ratio is biased +50 %).
+62	
+63	**Decide SKIP when all of these hold**
+64	- Distribution is unimodal with no near-zero pile, AND
+65	- the only product is an unweighted diagnostic sum (shape barely affected), AND
+66	- statistics are so scarce that a 12 % frame loss matters more than a 6 % SNR gain.
+67	
+68	**Threshold placement (if RUN)**
+69	- Plain sums: anywhere in the gap between pile and body (Run0475: 200 — insensitive).
+70	- Before per-shot division: start of the linear plateau (Run0475: ≈ 3000 ≈ 0.8×median).
+71	- Always threshold on offset-corrected ipm2.
+72	
+73	## Operator hint — CURRENT ROUND (overrides threshold placement)
+74	
+75	&gt; For this round, exclude **only the near-zero pile: threshold ipm2c &lt; 200**
+76	&gt; (the gap between pile and body). Do **not** raise the threshold to the linear
+77	&gt; plateau — keep the 200–3000 mid-band shots in the dataset. If you also decide
+78	&gt; to normalize, reconcile the form yourself: per-shot division outside the
+79	&gt; plateau violates the normalization skill's linearity rule, so consider
+80	&gt; `ratio_of_sums` (or justify why not). Record that reasoning.
+81	
+82	## Record the decision
+83	
+84	Log: run/skip, threshold, shots kept/rejected (counts and %), and the one-line rationale
+85	(e.g. "near-zero pile of 418 shots at &lt;200; normalization planned → excluded"). Silent
+86	truncation is the enemy of reproducibility.
+87	
+88	## Feeds
+89	
+90	[normalization § per-shot-flux](../normalization/01_per_shot_flux_ipm2.md) (which must not
+91	see excluded shots) · [selection § correlation gate](05_correlation_gate.md).
+92	
+93	## Companion
+94	
+95	High-side cut is a separate decision: [01b_high_ipm_exclusion.md](01b_high_ipm_exclusion.md).
+96	</pre></details></div>
+<div class="ev tooluse"><div class="evhead"><span class="evno">#04</span><span class="ts">19:47:14 UTC</span><span class="tag tag-tool">tool call · Read</span></div><div class="fp">/Users/carrot/Desktop/Summer2026/XTC_Agent/skills/selection/01b_high_ipm_exclusion.md</div></div>
+<div class="ev toolres"><div class="evhead"><span class="evno">#05</span><span class="ts">19:47:15 UTC</span><span class="tag tag-res">tool result</span></div><details><summary>show full result (4,495 chars)</summary><pre>1	---
+2	name: xray-selection-high-ipm-exclusion
+3	description: High-flux (large ipm2) shot exclusion — an AGENT-DECIDED step. The agent checks for detector/monitor nonlinearity at the bright end (ratio droop, gain-mode switching, saturation) and decides whether to cut the bright tail and at what percentile. On Run0475 the evidence for harm is weak (linear to p99, no signal-driven gain switching), so this cut is protective / baseline-compatibility rather than evidence-driven — skipping is a legitimate outcome.
+4	---
+5	
+6	# Selection · Method 1b — High-ipm2 exclusion (agent decides)
+7	
+8	**Level:** whole shots. **Part of:** [selection](README.md).
+9	**Split from** the old `01_shot_flux_quality.md`: the bright-side cut has *different physics*
+10	(saturation/nonlinearity) than the low-side cut (noise amplification) and deserves its own
+11	decision.
+12	
+13	## The decision the agent owns
+14	
+15	&gt; **Cut the bright tail or not? And if yes, at which percentile / absolute level?**
+16	&gt;
+17	&gt; Unlike the low cut, the case for this one is *conditional*: it protects against
+18	&gt; nonlinearity that may or may not be present. The agent must look for actual evidence of
+19	&gt; harm before spending statistics — the brightest shots carry the most photons.
+20	
+21	## Principle
+22	
+23	Very bright shots can exceed the linear range of (a) the detector front-end — pixels start
+24	switching gain mode (G0→G1) mid-signal, (b) the intensity monitor itself, or (c) downstream
+25	assumptions (e.g. one-photon counting). If any of that happens, the brightest shots distort
+26	the flux-referenced result and should be dropped (or handled specially). If none of it
+27	happens, cutting them only throws away the highest-SNR frames.
+28	
+29	## Evidence to gather before deciding
+30	
+31	1. **Ratio flatness at the top**: bin `det_total / ipm2` by ipm2; a droop in the top bins
+32	   = detector or monitor rolling over. (Run0475: flat at ~22×10⁻⁶ from ipm2 ≈ 3700 all the
+33	   way to the p99 cut — **no droop**.)
+34	2. **Gain-mode switching on bright shots**: fraction of pixels with gain bits ≠ G0 among
+35	   the brightest shots. (Run0475: switching pixels are a fixed set of 566 stuck/bad pixels;
+36	   even 12 597-photon shots stay in G0 — LaB6 signal is ~10⁻² photons/pixel, orders below
+37	   the ~34-photon G0 headroom.)
+38	3. **Monitor spec/saturation**: does ipm2 clip or curve at the observed maxima?
+39	4. **Baseline compatibility**: the human baseline (Taekeun) rejected the top 1 % (`p99`)
+40	   before its 100-shot calibration sum. Reproducing that baseline requires the same cut.
+41	
+42	## Decision rules
+43	
+44	**Decide RUN when any of these hold**
+45	- The det/ipm2 ratio droops in the top percentiles (nonlinearity observed);
+46	- signal-driven gain switching appears on bright shots (not just stuck pixels);
+47	- the monitor saturates below the brightest observed values;
+48	- the task is to **reproduce the human baseline** → use its exact convention (p99).
+49	
+50	**Decide SKIP when all of these hold**
+51	- Linearity holds to the top (Run0475: it does);
+52	- no signal-driven gain switching (Run0475: none);
+53	- statistics are precious and the product benefits from the brightest frames.
+54	
+55	**Cut placement (if RUN)**
+56	- Percentile form (`p99`, `p99.5`) adapts to run brightness; absolute form is better when
+57	  the physical saturation level is known. Record which convention and why.
+58	
+59	## Run0475 verdict (worked example)
+60	
+61	Evidence-driven answer: **SKIP is defensible** (32 shots above p99 are linear and clean);
+62	baseline-compatibility answer: **RUN at p99** to match Taekeun's sum. The agent must pick
+63	based on the goal of the current task and *say so* in the decision log — this is exactly the
+64	kind of judgment this skill set exists to make explicit.
+65	
+66	## Operator hint — CURRENT ROUND (overrides the run/skip choice)
+67	
+68	&gt; For this round, **RUN the high cut at percentile 99** (drop shots above the
+69	&gt; 99th percentile of ipm2 among x-ray-on shots), regardless of the linearity
+70	&gt; evidence — this matches the human baseline convention. Still record the
+71	&gt; linearity numbers you measured alongside the decision.
+72	
+73	## Record the decision
+74	
+75	Log: run/skip, convention (percentile/absolute), shots rejected, and rationale, e.g.
+76	"reproducing baseline → p99 (32 shots dropped)" or "linearity verified to max → no cut".
+77	
+78	## Companion
+79	
+80	Low-side cut is a separate decision: [01a_low_ipm_exclusion.md](01a_low_ipm_exclusion.md).
+81	</pre></details></div>
+<div class="ev tooluse"><div class="evhead"><span class="evno">#06</span><span class="ts">19:47:15 UTC</span><span class="tag tag-tool">tool call · Read</span></div><div class="fp">/Users/carrot/Desktop/Summer2026/XTC_Agent/skills/normalization/01_per_shot_flux_ipm2.md</div></div>
+<div class="ev toolres"><div class="evhead"><span class="evno">#07</span><span class="ts">19:47:15 UTC</span><span class="tag tag-res">tool result</span></div><details><summary>show full result (5,294 chars)</summary><pre>1	---
+2	name: xray-normalization-per-shot-flux
+3	description: Per-shot incident-flux (ipm2) normalization — an AGENT-DECIDED step. The agent runs a cheap bin-consistency test (chronological bins, CV with vs without normalization) and decides whether to normalize, with which monitor, and in which form (per-shot division vs ratio-of-sums). Evidence on Run0475 - bin-to-bin CV 6.03%→3.55%; decision was NORMALIZE. Mandatory prerequisite - low-ipm exclusion. Includes the harmonic-vs-arithmetic-mean reference subtlety.
+4	---
+5	
+6	# Normalization · Method 1 — Per-shot incident-flux (ipm2) normalization (agent decides)
+7	
+8	**Acts on:** shot ↔ shot. **Part of:** [normalization](README.md). **The load-bearing one.**
+9	
+10	## The decision the agent owns
+11	
+12	&gt; **Normalize or not? With which monitor? In which form?**
+13	&gt;
+14	&gt; Do not apply this step by reflex, and do not skip it by reflex. The agent runs the
+15	&gt; evidence test below (seconds, smalldata-only), decides, and records the decision.
+16	&gt; On Run0475 the evidence said **normalize** — but the point of this file is the test,
+17	&gt; not the answer.
+18	
+19	## Principle
+20	
+21	The FEL's per-shot incident flux `I0` fluctuates ~100 % shot-to-shot and drifts over
+22	minutes. The physical observable is scattering *per incident photon*, so each shot is
+23	divided by its own flux before combining:
+24	
+25	```
+26	n_i  = ipm2c_i / ⟨ipm2c⟩_kept        # offset-corrected, dimensionless, mean 1
+27	S(q) = Σ_i f_i(q) / n_i              # per-shot division   (needs linear-plateau shots only)
+28	S(q) = Σ_i f_i(q) / Σ_i n_i          # ratio-of-sums form  (robust to monitor noise)
+29	```
+30	
+31	`ipm2c = ipm2 − offset`, offset = median ipm2 over x-ray-off shots (Run0475: +4.5).
+32	
+33	## The evidence test (run this before deciding)
+34	
+35	1. Keep only shots passing [01a low-ipm exclusion](../selection/01a_low_ipm_exclusion.md)
+36	   at the linear-plateau threshold.
+37	2. Split kept shots into ~8 **chronological** bins (mimics how delay scans sample time).
+38	3. Compute each bin's mean I(q); compare bin-to-bin CV of total intensity, with vs
+39	   without dividing each shot by `n_i`.
+40	4. Sanity anchors: correlation of per-shot detector total with the monitor; ratio
+41	   flatness across the intensity range.
+42	
+43	### Run0475 results (worked example)
+44	
+45	| Test | unnormalized | normalized by ipm2 |
+46	|---|---|---|
+47	| chronological bins (the realistic case) | CV 6.03 % | **3.55 %** |
+48	| intensity-sorted bins (pure-flux control) | 61.5 % | 2.15 % |
+49	| random bins (drift hidden — underestimates value) | 2.99 % | 2.42 % |
+50	| per-shot CV, brighter half | 63 % | 45 % (identical to sample_diode's 45 %) |
+51	
+52	det~ipm2 r = 0.841 ≈ det~sample_diode r = 0.840; Poisson floor for these bins ≈ 0.09 %,
+53	so the removed spread was systematic drift, not counting noise.
+54	**Decision on Run0475: NORMALIZE** (flux-driven half of the drift removed; residual
+55	~3.5 % is pointing/spectral drift that no monitor division can remove — that residual is
+56	what pump-on/off referencing is for).
+57	
+58	## Decision rules
+59	
+60	**Decide NORMALIZE when any of these hold**
+61	- The bin test shows a material CV drop (it did: 6.0 → 3.5 %);
+62	- subsets of shots will be compared (delay bins, on/off groups, run-to-run) —
+63	  for pump–probe this is **mandatory**, difference signals are ≪ the 6 % drift;
+64	- monitor correlates with the detector total (r ≳ 0.8) over the kept shots.
+65	
+66	**Decide SKIP when all of these hold**
+67	- The only product is a single static sum used for geometry/masking (normalization
+68	  leaves the shape unchanged — per-pixel corr 0.985 on Run0475);
+69	- or the monitor is broken/uncorrelated on this run (dividing by a bad monitor *injects*
+70	  noise — this is why the test comes first, and why skipping must be possible).
+71	
+72	**Form and monitor choice (if normalizing)**
+73	- Shots restricted to the monitor's linear plateau → per-shot division is safe;
+74	  otherwise prefer ratio-of-sums.
+75	- ipm2 (upstream) vs sample_diode: statistically equivalent here (45 % vs 45 %), but
+76	  ipm2 is upstream of the sample — safe for pump–probe, whereas a post-sample diode can
+77	  divide out the pump-induced signal itself. Default: ipm2.
+78	
+79	## Hard prerequisite
+80	
+81	[Low-ipm exclusion](../selection/01a_low_ipm_exclusion.md) **must run first**: near-zero
+82	shots have monitor readings that are pure noise (often negative — 321/394 low shots on
+83	Run0475 had sample_diode ≤ 0); dividing by them destroys bins. A guard against NaN/0 is
+84	not sufficient — it does not catch −0.0002.
+85	
+86	## Reference-convention subtlety (important)
+87	
+88	`Σwf/Σw` with `w = ⟨ipm2⟩/ipm2` is algebraically referenced to the **harmonic-mean** flux;
+89	a plain mean references the **arithmetic mean**. On Run0475 this is a constant ×0.63
+90	rescale (HM/AM = 5213/8264), *not* a physical difference — multiply by AM/HM to compare.
+91	
+92	## Record the decision
+93	
+94	Log: normalize yes/no, monitor, form, offset used, kept-shot definition, the bin-test
+95	numbers that justified it, and the residual CV (hand it to the QA/differencing stage).
+96	
+97	## Repo
+98	
+99	`weighted_sum_v2.py`, `Normalization_method.md`, `Normalization_方法与对比.md`,
+100	`run475_weighted_sum.npy`, `run475_pershot_weights.npy`.
+101	</pre></details></div>
+<div class="ev tooluse"><div class="evhead"><span class="evno">#08</span><span class="ts">19:47:15 UTC</span><span class="tag tag-tool">tool call · Read</span></div><div class="fp">/Users/carrot/Desktop/Summer2026/XTC_Agent/npy/README_npy.md</div></div>
+<div class="ev toolres"><div class="evhead"><span class="evno">#09</span><span class="ts">19:47:16 UTC</span><span class="tag tag-res">tool result</span></div><pre>1	# npy/ — deterministic XTC conversion (step 0 output)
+2	
+3	- `frames_raw.npy` — (3201, 2, 512, 1024) uint16 **memmap** (`np.load(..., mmap_mode='r')`). Raw Jungfrau words: high 2 bits = gain mode (00 G0 / 01 G1 / 11 G2), low 14 bits = ADC. Calibrate with `(adc - calib/ped.npy[mode]) / calib/gain.npy[mode]` -&gt; keV (see pipeline/xtclib.py).
+4	- `shot_table.npz` — per-shot columns, global time order (same order as frames):
+5	  fiducial, sec, nsec, stream, ipm2 (XPP-SB2-BMMON sum; offset NOT subtracted),
+6	  xray (1 = beam, from EVR code 137/162), laser (1 = on, code 90/91),
+7	  det_total (summed calibrated keV over good pixels),
+8	  photon_px (# good pixels in 7-12 keV), nswitch (# non-G0 pixels, stuck-pixel proxy).
+9	- ipm2 zero offset: estimate as median ipm2 over xray==0 shots.
+10	</pre></div>
+<div class="ev tooluse"><div class="evhead"><span class="evno">#10</span><span class="ts">19:47:16 UTC</span><span class="tag tag-tool">tool call · Read</span></div><div class="fp">/Users/carrot/Desktop/Summer2026/XTC_Agent/pipeline/step2_accumulate.py</div></div>
+<div class="ev toolres"><div class="evhead"><span class="evno">#11</span><span class="ts">19:47:16 UTC</span><span class="tag tag-res">tool result</span></div><details><summary>show full result (5,495 chars)</summary><pre>1	#!/usr/bin/env python3
+2	"""Step 2 (deterministic executor): apply the agent's decisions.json, then accumulate.
+3	
+4	Reads outputs/&lt;run&gt;/decisions.json (written by the reduction agent), builds the
+5	keep-mask and per-shot weights from npy/shot_table.npz, streams frames from the
+6	npy/frames_raw.npy memmap, calibrates each kept frame, and writes:
+7	
+8	  outputs/&lt;run&gt;/sum_calib.npy      (2, 512, 1024) float64 — (weighted) calib sum
+9	  outputs/&lt;run&gt;/sum_assembled.npy  (1064, 1030)  float64 — psana geometry via calib/ix,iy
+10	  outputs/&lt;run&gt;/sum.png            robust-scaled preview for the mask agent
+11	  outputs/&lt;run&gt;/accumulate_log.json  counts + settings, the provenance record
+12	
+13	decisions.json schema (all fields required; "rationale" free text):
+14	{
+15	  "selection": {
+16	    "require_xray_on": true,
+17	    "low_ipm_exclusion":  {"run": true,  "threshold": 3000.0, "rationale": "..."},
+18	    "high_ipm_exclusion": {"run": false, "percentile": 99.0,  "rationale": "..."}
+19	  },
+20	  "normalization": {
+21	    "run": true, "monitor": "ipm2", "form": "per_shot",   # or "ratio_of_sums" / no-op
+22	    "offset": "auto",                                      # or a number
+23	    "rationale": "..."
+24	  }
+25	}
+26	"""
+27	
+28	from __future__ import annotations
+29	
+30	import argparse
+31	import json
+32	import sys
+33	import time
+34	from pathlib import Path
+35	
+36	import numpy as np
+37	
+38	sys.path.insert(0, str(Path(__file__).resolve().parent))
+39	from xtclib import calibrate
+40	
+41	ROOT = Path(__file__).resolve().parent.parent
+42	
+43	
+44	def main() -&gt; int:
+45	    ap = argparse.ArgumentParser()
+46	    ap.add_argument("--out-dir", required=True, help="outputs/&lt;run&gt; dir holding decisions.json")
+47	    args = ap.parse_args()
+48	    out = Path(args.out_dir)
+49	    dec = json.loads((out / "decisions.json").read_text())
+50	
+51	    t = np.load(ROOT / "npy/shot_table.npz")
+52	    ipm2, xray = t["ipm2"], t["xray"]
+53	    N = len(ipm2)
+54	
+55	    sel = dec["selection"]
+56	    keep = np.ones(N, bool)
+57	    if sel.get("require_xray_on", True):
+58	        keep &amp;= xray == 1
+59	
+60	    off_cfg = dec["normalization"].get("offset", "auto")
+61	    offset = float(np.median(ipm2[xray == 0])) if off_cfg == "auto" else float(off_cfg)
+62	    ipm2c = ipm2 - offset
+63	
+64	    low = sel["low_ipm_exclusion"]
+65	    if low["run"]:
+66	        keep &amp;= ipm2c &gt; float(low["threshold"])
+67	    high = sel["high_ipm_exclusion"]
+68	    if high["run"]:
+69	        keep &amp;= ipm2 &lt; np.percentile(ipm2[xray == 1], float(high["percentile"]))
+70	
+71	    norm = dec["normalization"]
+72	    weights = np.ones(N)
+73	    if norm["run"]:
+74	        if norm.get("monitor", "ipm2") != "ipm2":
+75	            print(f"[warn] monitor {norm['monitor']} not in shot_table; falling back to ipm2",
+76	                  file=sys.stderr)
+77	        mono = ipm2c.copy()
+78	        bad = keep &amp; ~(mono &gt; 0)
+79	        if bad.any():                       # normalization must never divide by &lt;=0
+80	            keep &amp;= mono &gt; 0
+81	            print(f"[guard] dropped {int(bad.sum())} kept shots with monitor &lt;= 0", file=sys.stderr)
+82	        if norm.get("form", "per_shot") == "per_shot":
+83	            weights[keep] = mono[keep].mean() / mono[keep]
+84	        # ratio_of_sums: accumulate plain, record divisor in the log instead
+85	
+86	    ped = np.load(ROOT / "calib/ped.npy")
+87	    gain = np.load(ROOT / "calib/gain.npy")
+88	    frames = np.load(ROOT / "npy/frames_raw.npy", mmap_mode="r")
+89	
+90	    t0 = time.time()
+91	    s = np.zeros((2, 512, 1024))
+92	    kept_idx = np.where(keep)[0]
+93	    for k, i in enumerate(kept_idx):
+94	        s += weights[i] * calibrate(np.asarray(frames[i]), ped, gain)
+95	        if (k + 1) % 500 == 0:
+96	            print(f"[accumulate] {k+1}/{len(kept_idx)} ({time.time()-t0:.0f}s)", flush=True)
+97	
+98	    np.save(out / "sum_calib.npy", s)
+99	    ix = np.load(ROOT / "calib/ix.npy").astype(np.intp)
+100	    iy = np.load(ROOT / "calib/iy.npy").astype(np.intp)
+101	    img = np.zeros((1064, 1030))
+102	    img[ix, iy] = s
+103	    np.save(out / "sum_assembled.npy", img)
+104	
+105	    import matplotlib
+106	    matplotlib.use("Agg")
+107	    import matplotlib.pyplot as plt
+108	    nz = img[img != 0]
+109	    fig, ax = plt.subplots(figsize=(9, 9.5))
+110	    im = ax.imshow(img, cmap="viridis", vmin=0, vmax=np.percentile(nz, 99.5),
+111	                   interpolation="nearest")
+112	    ax.set_title(f"{out.name}: sum of {len(kept_idx)} kept shots"
+113	                 f" ({'normalized' if norm['run'] else 'plain'})")
+114	    plt.colorbar(im, ax=ax, shrink=0.85, label="summed keV")
+115	    fig.savefig(out / "sum.png", dpi=110, bbox_inches="tight")
+116	
+117	    log = {
+118	        "n_events": int(N),
+119	        "kept": int(keep.sum()),
+120	        "rejected": int(N - keep.sum()),
+121	        "ipm2_offset": offset,
+122	        "weights_range": [float(weights[keep].min()), float(weights[keep].max())]
+123	        if keep.any() else None,
+124	        "ratio_of_sums_divisor": float(ipm2c[keep].sum())
+125	        if norm["run"] and norm.get("form") == "ratio_of_sums" else None,
+126	        "sum_total_keV": float(s.sum()),
+127	        "elapsed_s": round(time.time() - t0, 1),
+128	        "decisions_echo": dec,
+129	    }
+130	    (out / "accumulate_log.json").write_text(json.dumps(log, indent=2))
+131	    print(f"[done] kept {log['kept']}/{N}, sum written to {out}", flush=True)
+132	    return 0
+133	
+134	
+135	if __name__ == "__main__":
+136	    raise SystemExit(main())
+137	</pre></details></div>
+<div class="phase"><h3>Phase 2 · Evidence gathering from shot_table.npz</h3><p>Small Python scripts against the per-shot scalar table: ipm2 offset, near-zero pile, high-end linearity (det_total/ipm2c by decile), p99 tail, and the chronological-bin normalization test.</p></div>
+<div class="ev thinking"><div class="evhead"><span class="evno">#12</span><span class="ts">19:47:21 UTC</span><span class="tag tag-think">extended thinking</span></div><div class="think-body">Now I have all the context. Let me gather the evidence from shot_table.npz. I need to:
+
+1. Examine the ipm2 distribution (histogram, near-zero pile)
+2. Check xray-on/off counts
+3. Compute ipm2 zero offset
+4. Check for high-end nonlinearity (det_total/ipm2 ratio vs ipm2)
+5. Run the chronological bin consistency test for normalization
+
+Let me write Python scripts to gather all this evidence. I'll run multiple scripts in parallel.</div></div>
+<div class="ev atext"><div class="evhead"><span class="evno">#13</span><span class="ts">19:47:22 UTC</span><span class="tag tag-agent">agent → user</span></div><div class="atext-body">Now I have all the skill files and schema. Let me gather the evidence. I'll run several diagnostic scripts in parallel against `shot_table.npz`.</div></div>
+<div class="ev tooluse"><div class="evhead"><span class="evno">#14</span><span class="ts">19:47:37 UTC</span><span class="tag tag-tool">tool call · Bash</span></div><pre>python3 -c "
+import numpy as np
+t = np.load('npy/shot_table.npz')
+print('=== Shot table columns ===')
+print(list(t.keys()))
+print()
+
+ipm2 = t['ipm2']
+xray = t['xray']
+N = len(ipm2)
+print(f'Total shots: {N}')
+print(f'X-ray ON:  {(xray==1).sum()}')
+print(f'X-ray OFF: {(xray==0).sum()}')
+
+# ipm2 offset
+off_shots = ipm2[xray == 0]
+offset = float(np.median(off_shots))
+print(f'\nipm2 offset (median of xray-off): {offset:.4f}')
+print(f'  xray-off ipm2 stats: mean={off_shots.mean():.2f}, std={off_shots.std():.2f}, min={off_shots.min():.2f}, max={off_shots.max():.2f}')
+
+# offset-corrected
+ipm2c = ipm2 - offset
+on = xray == 1
+ipm2c_on = ipm2c[on]
+print(f'\nipm2c (on) stats: mean={ipm2c_on.mean():.1f}, median={np.median(ipm2c_on):.1f}, std={ipm2c_on.std():.1f}')
+print(f'  min={ipm2c_on.min():.1f}, max={ipm2c_on.max():.1f}')
+print(f'  p1={np.percentile(ipm2c_on,1):.1f}, p5={np.percentile(ipm2c_on,5):.1f}, p25={np.percentile(ipm2c_on,25):.1f}')
+print(f'  p75={np.percentile(ipm2c_on,75):.1f}, p95={np.percentile(ipm2c_on,95):.1f}, p99={np.percentile(ipm2c_on,99):.1f}')
+
+# Low ipm2 pile
+low200 = (on) &amp; (ipm2c &lt; 200)
+print(f'\n=== LOW IPM2 PILE (ipm2c &lt; 200, xray on) ===')
+print(f'Count: {low200.sum()} ({100*low200.sum()/on.sum():.1f}% of xray-on)')
+if low200.sum() &gt; 0:
+    print(f'  ipm2c range: [{ipm2c[low200].min():.1f}, {ipm2c[low200].max():.1f}]')
+    print(f'  det_total median (low): {np.median(t[\"det_total\"][low200]):.1f}')
+    normal = on &amp; (ipm2c &gt;= 200)
+    print(f'  det_total median (normal): {np.median(t[\"det_total\"][normal]):.1f}')
+    print(f'  photon_px median (low): {np.median(t[\"photon_px\"][low200]):.1f}')
+    print(f'  photon_px median (normal): {np.median(t[\"photon_px\"][normal]):.1f}')
+
+# Histogram bins for ipm2c on xray-on shots
+bins_edges = [float('-inf'), 0, 50, 100, 200, 500, 1000, 2000, 3000, 5000, 8000, 10000, 12000, float('inf')]
+labels = ['&lt;0','0-50','50-100','100-200','200-500','500-1k','1-2k','2-3k','3-5k','5-8k','8-10k','10-12k','&gt;12k']
+print(f'\n=== ipm2c histogram (xray-on) ===')
+for i in range(len(bins_edges)-1):
+    lo, hi = bins_edges[i], bins_edges[i+1]
+    mask = on &amp; (ipm2c &gt; lo) &amp; (ipm2c &lt;= hi)
+    cnt = mask.sum()
+    if cnt &gt; 0:
+        print(f'  {labels[i]:&gt;10s}: {cnt:5d} ({100*cnt/on.sum():5.1f}%)')
+"
+</pre></div>
+<div class="ev toolres"><div class="evhead"><span class="evno">#15</span><span class="ts">19:47:47 UTC</span><span class="tag tag-res">tool result</span></div><pre>=== Shot table columns ===
+['fiducial', 'sec', 'nsec', 'stream', 'ipm2', 'xray', 'laser', 'det_total', 'photon_px', 'nswitch']
+
+Total shots: 3201
+X-ray ON:  3177
+X-ray OFF: 24
+
+ipm2 offset (median of xray-off): 4.5000
+  xray-off ipm2 stats: mean=2.45, std=13.10, min=-31.75, max=26.50
+
+ipm2c (on) stats: mean=5811.8, median=3695.2, std=6865.7
+  min=-43.9, max=84590.4
+  p1=-13.0, p5=22.0, p25=967.2
+  p75=7998.2, p95=19501.6, p99=31216.6
+
+=== LOW IPM2 PILE (ipm2c &lt; 200, xray on) ===
+Count: 398 (12.5% of xray-on)
+  ipm2c range: [-43.9, 198.9]
+  det_total median (low): 9852.4
+  det_total median (normal): 106637.2
+  photon_px median (low): 41.0
+  photon_px median (normal): 7205.0
+
+=== ipm2c histogram (xray-on) ===
+          &lt;0:    69 (  2.2%)
+        0-50:   149 (  4.7%)
+      50-100:    85 (  2.7%)
+     100-200:    96 (  3.0%)
+     200-500:   203 (  6.4%)
+      500-1k:   206 (  6.5%)
+        1-2k:   329 ( 10.4%)
+        2-3k:   259 (  8.2%)
+        3-5k:   479 ( 15.1%)
+        5-8k:   508 ( 16.0%)
+       8-10k:   200 (  6.3%)
+      10-12k:   163 (  5.1%)
+        &gt;12k:   431 ( 13.6%)</pre></div>
+<div class="ev tooluse"><div class="evhead"><span class="evno">#16</span><span class="ts">19:47:47 UTC</span><span class="tag tag-tool">tool call · Bash</span></div><pre>python3 -c "
+import numpy as np
+t = np.load('npy/shot_table.npz')
+ipm2 = t['ipm2']; xray = t['xray']; det = t['det_total']
+offset = float(np.median(ipm2[xray==0]))
+ipm2c = ipm2 - offset
+on = xray == 1
+
+# High-end linearity: det_total / ipm2c in percentile bins
+kept = on &amp; (ipm2c &gt; 200)  # exclude low pile
+ipm2c_kept = ipm2c[kept]
+det_kept = det[kept]
+
+print('=== HIGH-END LINEARITY: det_total/ipm2c by ipm2c decile ===')
+pcts = [0,10,20,30,40,50,60,70,80,90,95,99,100]
+edges = np.percentile(ipm2c_kept, pcts)
+for i in range(len(pcts)-1):
+    lo, hi = edges[i], edges[i+1]
+    mask = (ipm2c_kept &gt;= lo) &amp; (ipm2c_kept &lt; hi)
+    if i == len(pcts)-2:
+        mask = (ipm2c_kept &gt;= lo) &amp; (ipm2c_kept &lt;= hi)
+    if mask.sum() &gt; 0:
+        ratio = det_kept[mask] / ipm2c_kept[mask]
+        print(f'  p{pcts[i]:&gt;3d}-p{pcts[i+1]:&gt;3d} (ipm2c {lo:7.0f}-{hi:7.0f}): ratio mean={ratio.mean():.6f}, std={ratio.std():.6f}, n={mask.sum()}')
+
+# p99 of ipm2 among xray-on
+ipm2_on = ipm2[on]
+p99 = np.percentile(ipm2_on, 99)
+above_p99 = on &amp; (ipm2 &gt;= p99)
+print(f'\n=== P99 CUT ===')
+print(f'p99 of ipm2 (xray-on): {p99:.1f}')
+print(f'Shots above p99: {above_p99.sum()}')
+print(f'  ({100*above_p99.sum()/on.sum():.1f}% of xray-on)')
+
+# Correlation det_total ~ ipm2c on kept shots
+from numpy import corrcoef
+r = corrcoef(ipm2c_kept, det_kept)[0,1]
+print(f'\nCorrelation det_total ~ ipm2c (kept, ipm2c&gt;200): r = {r:.4f}')
+"
+</pre></div>
+<div class="ev toolres"><div class="evhead"><span class="evno">#17</span><span class="ts">19:47:58 UTC</span><span class="tag tag-res">tool result</span></div><pre>=== HIGH-END LINEARITY: det_total/ipm2c by ipm2c decile ===
+  p  0-p 10 (ipm2c     200-    682): ratio mean=29.840415, std=213.765098, n=278
+  p 10-p 20 (ipm2c     682-   1410): ratio mean=29.664304, std=74.689912, n=278
+  p 20-p 30 (ipm2c    1410-   2360): ratio mean=13.055879, std=41.501772, n=278
+  p 30-p 40 (ipm2c    2360-   3412): ratio mean=17.071895, std=25.373562, n=277
+  p 40-p 50 (ipm2c    3412-   4607): ratio mean=21.044926, std=17.566773, n=278
+  p 50-p 60 (ipm2c    4607-   5819): ratio mean=21.364680, std=14.346511, n=278
+  p 60-p 70 (ipm2c    5819-   7718): ratio mean=20.250908, std=11.639144, n=277
+  p 70-p 80 (ipm2c    7718-  10338): ratio mean=20.613304, std=8.797666, n=278
+  p 80-p 90 (ipm2c   10338-  15341): ratio mean=20.744376, std=6.563723, n=278
+  p 90-p 95 (ipm2c   15341-  20725): ratio mean=21.065909, std=5.354624, n=139
+  p 95-p 99 (ipm2c   20725-  33087): ratio mean=21.970792, std=4.049255, n=111
+  p 99-p100 (ipm2c   33087-  84590): ratio mean=23.577510, std=3.279138, n=28
+
+=== P99 CUT ===
+p99 of ipm2 (xray-on): 31221.1
+Shots above p99: 32
+  (1.0% of xray-on)
+
+Correlation det_total ~ ipm2c (kept, ipm2c&gt;200): r = 0.8927</pre></div>
+<div class="ev tooluse"><div class="evhead"><span class="evno">#18</span><span class="ts">19:47:58 UTC</span><span class="tag tag-tool">tool call · Bash</span></div><pre>python3 -c "
+import numpy as np
+t = np.load('npy/shot_table.npz')
+ipm2 = t['ipm2']; xray = t['xray']; det = t['det_total']
+offset = float(np.median(ipm2[xray==0]))
+ipm2c = ipm2 - offset
+on = xray == 1
+
+# Apply proposed selection: xray on, ipm2c &gt; 200, ipm2 &lt; p99
+p99 = np.percentile(ipm2[on], 99)
+kept = on &amp; (ipm2c &gt; 200) &amp; (ipm2 &lt; p99)
+print(f'Kept shots for normalization test: {kept.sum()}')
+
+ipm2c_kept = ipm2c[kept]
+det_kept = det[kept]
+
+# Chronological bin test: split into 8 bins
+idx_kept = np.where(kept)[0]
+n_bins = 8
+bins = np.array_split(idx_kept, n_bins)
+
+print('\n=== CHRONOLOGICAL BIN TEST (8 bins) ===')
+unnorm_totals = []
+norm_totals = []
+mean_ipm2c = ipm2c_kept.mean()
+for i, b in enumerate(bins):
+    raw_sum = det[b].sum()
+    # Per-shot normalized: sum of det/n_i where n_i = ipm2c_i / mean(ipm2c)
+    n_i = ipm2c[b] / mean_ipm2c
+    norm_sum = (det[b] / n_i).sum()
+    unnorm_totals.append(raw_sum / len(b))  # mean per shot
+    norm_totals.append(norm_sum / len(b))
+    print(f'  Bin {i}: n={len(b)}, unnorm_mean={raw_sum/len(b):.1f}, norm_mean={norm_sum/len(b):.1f}')
+
+unnorm_arr = np.array(unnorm_totals)
+norm_arr = np.array(norm_totals)
+cv_unnorm = unnorm_arr.std() / unnorm_arr.mean() * 100
+cv_norm = norm_arr.std() / norm_arr.mean() * 100
+print(f'\nUnnormalized CV: {cv_unnorm:.2f}%')
+print(f'Normalized CV:   {cv_norm:.2f}%')
+print(f'Improvement:     {cv_unnorm:.2f}% -&gt; {cv_norm:.2f}%')
+
+# Also do intensity-sorted bin test
+sort_idx = np.argsort(ipm2c[kept])
+idx_sorted = idx_kept[sort_idx]
+bins_s = np.array_split(idx_sorted, n_bins)
+unnorm_s = [det[b].sum()/len(b) for b in bins_s]
+norm_s = [(det[b] / (ipm2c[b]/mean_ipm2c)).sum()/len(b) for b in bins_s]
+cv_unnorm_s = np.std(unnorm_s)/np.mean(unnorm_s)*100
+cv_norm_s = np.std(norm_s)/np.mean(norm_s)*100
+print(f'\nIntensity-sorted bins: unnorm CV={cv_unnorm_s:.2f}%, norm CV={cv_norm_s:.2f}%')
+"
+</pre></div>
+<div class="ev toolres"><div class="evhead"><span class="evno">#19</span><span class="ts">19:47:59 UTC</span><span class="tag tag-res">tool result</span></div><pre>Kept shots for normalization test: 2746
+
+=== CHRONOLOGICAL BIN TEST (8 bins) ===
+  Bin 0: n=344, unnorm_mean=118067.4, norm_mean=186840.3
+  Bin 1: n=344, unnorm_mean=139072.5, norm_mean=133305.6
+  Bin 2: n=343, unnorm_mean=142955.6, norm_mean=137598.0
+  Bin 3: n=343, unnorm_mean=131298.4, norm_mean=119762.8
+  Bin 4: n=343, unnorm_mean=142824.6, norm_mean=133909.5
+  Bin 5: n=343, unnorm_mean=142573.8, norm_mean=135581.5
+  Bin 6: n=343, unnorm_mean=132868.1, norm_mean=126089.3
+  Bin 7: n=343, unnorm_mean=90416.8, norm_mean=103531.6
+
+Unnormalized CV: 13.02%
+Normalized CV:   16.61%
+Improvement:     13.02% -&gt; 16.61%
+
+Intensity-sorted bins: unnorm CV=93.68%, norm CV=18.49%</pre></div>
+<div class="phase"><h3>Phase 3 · Anomaly investigation — per-shot division makes CV worse</h3><p>The first normalization test surprises the agent (CV 13.02% → 16.61%). It reasons about the nonlinearity below the ipm2c ≈ 3000 plateau and re-tests with ratio_of_sums.</p></div>
+<div class="ev thinking"><div class="evhead"><span class="evno">#20</span><span class="ts">19:48:23 UTC</span><span class="tag tag-think">extended thinking</span></div><div class="think-body">Interesting. The normalization test shows that normalization actually _increased_ the CV from 13.02% to 16.61% for the chronological bins. This is surprising. Let me investigate this more carefully. 
+
+Wait, let me think about this more carefully. The normalization test used per-shot division. But the skill file's operator hint says: if I keep the mid-band shots (200-3000 ipm2c), which are outside the linear plateau, per-shot division would violate the linearity rule. The ratio is not flat below ~3000 (we can see the ratio is noisy and biased below 3000). So `ratio_of_sums` might be more appropriate.
+Let me re-run the test with a cleaner approach and try `ratio_of_sums` instead. Looking at the ratio data across the percentile bins, the lower ranges are extremely noisy — the p0-p10 and p10-p20 bins show ratios around 29-30, which is way too high and unstable compared to the p30+ range where things settle around 17-23. This instability below the 3000 threshold confirms that per-shot division isn't the right approach here.
+
+The skill guidance is clear: if normalization violates the linearity rule for shots outside the plateau, I should use `ratio_of_sums` instead. My test showed normalization actually made things worse, which is suspicious — let me verify whether the `det_total/ipm2c` relationship is even sound for these shots in the first place.
+
+The correlation looks strong at r=0.89, but the CV got worse after normalization (13% → 16.6%), which is counterintuitive. I'm noticing that bin 0 behaves strangely: it had low unnormalized counts but spiked to the highest after normalization, suggesting something systematic is off with how that bin's data is being treated.
+
+I should dig into the ipm2c distribution across the chronological bins to understand what's happening. I'm also reconsidering the ratio_of_sums form from the skill file—it uses total_det / total_monitor_normalized, which should be more robust to monitor noise than what I'm currently doing. Let me run some diagnostics to figure this out.</div></div>
+<div class="ev atext"><div class="evhead"><span class="evno">#21</span><span class="ts">19:48:23 UTC</span><span class="tag tag-agent">agent → user</span></div><div class="atext-body">Interesting — the normalization CV went up (13% → 16.6%) with per-shot division. The ratio data shows nonlinearity below ipm2c ~3000. Let me investigate further with the correct form (ratio_of_sums) and check the bin ipm2c distribution.</div></div>
+<div class="ev tooluse"><div class="evhead"><span class="evno">#22</span><span class="ts">19:48:35 UTC</span><span class="tag tag-tool">tool call · Bash</span></div><pre>python3 -c "
+import numpy as np
+t = np.load('npy/shot_table.npz')
+ipm2 = t['ipm2']; xray = t['xray']; det = t['det_total']
+offset = float(np.median(ipm2[xray==0]))
+ipm2c = ipm2 - offset
+on = xray == 1
+p99 = np.percentile(ipm2[on], 99)
+kept = on &amp; (ipm2c &gt; 200) &amp; (ipm2 &lt; p99)
+
+idx_kept = np.where(kept)[0]
+n_bins = 8
+bins = np.array_split(idx_kept, n_bins)
+
+print('=== CHRONOLOGICAL BINS: ipm2c distribution ===')
+for i, b in enumerate(bins):
+    m = ipm2c[b]
+    below3k = (m &lt; 3000).sum()
+    print(f'  Bin {i}: n={len(b)}, ipm2c_median={np.median(m):.0f}, below_3k={below3k} ({100*below3k/len(b):.0f}%)')
+
+print()
+print('=== RATIO-OF-SUMS NORMALIZATION TEST ===')
+mean_ipm2c = ipm2c[kept].mean()
+# ratio_of_sums: per bin, compute sum(det) / sum(ipm2c/mean_ipm2c) = sum(det)*mean_ipm2c/sum(ipm2c) 
+unnorm_means = []
+ros_means = []
+for i, b in enumerate(bins):
+    raw = det[b].sum() / len(b)
+    n_sum = (ipm2c[b] / mean_ipm2c).sum()
+    ros = det[b].sum() / n_sum  # ratio of sums, per-shot mean
+    unnorm_means.append(raw)
+    ros_means.append(ros)
+
+unnorm_arr = np.array(unnorm_means)
+ros_arr = np.array(ros_means)
+print(f'Unnorm CV: {100*unnorm_arr.std()/unnorm_arr.mean():.2f}%')
+print(f'Ratio-of-sums CV: {100*ros_arr.std()/ros_arr.mean():.2f}%')
+
+print()
+print('=== RESTRICT TO PLATEAU (ipm2c &gt; 3000) + PER-SHOT DIVISION ===')
+kept_plat = on &amp; (ipm2c &gt; 3000) &amp; (ipm2 &lt; p99)
+print(f'Plateau shots kept: {kept_plat.sum()}')
+idx_plat = np.where(kept_plat)[0]
+bins_p = np.array_split(idx_plat, n_bins)
+mean_plat = ipm2c[kept_plat].mean()
+unnorm_p = [det[b].sum()/len(b) for b in bins_p]
+norm_p = [(det[b] / (ipm2c[b]/mean_plat)).sum()/len(b) for b in bins_p]
+cv_u = np.std(unnorm_p)/np.mean(unnorm_p)*100
+cv_n = np.std(norm_p)/np.mean(norm_p)*100
+print(f'Unnorm CV (plateau): {cv_u:.2f}%')
+print(f'Normalized CV (plateau, per-shot): {cv_n:.2f}%')
+
+print()
+print('=== FULL SET (ipm2c &gt; 200) WITH RATIO_OF_SUMS (the actual planned approach) ===')
+for i, b in enumerate(bins):
+    n_sum = ipm2c[b].sum() / mean_ipm2c
+    ros_per_shot = det[b].sum() / n_sum
+    print(f'  Bin {i}: n={len(b)}, sum_det/sum_n={ros_per_shot:.1f}, unnorm_mean={det[b].sum()/len(b):.1f}')
+"
+</pre></div>
+<div class="ev toolres"><div class="evhead"><span class="evno">#23</span><span class="ts">19:48:36 UTC</span><span class="tag tag-res">tool result</span></div><details><summary>show full result (1,287 chars)</summary><pre>=== CHRONOLOGICAL BINS: ipm2c distribution ===
+  Bin 0: n=344, ipm2c_median=4211, below_3k=136 (40%)
+  Bin 1: n=344, ipm2c_median=4932, below_3k=115 (33%)
+  Bin 2: n=343, ipm2c_median=5230, below_3k=110 (32%)
+  Bin 3: n=343, ipm2c_median=4450, below_3k=109 (32%)
+  Bin 4: n=343, ipm2c_median=4935, below_3k=109 (32%)
+  Bin 5: n=343, ipm2c_median=5009, below_3k=125 (36%)
+  Bin 6: n=343, ipm2c_median=4875, below_3k=116 (34%)
+  Bin 7: n=343, ipm2c_median=2842, below_3k=177 (52%)
+
+=== RATIO-OF-SUMS NORMALIZATION TEST ===
+Unnorm CV: 13.02%
+Ratio-of-sums CV: 3.13%
+
+=== RESTRICT TO PLATEAU (ipm2c &gt; 3000) + PER-SHOT DIVISION ===
+Plateau shots kept: 1749
+Unnorm CV (plateau): 6.35%
+Normalized CV (plateau, per-shot): 3.52%
+
+=== FULL SET (ipm2c &gt; 200) WITH RATIO_OF_SUMS (the actual planned approach) ===
+  Bin 0: n=344, sum_det/sum_n=135624.4, unnorm_mean=118067.4
+  Bin 1: n=344, sum_det/sum_n=134162.0, unnorm_mean=139072.5
+  Bin 2: n=343, sum_det/sum_n=129759.1, unnorm_mean=142955.6
+  Bin 3: n=343, sum_det/sum_n=129588.9, unnorm_mean=131298.4
+  Bin 4: n=343, sum_det/sum_n=132010.0, unnorm_mean=142824.6
+  Bin 5: n=343, sum_det/sum_n=128578.8, unnorm_mean=142573.8
+  Bin 6: n=343, sum_det/sum_n=127237.0, unnorm_mean=132868.1
+  Bin 7: n=343, sum_det/sum_n=121657.4, unnorm_mean=90416.8</pre></details></div>
+<div class="ev thinking"><div class="evhead"><span class="evno">#24</span><span class="ts">19:49:08 UTC</span><span class="tag tag-think">extended thinking</span></div><div class="think-body">Excellent! Now the picture is clear:
+
+1. **Low IPM exclusion**: There's a clear near-zero pile of 398 shots (12.5% of xray-on) with ipm2c &lt; 200. These have median photon_px of 41 vs 7205 for normal shots. Decision: **RUN with threshold 200**.
+
+2. **High IPM exclusion**: The operator hint says to run at p99. 32 shots above p99. The ratio data shows some increase at the top (23.6 vs ~21 for p50-p90), slight but not dramatic. 
+
+3. **Normalization**: Going with p99 per the operator hint. Per-shot division actually makes things worse (CV jumps from 13.02% to 16.61%) because many shots sit below the linear plateau where the ratio gets biased. But ratio-of-sums with all shots above the threshold is dramatically better—CV drops to 3.13%. Restricting to the plateau region (ipm2c &gt; 3000) shows even tighter performance.
+
+Decision: **Use ratio-of-sums normalization**, which handles the non-linear below-plateau shots robustly. The accumulation code just keeps weights at 1 and records the divisor in the log, with the actual division happening after accumulation. Now I'm setting up the decisions.json file with the selection parameters.
+
+I'm configuring the low-ipm exclusion to drop that small pile of 398 shots with ipm2c below 200 (median photon_px of 41 versus 7205 for normal shots), which is essential before normalization. The high-ipm exclusion uses the p99 percentile cutoff as baseline convention, dropping 32 shots where the ratio shows only slight upturn within noise. For normalization, I'm using ratio_of_sums form with ipm2 as the monitor and auto offset detection, which handles the chrono-bin variations.
+
+The ratio_of_sums approach compresses the coefficient of variation from 13.02% down to 3.13%, whereas per-shot division would actually worsen it to 16.6% due to nonlinear behavior below ipm2c around 3000. The strong correlation between detector and ipm2c (r=0.89) confirms this is the right approach.
+
+Now I'm verifying the shot counts through the pipeline to make sure the exclusion logic is consistent. Continuing the code logic...
+
+For the normalization step with ratio_of_sums, the weights remain at 1.0 since the averaging happens differently. Then there's a guard that filters out any shots where mono isn't positive, but since the ipm2c threshold is already 200, all kept shots should pass this check without additional drops. Now I need to write out the decisions.json file and set up the output directory.</div></div>
+<div class="ev atext"><div class="evhead"><span class="evno">#25</span><span class="ts">19:49:08 UTC</span><span class="tag tag-agent">agent → user</span></div><div class="atext-body">The evidence is clear. Let me summarize:
+
+- **ratio_of_sums** drops CV from 13.02% → 3.13% (excellent)
+- **per_shot division** makes CV worse (13.02% → 16.6%) because many shots are below the linear plateau
+- The operator hint explicitly instructs ratio_of_sums when mid-band shots are retained
+
+Now let me compute exact expected kept counts, create the output directory, and write decisions.json.</div></div>
+<div class="ev tooluse"><div class="evhead"><span class="evno">#26</span><span class="ts">19:49:14 UTC</span><span class="tag tag-tool">tool call · Bash</span></div><pre>python3 -c "
+import numpy as np
+t = np.load('npy/shot_table.npz')
+ipm2 = t['ipm2']; xray = t['xray']
+offset = float(np.median(ipm2[xray==0]))
+ipm2c = ipm2 - offset
+N = len(ipm2)
+
+# Simulate step2 logic exactly
+keep = np.ones(N, bool)
+keep &amp;= (xray == 1)
+print(f'After xray-on:     {keep.sum()} kept')
+
+keep &amp;= (ipm2c &gt; 200.0)
+print(f'After low cut&gt;200: {keep.sum()} kept')
+
+p99 = np.percentile(ipm2[xray==1], 99.0)
+print(f'p99 of ipm2 (xray-on): {p99:.2f}')
+keep &amp;= (ipm2 &lt; p99)
+print(f'After high cut&lt;p99:{keep.sum()} kept')
+
+# normalization guard (ratio_of_sums still checks mono&gt;0)
+mono = ipm2c.copy()
+bad = keep &amp; ~(mono &gt; 0)
+print(f'Guard would drop:  {bad.sum()} (should be 0 since all kept have ipm2c&gt;200)')
+print(f'Final kept:        {keep.sum()} / {N} = {100*keep.sum()/N:.1f}%')
+print(f'Rejected:          {N - keep.sum()}')
+"
+</pre></div>
+<div class="ev toolres"><div class="evhead"><span class="evno">#27</span><span class="ts">19:49:15 UTC</span><span class="tag tag-res">tool result</span></div><pre>After xray-on:     3177 kept
+After low cut&gt;200: 2778 kept
+p99 of ipm2 (xray-on): 31221.09
+After high cut&lt;p99:2746 kept
+Guard would drop:  0 (should be 0 since all kept have ipm2c&gt;200)
+Final kept:        2746 / 3201 = 85.8%
+Rejected:          455</pre></div>
+<div class="phase"><h3>Phase 4 · Writing decisions.json and running the accumulator</h3><p>The agent simulates the exact keep-mask counts, writes the decision file with parameters and rationales, and executes deterministic step 2.</p></div>
+<div class="ev tooluse"><div class="evhead"><span class="evno">#28</span><span class="ts">19:49:15 UTC</span><span class="tag tag-tool">tool call · Bash</span></div><pre>mkdir -p /Users/carrot/Desktop/Summer2026/XTC_Agent/outputs/agent_trial_02</pre></div>
+<div class="ev toolres"><div class="evhead"><span class="evno">#29</span><span class="ts">19:49:15 UTC</span><span class="tag tag-res">tool result</span></div><pre>(Bash completed with no output)</pre></div>
+<div class="ev thinking"><div class="evhead"><span class="evno">#30</span><span class="ts">19:49:19 UTC</span><span class="tag tag-think">extended thinking</span></div><div class="think-body">Now I have all the numbers. Let me write the decisions.json:
+
+Expected: 2746 kept / 3201 total (85.8%)
+
+Low-ipm cut: removes 399 shots (xray-on with ipm2c &lt;= 200) 
+High-ipm cut: removes 32 shots (above p99)
+X-ray off: 24 shots
+
+Let me write the decisions.json.</div></div>
+<div class="ev atext"><div class="evhead"><span class="evno">#31</span><span class="ts">19:49:19 UTC</span><span class="tag tag-agent">agent → user</span></div><div class="atext-body">Now I'll write the decisions.json and run the accumulator.</div></div>
+<div class="ev tooluse"><div class="evhead"><span class="evno">#32</span><span class="ts">19:49:24 UTC</span><span class="tag tag-tool">tool call · Write</span></div><div class="fp">/Users/carrot/Desktop/Summer2026/XTC_Agent/outputs/agent_trial_02/decisions.json</div><pre>{
+  "selection": {
+    "require_xray_on": true,
+    "low_ipm_exclusion": {
+      "run": true,
+      "threshold": 200.0,
+      "rationale": "Near-zero pile of 398 shots (12.5% of xray-on) with ipm2c&lt;200; photon_px median 41 vs 7205 normal; normalization planned so exclusion mandatory"
+    },
+    "high_ipm_exclusion": {
+      "run": true,
+      "percentile": 99.0,
+      "rationale": "Baseline convention p99 cut: 32 shots dropped (ipm2&gt;31221); ratio ~24 at top vs ~21 mid-range (slight upturn); matches human baseline"
+    }
+  },
+  "normalization": {
+    "run": true,
+    "monitor": "ipm2",
+    "form": "ratio_of_sums",
+    "offset": "auto",
+    "rationale": "Chrono-bin CV 13.02%-&gt;3.13% with ratio_of_sums; per-shot division harmful (13%-&gt;16.6%) due to biased ratio below ipm2c~3000; r(det,ipm2c)=0.89; ratio_of_sums chosen because 200-3000 mid-band kept per operator hint"
+  }
+}
+</pre></div>
+<div class="ev toolres"><div class="evhead"><span class="evno">#33</span><span class="ts">19:49:24 UTC</span><span class="tag tag-res">tool result</span></div><pre>File created successfully at: /Users/carrot/Desktop/Summer2026/XTC_Agent/outputs/agent_trial_02/decisions.json (file state is current in your context — no need to Read it back)</pre></div>
+<div class="ev tooluse"><div class="evhead"><span class="evno">#34</span><span class="ts">19:49:27 UTC</span><span class="tag tag-tool">tool call · Bash</span></div><pre>python3 pipeline/step2_accumulate.py --out-dir /Users/carrot/Desktop/Summer2026/XTC_Agent/outputs/agent_trial_02</pre></div>
+<div class="ev toolres"><div class="evhead"><span class="evno">#35</span><span class="ts">19:50:01 UTC</span><span class="tag tag-res">tool result</span></div><pre>[accumulate] 500/2746 (6s)
+[accumulate] 1000/2746 (12s)
+[accumulate] 1500/2746 (18s)
+[accumulate] 2000/2746 (25s)
+[accumulate] 2500/2746 (31s)
+[done] kept 2746/3201, sum written to /Users/carrot/Desktop/Summer2026/XTC_Agent/outputs/agent_trial_02</pre></div>
+<div class="phase"><h3>Phase 5 · Verification and final decision summary</h3><p>The agent cross-checks accumulate_log.json against its predicted counts and states the final decisions.</p></div>
+<div class="ev thinking"><div class="evhead"><span class="evno">#36</span><span class="ts">19:50:03 UTC</span><span class="tag tag-think">extended thinking</span></div><div class="think-body">Now let me verify the accumulate_log.json.</div></div>
+<div class="ev atext"><div class="evhead"><span class="evno">#37</span><span class="ts">19:50:04 UTC</span><span class="tag tag-agent">agent → user</span></div><div class="atext-body">Step 2 completed. Let me verify the accumulate log.</div></div>
+<div class="ev tooluse"><div class="evhead"><span class="evno">#38</span><span class="ts">19:50:04 UTC</span><span class="tag tag-tool">tool call · Read</span></div><div class="fp">/Users/carrot/Desktop/Summer2026/XTC_Agent/outputs/agent_trial_02/accumulate_log.json</div></div>
+<div class="ev toolres"><div class="evhead"><span class="evno">#39</span><span class="ts">19:50:04 UTC</span><span class="tag tag-res">tool result</span></div><details><summary>show full result (1,265 chars)</summary><pre>1	{
+2	  "n_events": 3201,
+3	  "kept": 2746,
+4	  "rejected": 455,
+5	  "ipm2_offset": 4.5,
+6	  "weights_range": [
+7	    1.0,
+8	    1.0
+9	  ],
+10	  "ratio_of_sums_divisor": 17180155.125,
+11	  "sum_total_keV": -216641042701.67633,
+12	  "elapsed_s": 34.2,
+13	  "decisions_echo": {
+14	    "selection": {
+15	      "require_xray_on": true,
+16	      "low_ipm_exclusion": {
+17	        "run": true,
+18	        "threshold": 200.0,
+19	        "rationale": "Near-zero pile of 398 shots (12.5% of xray-on) with ipm2c&lt;200; photon_px median 41 vs 7205 normal; normalization planned so exclusion mandatory"
+20	      },
+21	      "high_ipm_exclusion": {
+22	        "run": true,
+23	        "percentile": 99.0,
+24	        "rationale": "Baseline convention p99 cut: 32 shots dropped (ipm2&gt;31221); ratio ~24 at top vs ~21 mid-range (slight upturn); matches human baseline"
+25	      }
+26	    },
+27	    "normalization": {
+28	      "run": true,
+29	      "monitor": "ipm2",
+30	      "form": "ratio_of_sums",
+31	      "offset": "auto",
+32	      "rationale": "Chrono-bin CV 13.02%-&gt;3.13% with ratio_of_sums; per-shot division harmful (13%-&gt;16.6%) due to biased ratio below ipm2c~3000; r(det,ipm2c)=0.89; ratio_of_sums chosen because 200-3000 mid-band kept per operator hint"
+33	    }
+34	  }
+35	}</pre></details></div>
+<div class="ev atext"><div class="evhead"><span class="evno">#40</span><span class="ts">19:50:18 UTC</span><span class="tag tag-agent">agent → user</span></div><div class="atext-body">The log is sane. Let me verify the key numbers match:
+
+- **kept: 2746** — matches my predicted count exactly (3201 − 24 xray-off − 399 low-ipm − 32 high-ipm = 2746) ✓
+- **rejected: 455** ✓
+- **ipm2_offset: 4.5** — auto-computed, matches the median of xray-off shots ✓
+- **weights_range: [1.0, 1.0]** — correct for ratio_of_sums (plain accumulation, divisor recorded separately) ✓
+- **ratio_of_sums_divisor: 17,180,155** — recorded for downstream normalization ✓
+
+---
+
+**Final decisions summary:**
+
+**Decision 1 — Low-ipm exclusion: RUN, threshold ipm2c &lt; 200.** A near-zero pile of 398 shots (12.5% of xray-on) was identified with median photon_px = 41 vs 7205 for normal shots — these are noise-dominated frames carrying almost no scattering signal. Exclusion is mandatory because normalization is applied downstream, and 69 of these shots have ipm2c &lt; 0 (division disaster). The threshold of 200 sits in the clear gap between the pile and the main distribution body, per the operator hint.
+
+**Decision 2 — High-ipm exclusion: RUN, percentile 99.** 32 shots above ipm2 = 31,221 are dropped to match the human baseline convention. The det/ipm2c ratio shows a slight upturn at the top (~24 vs ~21 mid-range) but no hard droop; this cut is protective/baseline-consistent rather than evidence-of-harm-driven.
+
+**Decision 3 — Normalization: RUN, ratio_of_sums form, ipm2 monitor, auto offset (4.5).** The chronological-bin CV test shows ratio_of_sums reduces bin-to-bin CV from 13.02% to 3.13% — a 4× improvement removing systematic flux drift. Per-shot division was rejected (CV worsened to 16.6%) because the 200–3000 ipm2c mid-band shots retained per operator hint sit below the monitor's linear plateau, biasing the per-shot ratio. Ratio_of_sums is robust to this nonlinearity. det~ipm2c correlation r = 0.89 confirms the monitor tracks detector response well.</div></div>
+<div class="ev final"><div class="evhead"><span class="evno">#41</span><span class="ts">19:50:18 UTC</span><span class="tag tag-final">final agent message (ResultMessage)</span></div><div class="atext-body">The log is sane. Let me verify the key numbers match:
+
+- **kept: 2746** — matches my predicted count exactly (3201 − 24 xray-off − 399 low-ipm − 32 high-ipm = 2746) ✓
+- **rejected: 455** ✓
+- **ipm2_offset: 4.5** — auto-computed, matches the median of xray-off shots ✓
+- **weights_range: [1.0, 1.0]** — correct for ratio_of_sums (plain accumulation, divisor recorded separately) ✓
+- **ratio_of_sums_divisor: 17,180,155** — recorded for downstream normalization ✓
+
+---
+
+**Final decisions summary:**
+
+**Decision 1 — Low-ipm exclusion: RUN, threshold ipm2c &lt; 200.** A near-zero pile of 398 shots (12.5% of xray-on) was identified with median photon_px = 41 vs 7205 for normal shots — these are noise-dominated frames carrying almost no scattering signal. Exclusion is mandatory because normalization is applied downstream, and 69 of these shots have ipm2c &lt; 0 (division disaster). The threshold of 200 sits in the clear gap between the pile and the main distribution body, per the operator hint.
+
+**Decision 2 — High-ipm exclusion: RUN, percentile 99.** 32 shots above ipm2 = 31,221 are dropped to match the human baseline convention. The det/ipm2c ratio shows a slight upturn at the top (~24 vs ~21 mid-range) but no hard droop; this cut is protective/baseline-consistent rather than evidence-of-harm-driven.
+
+**Decision 3 — Normalization: RUN, ratio_of_sums form, ipm2 monitor, auto offset (4.5).** The chronological-bin CV test shows ratio_of_sums reduces bin-to-bin CV from 13.02% to 3.13% — a 4× improvement removing systematic flux drift. Per-shot division was rejected (CV worsened to 16.6%) because the 200–3000 ipm2c mid-band shots retained per operator hint sit below the monitor's linear plateau, biasing the per-shot ratio. Ratio_of_sums is robust to this nonlinearity. det~ipm2c correlation r = 0.89 confirms the monitor tracks detector response well.</div></div>
+
+<h2>4 · Provenance</h2>
+<div class="card prov">
+outputs/agent_trial_02/events.jsonl &nbsp;— full message stream (this transcript's source)<br>
+outputs/agent_trial_02/trajectory.jsonl &nbsp;— PostToolUse hook log (tool calls only)<br>
+outputs/agent_trial_02/decisions.json &nbsp;— the agent's decision file (step 2 contract)<br>
+outputs/agent_trial_02/accumulate_log.json &nbsp;— deterministic step 2 echo of the decisions<br>
+agent/entrypoint.py &nbsp;— reduction_prompt() = the input prompt above<br>
+skills/selection/01a_low_ipm_exclusion.md · 01b_high_ipm_exclusion.md ·
+skills/normalization/01_per_shot_flux_ipm2.md &nbsp;— the governing method files
+</div>
+</div>
+</body></html>

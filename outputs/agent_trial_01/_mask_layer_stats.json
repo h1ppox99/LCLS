@@ -1,0 +1,34 @@
+{
+  "L1_gap_plus_dilation": {
+    "core_gap_pixels": 47369,
+    "after_dilation": 59802,
+    "cumulative": 59802
+  },
+  "L2_dead_negative": {
+    "strongly_neg_raw": 3844,
+    "new_added": 3784,
+    "cumulative": 63586
+  },
+  "L3_status_bad": {
+    "raw": 4565,
+    "new_added": 2687,
+    "cumulative": 66273
+  },
+  "L4_asic_boundary": {
+    "raw": 12528,
+    "new_added": 0,
+    "cumulative": 66273,
+    "note": "subsumed by L1 dilation"
+  },
+  "L5_beamstop": {
+    "raw": 38110,
+    "new_added": 35953,
+    "row_range": "970-1006",
+    "cumulative": 102226
+  },
+  "L6_extreme_outliers": {
+    "raw": 843,
+    "new_added": 190,
+    "cumulative": 102416
+  }
+}

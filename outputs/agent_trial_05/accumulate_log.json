@@ -1,0 +1,79 @@
+{
+  "n_events": 3201,
+  "kept": 2746,
+  "rejected": 455,
+  "ipm2_offset": 4.5,
+  "monitor": "ipm2",
+  "monitor_offset": 4.5,
+  "weights_range": [
+    1.0,
+    1.0
+  ],
+  "ratio_of_sums_divisor": 17180155.125,
+  "sum_total_keV": -216641042701.67633,
+  "elapsed_s": 34.3,
+  "decisions_echo": {
+    "selection": {
+      "require_xray_on": true,
+      "low_ipm_exclusion": {
+        "run": true,
+        "threshold": 200.0,
+        "rationale": "Near-zero pile of 398 shots (12.4%) at ipm2c < 200; they carry median 41 photon pixels vs 6448 in the normal group and contribute 0.73% of the signal but 12.3% of the noise variance. Operator hint: cut at 200 (gap between pile and body), keeping the 200-3000 mid-band. Since mid-band is retained, normalization form must be ratio_of_sums (per-shot division outside the linear plateau amplifies the +10% ratio bias in the mid-band, worsening bin-CV from 13.1% to 16.3%)."
+      },
+      "high_ipm_exclusion": {
+        "run": true,
+        "percentile": 99.0,
+        "rationale": "Operator hint: RUN at p99 to match the human baseline convention (Taekeun's calibration sum). Drops 32 shots above ipm2(raw) = 31221. Linearity evidence: det_total/ipm2 ratio is flat at ~21e-6 from ipm2c 3700 to p99, no droop; no signal-driven gain switching (LaB6 signal ~0.01 photons/pixel, well below the 34-photon G0 headroom). The cut is protective/baseline-compatible, not evidence-driven."
+      }
+    },
+    "normalization": {
+      "run": true,
+      "monitor": "ipm2",
+      "form": "ratio_of_sums",
+      "offset": "auto",
+      "rationale": "Bin-CV test (8 chronological bins, 2746 kept shots after both selection cuts): unnormalized 13.10%, per-shot-ipm2 16.32% (WORSE, because 997 mid-band shots at ipm2c 200-3000 have a +10% det/ipm2c ratio bias vs plateau), ratio-of-sums 3.25% (drift removed without amplifying mid-band bias). r(det_total, ipm2c) = 0.893 over kept shots. Ratio-of-sums is the correct form when the kept set includes sub-plateau shots (36.3% of kept), as the operator hint in 01a anticipates. ipm2 offset = 4.50 (median over 24 xray-off shots). Residual bin-CV ~3.3% is the systematic floor (pointing/spectral drift no scalar monitor can remove).",
+      "monitor_choice": {
+        "verdict": "ipm2",
+        "cross_check": "ipmfex22_sum",
+        "cross_ratio_bin_drift_pct": 5.3,
+        "candidates_ranked": [
+          "ipm2 bin-CV 3.42% r=0.895 (plateau-only per-shot reference)",
+          "ipmfex22_sum bin-CV 3.41% r=0.909",
+          "ipmfex28_sum bin-CV 4.06% r=0.905",
+          "ipmfex26_ch0+ch3 bin-CV 4.09% r=0.909",
+          "bmmon4c_sum bin-CV 3.94% r=0.639"
+        ],
+        "anomalies": [
+          "ipmfex26_ch1 saturated at ~1.21 const \u2014 poisons ipmfex26_sum (r drops 0.91->0.61)",
+          "ipmfex22_ch1 dead (always 0) \u2014 harmless in sum",
+          "ipmfex23 near saturation, xpos/ypos pinned ~1"
+        ],
+        "rationale": "ipm2 and ipmfex22_sum statistically tied (3.42% vs 3.41% bin-CV, r 0.895 vs 0.909). Keeping ipm2 as verdict because all documented thresholds (low-cut 200/3000, offsets) are written against it; switching monitors redefines every threshold for no measurable gain. ipmfex22_sum is the cross-check (different electronics \u2014 diode box vs wave8)."
+      },
+      "photon_energy": {
+        "median_ev": 9563.8,
+        "rms_ev": 6.4,
+        "p2p_ev": 38,
+        "vs_geometry_lambda_pct": 0.379,
+        "jitter_blur_px": 0.56,
+        "tolerance_px": 5.0,
+        "decision": "skip",
+        "rationale": "Jitter 6.4 eV rms = 0.067% = 0.56 px blur at outermost ring, far below the 5 px tolerance. Single energy setpoint, no scan. Machine absolute (9564 eV) disagrees with geometry lambda (9600 eV) by +0.38%, but measured ring deltas are 0/0/+1/-1 px \u2014 rings refute the machine absolute. No correction warranted."
+      },
+      "residual_attribution": {
+        "residual_bin_cv_pct": 3.3,
+        "screen_r2_pct": {
+          "bmmon4b_xpos": 0.0,
+          "bmmon4b_ypos": 0.0,
+          "bmmon43_xpos": 0.0,
+          "bmmon43_ypos": 0.1,
+          "photon_energy_ev": 0.0,
+          "ebeam_charge_nc": 0.0,
+          "joint_xyE": 0.0
+        },
+        "decision": "record_only",
+        "rationale": "No recorded channel explains the post-normalization residual (joint per-shot R2 = 0.0%). The ~3.3% bin-CV floor is plausibly sample/illumination-footprint or SASE spectral structure invisible to scalar diagnostics. Legitimate mitigation is pump-on/off referencing, not a division by uncorrelated signals."
+      }
+    }
+  }
+}

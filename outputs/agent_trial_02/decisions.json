@@ -1,0 +1,22 @@
+{
+  "selection": {
+    "require_xray_on": true,
+    "low_ipm_exclusion": {
+      "run": true,
+      "threshold": 200.0,
+      "rationale": "Near-zero pile of 398 shots (12.5% of xray-on) with ipm2c<200; photon_px median 41 vs 7205 normal; normalization planned so exclusion mandatory"
+    },
+    "high_ipm_exclusion": {
+      "run": true,
+      "percentile": 99.0,
+      "rationale": "Baseline convention p99 cut: 32 shots dropped (ipm2>31221); ratio ~24 at top vs ~21 mid-range (slight upturn); matches human baseline"
+    }
+  },
+  "normalization": {
+    "run": true,
+    "monitor": "ipm2",
+    "form": "ratio_of_sums",
+    "offset": "auto",
+    "rationale": "Chrono-bin CV 13.02%->3.13% with ratio_of_sums; per-shot division harmful (13%->16.6%) due to biased ratio below ipm2c~3000; r(det,ipm2c)=0.89; ratio_of_sums chosen because 200-3000 mid-band kept per operator hint"
+  }
+}

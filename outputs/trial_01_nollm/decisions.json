@@ -1,0 +1,22 @@
+{
+  "selection": {
+    "require_xray_on": true,
+    "low_ipm_exclusion": {
+      "run": true,
+      "threshold": 3000.0,
+      "rationale": "baseline: normalization planned -> plateau threshold (offset +4.5 subtracted); near-zero pile present"
+    },
+    "high_ipm_exclusion": {
+      "run": false,
+      "percentile": 99.0,
+      "rationale": "baseline: det/ipm2 linear to the top on Run0475 -> skip"
+    }
+  },
+  "normalization": {
+    "run": true,
+    "monitor": "ipm2",
+    "form": "per_shot",
+    "offset": "auto",
+    "rationale": "baseline: bin CV 6.03%->3.55% on Run0475 -> normalize"
+  }
+}

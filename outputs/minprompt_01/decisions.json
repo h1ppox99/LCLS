@@ -1,0 +1,22 @@
+{
+  "selection": {
+    "require_xray_on": true,
+    "low_ipm_exclusion": {
+      "run": true,
+      "threshold": 200.0,
+      "rationale": "Near-zero pile of 398 xray-on shots (12.5%) with ipm2c<200: median photon_px=41 vs 7205 for normal group — these carry readout noise but almost no photons. Operator hint: exclude only the near-zero pile at 200, do NOT raise to the 3000 linear-plateau threshold — keep the 200-3000 mid-band shots. Threshold placed in the clear gap between the pile and the main body."
+    },
+    "high_ipm_exclusion": {
+      "run": true,
+      "percentile": 99.0,
+      "rationale": "Operator hint overrides: RUN at p99 to match human-baseline (Taekeun) convention, dropping 32 shots above ipm2=31221. Linearity evidence is clean — det/ipm2 ratio flat (~20-22) from ipm2c=3400 through the top decile (no droop); nswitch median 569 for bright vs 567 for normal (same stuck-pixel set, no signal-driven G0→G1 switching). Cut is protective/baseline-compatible, not evidence-driven."
+    }
+  },
+  "normalization": {
+    "run": true,
+    "monitor": "ipm2",
+    "form": "ratio_of_sums",
+    "offset": "auto",
+    "rationale": "Normalize: corr(det_total, ipm2c)=0.856 for kept shots; 8-bin chrono CV drops 13.1%→3.3% with ratio_of_sums. Form choice: with low threshold at 200, the 200-3000 mid-band (997 shots, 36% of kept) lies below the ipm2 linear plateau — det/ipm2 ratio is biased ~30 there vs ~20 on the plateau. Per-shot division amplifies this nonlinearity (CV worsens to 16.3%); ratio_of_sums naturally downweights low-monitor shots in the denominator and removes the systematic drift without injecting ratio bias. Offset auto = median(ipm2|xray==0) = 4.5."
+  }
+}

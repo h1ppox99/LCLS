@@ -1,0 +1,22 @@
+{
+  "selection": {
+    "require_xray_on": true,
+    "low_ipm_exclusion": {
+      "run": true,
+      "threshold": 200.0,
+      "rationale": "Near-zero pile of 398 shots (12.5% of xray-on) with ipm2c < 200: median photon pixels 41 vs 11806 for normal body -- these carry detector noise but negligible signal. Operator hint directs threshold at 200 (gap between pile and main body) rather than the linear-plateau onset at ~3000, retaining the 998 mid-band shots. Normalization is planned downstream (ratio_of_sums form), which is robust to the nonlinear mid-band, so the low threshold suffices."
+    },
+    "high_ipm_exclusion": {
+      "run": true,
+      "percentile": 99.0,
+      "rationale": "Linearity evidence is clean: det/ipm2c ratio flat at ~20.5-21.7 from 3k to 50k; nswitch median 569 for bright (>p99) vs 567 for normal body -- gain switching is fixed stuck pixels (566), not signal-driven. Dropping 32 shots above p99 is not evidence-driven but matches the human baseline convention (Taekeun p99 cut). Operator hint directs RUN at p99 for baseline compatibility."
+    }
+  },
+  "normalization": {
+    "run": true,
+    "monitor": "ipm2",
+    "form": "ratio_of_sums",
+    "offset": "auto",
+    "rationale": "Bin CV test (8 chronological bins, 2747 kept shots after low+high cuts): raw CV 13.14%. Per-shot division WORSENS CV to 18.54% because the 998 mid-band shots (ipm2c 200-3000) sit below the linear plateau -- det/ipm2c ratio is biased and noisy there (200-500: 31.6 +/- 239 vs plateau 3k+: 20.5 +/- 8-16). Ratio-of-sums IMPROVES CV to 3.23% -- it is robust to per-shot monitor noise because the noisy denominators average out in the sum. det~ipm2c correlation r=0.893 over kept shots confirms the monitor tracks flux well. Offset auto = median ipm2 over 24 xray-off shots = 4.50 (0.12% of median). Chose ratio_of_sums over per_shot to honor the operator hint (keep mid-band at threshold 200) without violating the normalization skill's linearity prerequisite."
+  }
+}

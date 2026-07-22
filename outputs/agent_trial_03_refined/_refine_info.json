@@ -1,0 +1,8 @@
+{
+  "based_on": "agent_trial_03",
+  "skill": "skills/masking/05_azimuthal_residual.md",
+  "refine_contour_eps": 0.02,
+  "envelope_px": 891,
+  "refined_layer_px": 3627,
+  "final_mask_px": 116944
+}

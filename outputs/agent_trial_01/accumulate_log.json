@@ -1,0 +1,35 @@
+{
+  "n_events": 3201,
+  "kept": 1781,
+  "rejected": 1420,
+  "ipm2_offset": 4.5,
+  "weights_range": [
+    0.11342857730503578,
+    3.1956589142213043
+  ],
+  "ratio_of_sums_divisor": null,
+  "sum_total_keV": -202989858468.25616,
+  "elapsed_s": 21.6,
+  "decisions_echo": {
+    "selection": {
+      "require_xray_on": true,
+      "low_ipm_exclusion": {
+        "run": true,
+        "threshold": 3000.0,
+        "rationale": "Near-zero pile of 398 shots at ipm2c<200 (median photon_px=41 vs 8815 normal); normalization planned so threshold raised to linear-plateau start at 3000 (0.81x median 3695); 1781 of 3177 xray-on shots kept."
+      },
+      "high_ipm_exclusion": {
+        "run": false,
+        "percentile": 99.0,
+        "rationale": "det_total/ipm2c ratio flat across deciles (20.5\u201322.0); top-1% ratio 23.6 within scatter of bulk (std 12.7); no droop or gain switching evidence \u2014 cutting discards highest-SNR frames for no benefit."
+      }
+    },
+    "normalization": {
+      "run": true,
+      "monitor": "ipm2",
+      "form": "per_shot",
+      "offset": "auto",
+      "rationale": "Chrono-bin CV 9.33%->3.42% with normalization; det~ipm2c r=0.895; per-shot division safe because low-ipm cut at 3000 ensures all kept shots on linear plateau."
+    }
+  }
+}
