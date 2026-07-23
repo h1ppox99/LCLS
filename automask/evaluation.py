@@ -35,7 +35,7 @@ class Sample:
     """Per-run masking context. The feature fields are shot-selection reductions
     from the FeatureStore (`automask.features`): `mean` is a beam-OFF dark frame,
     `umean` the lit-beam per-pixel mean, `ustd` the lit-beam per-pixel std --
-    statistics needing scattering contrast (window_median, blackhat) must use
+    statistics needing scattering contrast (blackhat) must use
     `umean`, not `mean`. Feature fields are `None` when a caller did not request
     them (see `load_sample(features=...)`); a stat that reads one it wasn't given
     gets a clear error rather than silent garbage."""

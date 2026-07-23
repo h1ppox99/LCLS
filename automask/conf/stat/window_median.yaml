@@ -1,5 +1,0 @@
-name: window_median
-params:
-  win: 21
-  k: 5.0
-  mode: low

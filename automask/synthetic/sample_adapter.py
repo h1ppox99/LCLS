@@ -4,7 +4,7 @@ synthetic/sample_adapter.py -- inject synthetic artifacts into a run-level Sampl
 The single-image path (evaluate.py, mode="image") scores a masker that sees only
 one 2-D image, so its variance channel is absent. This adapter instead corrupts a
 full ``automask.evaluation.Sample`` so the *production* ``Pipeline`` -- variance
-(reads ``ustd``), window_median + blackhat (read ``umean``), geometry+calib floor
+(reads ``ustd``), blackhat (reads ``umean``), geometry+calib floor
 -- can be scored on the same synthetic artifacts.
 
 An artifact is injected CONSISTENTLY across the intensity-derived arrays a real
@@ -41,8 +41,8 @@ def rotate_sample(sample, degrees: int):
     """Rotate every array field of a Sample together by a multiple of 90 deg.
 
     Keeps the arrays mutually aligned (90/270 also transpose the shape). ``run``
-    is preserved; the production detectors used here (variance/window_median/
-    blackhat + geometry/calib floor) read no absolute geometry, so the stale
+    is preserved; the production detectors used here (variance/blackhat +
+    geometry/calib floor) read no absolute geometry, so the stale
     ``center`` cached-property is irrelevant.
     """
     if int(degrees) % 90 != 0:

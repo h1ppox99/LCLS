@@ -4,7 +4,7 @@
 Each valid X-ray-on calibrated frame is scaled by ``median(ipm2) / ipm2[event]``.
 The per-pixel median of those frames is saved as ``umean`` and the scaled median
 absolute deviation (MAD) as ``ustd``.  These are the lit-beam features used by
-the window-median and black-hat masking statistics.
+black-hat masking statistic.
 
 The producer stages normalized panel frames in an HDF5 cache, then processes
 that cache in panel-row blocks.  It therefore needs disk space (about

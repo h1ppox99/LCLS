@@ -14,7 +14,7 @@ its own folder (one file per method), plus an intensity-free floor:
 The three registries below are the catalogue of everything available. Each is a
 dict name -> spec, populated by importing the component packages:
 
-    STATS         variance, window_median, blackhat, radial_median,
+    STATS         variance, blackhat, radial_median,
                   azimuthal_sigma, geometry (floor), calib (floor)
     REGULARIZERS  tv (field), frangi (field), pad (mask), close_open (mask)
     COMBINERS     union (picks), weighted_sum (fields), mahalanobis (fields)
@@ -140,11 +140,10 @@ class Pipeline:
 #  production pipeline -- the live 3-detector recipe (regression anchor)
 # ==========================================================================
 def production_pipeline(combiner: str = "union") -> Pipeline:
-    """The current production recipe: TV variance + TV+pad window-median + TV+pad
-    black-hat on the geometry+calib floor. combiner="union" reproduces `combo`;
+    """The current production recipe: TV variance + TV+pad black-hat on the
+    geometry+calib floor. combiner="union" reproduces `combo`;
     combiner="weighted_sum" reproduces `combo_sum`."""
     from automask.stats.variance import VarianceParams
-    from automask.stats.window_median import WindowMedianParams
     from automask.stats.blackhat import BlackhatParams
     from automask.regularization.tv import TVParams
     from automask.regularization.pad import PadParams
@@ -153,9 +152,6 @@ def production_pipeline(combiner: str = "union") -> Pipeline:
     detectors = [
         Detector("variance", VarianceParams(k=3.5, mode="low"),
                  field_reg="tv", field_reg_params=TVParams(4.0), mask_reg=None),
-        Detector("window_median", WindowMedianParams(win=21, k=5.0, mode="low"),
-                 field_reg="tv", field_reg_params=TVParams(1.0),
-                 mask_reg="pad", mask_reg_params=PadParams(2)),
         Detector("blackhat", BlackhatParams(radius=5, k=6.0, mode="high"),
                  field_reg="tv", field_reg_params=TVParams(1.0),
                  mask_reg="pad", mask_reg_params=PadParams(2)),
@@ -172,20 +168,16 @@ def production_pipeline(combiner: str = "union") -> Pipeline:
 def mask_image(
     image: np.ndarray,
     *,
-    win: int = 21,
-    window_k: float = 5.0,
-    window_weight: float = 1.0,
     blackhat_radius: int = 5,
     blackhat_k: float = 6.0,
     blackhat_weight: float = 1.0,
     pad: int = 2,
 ) -> np.ndarray:
     """Honest single-image subset of the run-level pipeline: invalid pixels and
-    geometry lines form the floor, then TV+pad window-median and black-hat picks
-    are unioned onto it. The variance detector is absent (per-pixel variance needs
-    many frames) and so is the run-specific calib mask. True == masked."""
+    geometry lines form the floor, then a TV+pad black-hat pick is unioned onto
+    it. The variance detector is absent (per-pixel variance needs many frames)
+    and so is the run-specific calib mask. True == masked."""
     from automask.stats.geometry import geometry_mask
-    from automask.stats.window_median import window_median_stat
     from automask.stats.blackhat import blackhat_stat
     from automask.regularization.tv import tv_denoise
     from automask.regularization.pad import pad_mask
@@ -201,11 +193,9 @@ def mask_image(
 
     carrying_data = finite & (work != 0)
     floor = ~finite | geometry_mask(carrying_data, pad=pad)
-    wm = tv_denoise(window_median_stat(work, finite, win=win), window_weight)
-    wm = pad_mask(threshold_stat(wm, window_k, "low") & finite, pad) & finite
     bh = tv_denoise(blackhat_stat(work, finite, radius=blackhat_radius), blackhat_weight)
     bh = pad_mask(threshold_stat(bh, blackhat_k, "high") & finite, pad) & finite
-    return combine_masks(floor, {"window_median": wm, "blackhat": bh}).astype(bool, copy=False)
+    return combine_masks(floor, {"blackhat": bh}).astype(bool, copy=False)
 
 
 # ==========================================================================
