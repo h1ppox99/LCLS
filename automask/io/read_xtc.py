@@ -58,9 +58,14 @@ import h5py
 # --- local data locations --------------------------------------------------
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))   # .../LCLS (automask/io/ -> LCLS)
 XTC_DIR = os.path.join(ROOT, "xtc")
-CALIB_DIR = os.path.join(
-    os.environ.get("SIT_PSDM_DATA", os.path.join(os.path.dirname(ROOT), "psdm")),
-    "xpp", "xppl1016922", "calib")
+
+
+def calib_dir() -> str:
+    """Resolve the experiment calib tree from ``SIT_PSDM_DATA`` *at call time*.
+    """
+    return os.path.join(
+        os.environ.get("SIT_PSDM_DATA", os.path.join(os.path.dirname(ROOT), "psdm")),
+        "xpp", "xppl1016922", "calib")
 
 JUNGFRAU_NAME = "jungfrau1M_alcove"       # psana alias; source is XppEndstation.0:Jungfrau.0
 
@@ -82,10 +87,11 @@ def open_local_run(run: int = 475):
     """
     import psana
     # Point psana at the (real-colon) calib tree built by setup_psdm_layout.py.
-    if os.path.isdir(CALIB_DIR):
-        psana.setOption("psana.calib-dir", CALIB_DIR)
+    cdir = calib_dir()
+    if os.path.isdir(cdir):
+        psana.setOption("psana.calib-dir", cdir)
     else:
-        print(f"[warn] calib dir not found: {CALIB_DIR}\n"
+        print(f"[warn] calib dir not found: {cdir}\n"
               f"       run setup_psdm_layout.py first, or frames will be uncalibrated.")
     files = sorted(glob.glob(
         os.path.join(XTC_DIR, f"xppl1016922-r{run:04d}-s0*-c00.xtc")))
