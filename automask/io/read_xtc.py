@@ -64,6 +64,16 @@ CALIB_DIR = os.path.join(
 
 JUNGFRAU_NAME = "jungfrau1M_alcove"       # psana alias; source is XppEndstation.0:Jungfrau.0
 
+# Per-shot scalar sources on the XTC stream. The EVR-code conventions are the
+# ones the small-data producer recorded in UserDataCfg/lightStatus for this
+# experiment: x-ray is "on" when code 137 is present, laser is "dropped" (off)
+# when code 91 is present. On the SLAC cluster these would be read from the
+# run's config rather than hard-coded.
+BMMON_NAME = "XPP-SB2-BMMON"              # ipm2 intensity monitor
+EVR_NAME = "evr0"                         # NoDetector.0:Evr.0
+XRAY_ON_CODE = 137
+LASER_DROP_CODE = 91
+
 
 def open_local_run(run: int = 475):
     """Open all streams of a run from the local XTC, with calibration wired up.
@@ -84,6 +94,83 @@ def open_local_run(run: int = 475):
     print(f"[psana] opening {len(files)} streams for run {run}")
     ds = psana.DataSource(*files)
     return ds, files
+
+
+def scan_shots(run: int = 475, max_events: int | None = None):
+    """Pass 1: read only the cheap per-shot scalars for a run -> ``ShotMeta``.
+
+    Iterates events reading the ipm2 monitor and EVR codes but NOT the Jungfrau
+    ``.calib()`` (the expensive part), so it is fast enough to scan the whole run
+    and get the exact intensity distribution the percentile filter needs.
+
+    This is the single psana-touching seam behind ``ShotSelection``. On the SLAC
+    cluster, swap ``open_local_run(run)`` for
+    ``psana.DataSource(f'exp=xppl1016922:run={run}:smd')`` (the small-data stream
+    makes this pass nearly free) -- nothing else changes.
+    """
+    import psana
+    from automask.shot_selection import ShotMeta
+
+    ds, _ = open_local_run(run)
+    evr = psana.Detector(EVR_NAME)
+    try:
+        bmmon = psana.Detector(BMMON_NAME)
+    except Exception as e:                # pragma: no cover - depends on run config
+        raise RuntimeError(f"run {run}: ipm2 monitor {BMMON_NAME} unavailable: {e}")
+
+    intensity, xray_on, laser_on = [], [], []
+    for n, evt in enumerate(ds.events()):
+        codes = evr.eventCodes(evt) or ()
+        xray_on.append(XRAY_ON_CODE in codes)
+        laser_on.append(LASER_DROP_CODE not in codes)   # dropped code == laser off
+        d = bmmon.get(evt)
+        intensity.append(float(d.TotalIntensity()) if d is not None else np.nan)
+        if max_events and (n + 1) >= max_events:
+            break
+    if not intensity:
+        raise RuntimeError(f"run {run}: no events scanned")
+    print(f"[scan] run {run:04d}: {len(intensity)} shots "
+          f"({int(np.sum(xray_on))} x-ray-on)")
+    return ShotMeta(run=run, intensity=np.asarray(intensity),
+                    xray_on=np.asarray(xray_on), laser_on=np.asarray(laser_on))
+
+
+def iter_calibrated(run: int, indices, detname: str = JUNGFRAU_NAME):
+    """Pass 2: yield ``(event_index, calibrated_panel)`` for the selected events.
+
+    ``indices`` is any iterable of event indices (as returned by
+    ``ShotSelection.resolve``); frames for other events are skipped without
+    decoding. Panels are ALWAYS psana-calibrated (pedestal + gain +
+    common-mode) -- calibration is unconditional; any intensity normalization is
+    the caller's concern. Events whose ``.calib()`` returns ``None`` are skipped.
+    """
+    import psana
+
+    wanted = set(int(i) for i in indices)
+    if not wanted:
+        return
+    last = max(wanted)
+    ds, _ = open_local_run(run)
+    det = psana.Detector(detname)
+    for event_index, evt in enumerate(ds.events()):
+        if event_index in wanted:
+            panel = det.calib(evt)
+            if panel is not None:
+                yield event_index, np.asarray(panel, dtype=np.float32)
+        if event_index >= last:
+            break
+
+
+def panel_geometry(run: int, detname: str = JUNGFRAU_NAME):
+    """psana panel->assembled index maps ``(ix, iy)`` for one run (no small-data)."""
+    import psana
+
+    ds, _ = open_local_run(run)
+    det = psana.Detector(detname)
+    next(ds.events())                     # psana needs one event before geometry
+    ix = np.asarray(det.indexes_x(run), dtype=np.int64)
+    iy = np.asarray(det.indexes_y(run), dtype=np.int64)
+    return ix, iy
 
 
 def extract(run: int = 475, max_events: int = 200, out: str | None = None) -> str:
