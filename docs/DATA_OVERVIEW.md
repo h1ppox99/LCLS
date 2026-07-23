@@ -25,10 +25,13 @@ python -m automask.producers.baseline_mask --source xtc --run 475
 # Consumes that baseline and freezes images/masks for the pipeline.
 python -m automask.producers.extract_dataset
 
-# Builds features from raw XTC via ShotSelection (needs the psana env): umean/ustd
-# from x-ray-on shots, mean from x-ray-off shots. No small-data dependency.
+# Features are computed on demand by the FeatureStore (automask.features): a
+# feature = a reduction over a ShotSelection, resolved from the warm .npy cache
+# or, on a miss, from raw XTC. The evaluation loop materializes only the features
+# a pipeline's stats declare (Pipeline.features_needed). Prewarming is optional --
+# it just makes the first evaluation numpy-only instead of paying one XTC pass:
 source psana_env.sh
-python -m automask.producers.build_features --run 389 475 --n-shots 500
+python -m automask.producers.build_features --run 389 475   # prewarm the catalogue
 # Alternative lit features via robust median/MAD instead of mean/std:
 python -m automask.producers.normalized_median --run 475 --n 800
 ```

@@ -1,11 +1,14 @@
 """
 evaluation.py -- per-run Sample context + the evaluation loop.
 
-`Sample` bundles every array a statistic might read for one run; `load_sample`
-builds it from the frozen numpy dataset (no psana). `evaluate` scores any object
-exposing `.run(sample)` and `.floor(sample)` (a masking.Pipeline) across the
-evaluation runs and aggregates the metrics. `EVAL_RUNS` is the single place the
-evaluation set grows.
+`Sample` bundles the arrays a statistic reads for one run. Its shot-selection
+features (`mean`/`umean`/`ustd`) come from the FeatureStore, which serves a warm
+`.npy` cache when present and otherwise computes the feature from raw XTC (see
+`automask.features`). `load_sample` materializes only the features a caller asks
+for -- `evaluate` passes exactly what the pipeline's stats declare via `needs`,
+so the masking strategy drives which features are built. `evaluate` scores any
+object exposing `.run(sample)`/`.floor(sample)` (a masking.Pipeline) across the
+evaluation runs. `EVAL_RUNS` is the single place the evaluation set grows.
 """
 from __future__ import annotations
 import os
@@ -16,9 +19,9 @@ from typing import Optional, Sequence, Tuple
 import numpy as np
 
 from automask.dataset import load_image, load_mask, score
+from automask.features import FEATURES, FeatureStore, get_spec
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-_FEATURES = os.path.join(HERE, "data", "features")
 
 # The evaluation set. Grows here, in one place, as more runs are frozen.
 EVAL_RUNS: Tuple[int, ...] = (389, 475)
@@ -29,16 +32,20 @@ _CALIB_MASK_BY_RUN = {389: "statusMask_run0389", 475: "statusMask_run0475"}
 
 @dataclass
 class Sample:
-    """Per-run masking context. `mean` is a beam-OFF dark frame; `umean` is the
-    genuine lit-beam per-pixel mean -- statistics needing scattering contrast
-    (window_median, blackhat) must use `umean`, not `mean`."""
+    """Per-run masking context. The feature fields are shot-selection reductions
+    from the FeatureStore (`automask.features`): `mean` is a beam-OFF dark frame,
+    `umean` the lit-beam per-pixel mean, `ustd` the lit-beam per-pixel std --
+    statistics needing scattering contrast (window_median, blackhat) must use
+    `umean`, not `mean`. Feature fields are `None` when a caller did not request
+    them (see `load_sample(features=...)`); a stat that reads one it wasn't given
+    gets a clear error rather than silent garbage."""
     run: int
-    sumimg: np.ndarray      # calibrated run-sum image (lit), (1064, 1030)
-    mean: np.ndarray        # beam-OFF dark/pedestal frame
-    umean: np.ndarray       # per-shot-normalized lit-beam mean
-    ustd: np.ndarray        # per-pixel std
-    human: np.ndarray       # reference target mask (bool, True == masked)
-    calib: np.ndarray       # psana pixel_status floor mask (bool)
+    sumimg: np.ndarray                  # calibrated run-sum image (lit), (1064, 1030)
+    human: np.ndarray                   # reference target mask (bool, True == masked)
+    calib: np.ndarray                   # psana pixel_status floor mask (bool)
+    mean: Optional[np.ndarray] = None   # beam-OFF dark/pedestal frame
+    umean: Optional[np.ndarray] = None  # lit-beam per-pixel mean
+    ustd: Optional[np.ndarray] = None   # lit-beam per-pixel std
 
     @property
     def real(self) -> np.ndarray:
@@ -54,12 +61,20 @@ class Sample:
         return get_center(self.run)
 
 
-def load_sample(run: int) -> Sample:
-    """Build a :class:`Sample` for `run` from the frozen numpy dataset."""
+def load_sample(run: int, features: Optional[Sequence[str]] = None,
+                store: Optional[FeatureStore] = None) -> Sample:
+    """Build a :class:`Sample` for `run`.
+
+    `features` names the shot-selection features to materialize (default: the
+    whole catalogue). Each is resolved through the FeatureStore -- served from
+    the warm cache if present, else computed from XTC. Pass the subset a pipeline
+    actually needs (see `Pipeline.features_needed`) to avoid building the rest.
+    """
+    store = store or FeatureStore()
+    if features is None:
+        features = tuple(FEATURES)
     sumimg = load_image(f"sum_calib_run{run:04d}").astype(np.float64)
-    mean = np.load(os.path.join(_FEATURES, f"mean_run{run:04d}_asm.npy")).astype(np.float64)
-    ustd = np.load(os.path.join(_FEATURES, f"ustd_run{run:04d}_asm.npy")).astype(np.float64)
-    umean = np.load(os.path.join(_FEATURES, f"umean_run{run:04d}_asm.npy")).astype(np.float64)
+    feats = {name: store.get(run, get_spec(name)).astype(np.float64) for name in features}
     # Prefer a run-specific target (lab recipe re-run on this run); fall back to
     # the shared 475-built human_Mask.
     per_run = os.path.join(HERE, "data", "masks", f"human_Mask_run{run:04d}_asm.npy")
@@ -71,8 +86,7 @@ def load_sample(run: int) -> Sample:
         raise ValueError(
             f"no frozen calibration mask for run {run}; only "
             f"{sorted(_CALIB_MASK_BY_RUN)} are available") from None
-    return Sample(run=run, sumimg=sumimg, mean=mean, umean=umean, ustd=ustd,
-                  human=human, calib=calib)
+    return Sample(run=run, sumimg=sumimg, human=human, calib=calib, **feats)
 
 
 def evaluate(pipeline, runs: Optional[Sequence[int]] = None, verbose: bool = False):
@@ -83,9 +97,12 @@ def evaluate(pipeline, runs: Optional[Sequence[int]] = None, verbose: bool = Fal
     beyond the floor vs human & ~floor -- what the intensity detectors must find).
     """
     runs = list(EVAL_RUNS if runs is None else runs)
+    # Materialize only the features this pipeline's stats declare (step 2 of the
+    # hierarchy: the masking strategy decides which features get built).
+    needed = pipeline.features_needed() if hasattr(pipeline, "features_needed") else None
     per_run = {}
     for run in runs:
-        sample = load_sample(run)
+        sample = load_sample(run, features=needed)
         floor = pipeline.floor(sample)
         pred = pipeline.run(sample)
         target = sample.human & ~floor

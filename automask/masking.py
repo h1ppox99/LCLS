@@ -28,7 +28,7 @@ Run:  python -m automask.masking
 from __future__ import annotations
 import os, sys
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import numpy as np
 
@@ -104,6 +104,19 @@ class Pipeline:
     floor_stats: List[str] = field(default_factory=lambda: ["geometry", "calib"])
     combiner: str = "union"
     combiner_params: object = None
+
+    def features_needed(self) -> Tuple[str, ...]:
+        """Shot-selection features this pipeline's stats require, from their
+        declared `needs` (floor stats + detectors), restricted to the feature
+        catalogue. This is what the evaluation loop materializes -- the masking
+        strategy decides which features get built from XTC."""
+        from automask.features import FEATURES
+        wanted = set()
+        for name in self.floor_stats:
+            wanted |= set(STATS[name].needs)
+        for d in self.detectors:
+            wanted |= set(STATS[d.stat].needs)
+        return tuple(sorted(n for n in wanted if n in FEATURES))
 
     def floor(self, sample) -> np.ndarray:
         """OR of the intensity-free floor stats (geometry + calib), 100%-precision."""
@@ -200,9 +213,9 @@ def mask_image(
 # ==========================================================================
 def main():
     RUN = 475
-    sample = load_sample(RUN)
     pipe = production_pipeline("union")
     pipe_sum = production_pipeline("weighted_sum")
+    sample = load_sample(RUN, features=pipe.features_needed())
 
     floor = pipe.floor(sample)
     human = sample.human
