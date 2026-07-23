@@ -5,15 +5,9 @@ The baseline mirrors the lab notebook's mask recipe: mark non-positive pixels
 in an accumulated calibrated image, dilate them with a 5x5 neighbourhood, and
 add the three fixed geometry regions.  Masks use ``True == masked``.
 
-Two input modes are provided:
-
-* ``--source xtc`` reproduces the notebook most closely: select events using
-  ``ipm2/sum``, sum the first selected calibrated XTC images, then mask them.
-  It requires the psana environment and complete local XTC streams.
-* ``--source smalldata`` uses the calibrated full-run sum already
-  stored in small-data HDF5.  This is a practical recovery baseline when raw
-  XTC is not available; it is not byte-identical to the 100-event notebook
-  accumulation.
+The input reproduces the notebook: select events using ``ipm2/sum``, sum the
+first selected calibrated XTC images, then mask them.  It requires the psana
+environment and complete local XTC streams.
 
 Run ``python -m automask.producers.baseline_mask --help`` for options.
 """
@@ -30,21 +24,6 @@ RUN = 475
 DETNAME = "jungfrau1M_alcove"
 ASM_SHAPE = (1064, 1030)
 DILATION_STRUCTURE = np.ones((5, 5), dtype=bool)
-
-
-def assemble(panel: np.ndarray, ix: np.ndarray, iy: np.ndarray) -> np.ndarray:
-    """Assemble a panel stack in the frozen-data orientation, ``(1064, 1030)``."""
-    image = np.zeros(ASM_SHAPE, dtype=np.asarray(panel).dtype)
-    image[np.asarray(ix, dtype=np.int64), np.asarray(iy, dtype=np.int64)] = panel
-    return image
-
-
-def small_data_sum(run: int = RUN) -> np.ndarray:
-    """Return the calibrated full-run sum in the project's assembled orientation."""
-    with SmallData(run) as sd:
-        panel = sd.h5[f"Sums/{DETNAME}_calib"][()].astype(np.float32)
-        geo = sd.jungfrau_geometry(DETNAME)
-    return assemble(panel, geo["ix"], geo["iy"])
 
 
 def select_events_by_ipm2(run: int = RUN, drop_top_percent: float = 1.0) -> np.ndarray:
@@ -150,18 +129,22 @@ def save_plot(mask: np.ndarray, out: str | Path, title: str) -> Path:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", type=int, default=RUN)
-    parser.add_argument("--source", choices=("smalldata", "xtc"), default="xtc")
     parser.add_argument("--n-images", type=int, default=100, help="XTC images to accumulate")
     parser.add_argument("--out", type=Path, default=None)
-    parser.add_argument("--plot", type=Path, default=None, help="optional PNG output path")
+    parser.add_argument(
+        "--plot",
+        type=Path,
+        default=Path("automask/outputs/figures/reference_mask_run0475.png"),
+        help="PNG output path",
+    )
     args = parser.parse_args()
 
-    image = small_data_sum(args.run) if args.source == "smalldata" else xtc_sum(args.run, args.n_images)
+    image = xtc_sum(args.run, args.n_images)
     default = Path("automask/data/masks/human_Mask_source.npy")
     mask = build_mask(image)
     save_baseline(mask, args.out or default)
     if args.plot:
-        save_plot(mask, args.plot, f"Jungfrau1M baseline ({args.source}, run {args.run:04d})")
+        save_plot(mask, args.plot, f"Jungfrau1M baseline (xtc, run {args.run:04d})")
 
 
 if __name__ == "__main__":
