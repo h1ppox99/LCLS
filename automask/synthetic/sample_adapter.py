@@ -34,7 +34,10 @@ from dataclasses import replace
 
 import numpy as np
 
-from automask.synthetic.artifacts import beamstop_factor, streak_profile, _robust_stats
+from automask.synthetic.artifacts import (
+    beamstop_factor, streak_profile, _robust_stats,
+    point_defect_mask, column_defect_mask,
+)
 
 
 def rotate_sample(sample, degrees: int):
@@ -88,8 +91,45 @@ def corrupt_sample(sample, name: str, rng, params: dict):
             updates[field] = arr
         injected = core & region
 
+    elif name in ("dead_pixels", "bad_column"):
+        # Dead pixels / dead columns read ~0 in every per-shot quantity: the mean
+        # AND the spread collapse, so both window_median (dark) and variance (low)
+        # see them. sumimg/umean/ustd all -> 0 on the footprint.
+        if name == "dead_pixels":
+            spots = point_defect_mask(grid, rng, region, n=int(p.get("n", 200)),
+                                      cluster=int(p.get("cluster", 1)))
+        else:
+            spots = column_defect_mask(grid, rng, region,
+                                       n_cols=int(p.get("n_cols", 2)),
+                                       length_frac=float(p.get("length_frac", 1.0)))
+        updates = {}
+        for field in ("sumimg", "umean", "ustd"):
+            arr = np.array(getattr(sample, field), dtype=np.float64, copy=True)
+            arr[spots] = 0.0
+            updates[field] = arr
+        injected = spots & region
+
+    elif name == "hot_pixels":
+        # Stuck-high pixels: the mean rises but the per-shot spread collapses
+        # (a stuck value has no shot-to-shot variance). umean/sumimg -> high,
+        # ustd -> ~0. This is the polarity the low-variance channel should catch.
+        spots = point_defect_mask(grid, rng, region, n=int(p.get("n", 200)),
+                                  cluster=int(p.get("cluster", 1)))
+        amp = float(p.get("amplitude_sigma", 15.0))
+        updates = {}
+        for field in ("sumimg", "umean"):
+            arr = np.array(getattr(sample, field), dtype=np.float64, copy=True)
+            med, sd = _robust_stats(arr[region])
+            arr[spots] = med + amp * sd
+            updates[field] = arr
+        ustd = np.array(sample.ustd, dtype=np.float64, copy=True)
+        ustd[spots] = 0.0
+        updates["ustd"] = ustd
+        injected = spots & region
+
     else:
-        raise ValueError(f"no Sample adapter for artifact {name!r} "
-                         f"(supported: streak, beamstop, beamstop_small)")
+        raise ValueError(f"no Sample adapter for artifact {name!r} (supported: "
+                         f"streak, beamstop, beamstop_small, dead_pixels, "
+                         f"hot_pixels, bad_column)")
 
     return replace(sample, **updates), injected

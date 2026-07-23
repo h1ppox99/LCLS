@@ -166,6 +166,17 @@ def production_pipeline(combiner: str = "union") -> Pipeline:
     return Pipeline(detectors, combiner=combiner)
 
 
+def best_pipeline(combiner: str = "union") -> Pipeline:
+    """`production_pipeline` plus the `dead_holes` + `stuck` floors validated in
+    exploration.MD D1: same detectors and same real-mask IoU/precision as
+    production, but structurally catches isolated dead / stuck / dead-column
+    pixels that the frozen `calib` mask can miss on a new run. Zero regression on
+    runs 389/475; strictly more robust run-agnostically."""
+    p = production_pipeline(combiner)
+    return Pipeline(p.detectors, floor_stats=["geometry", "calib", "dead_holes", "stuck"],
+                    combiner=p.combiner, combiner_params=p.combiner_params)
+
+
 # ==========================================================================
 #  single-image adapter (used by review.py --masker masking:mask_image)
 # ==========================================================================

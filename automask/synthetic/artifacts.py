@@ -157,12 +157,100 @@ def beamstop_shadow(image, valid, rng, *, center=None, radius=60.0,
     return out, injected
 
 
+# --------------------------------------------------------------------------
+# 3. point defects (dead / hot / stuck pixels and small clusters)
+# --------------------------------------------------------------------------
+# Physically the bread-and-butter of detector masking on the Jungfrau1M: single
+# malfunctioning pixels and small clusters. Two polarities -- DEAD (reads ~0) and
+# HOT (stuck high) -- exercise the pixel-scale detectors (variance, blackhat,
+# window_median), which the extended streak/beamstop artifacts do not.
+
+def point_defect_mask(shape, rng, valid, *, n=200, cluster=1):
+    """Boolean footprint of ``n`` random cluster-blocks drawn from ``valid``.
+
+    ``cluster`` is the block side in pixels (1 -> single pixel). Draw order:
+    one ``rng.choice`` over the valid-pixel index, so a fixed seed reproduces the
+    same defects in either evaluation path."""
+    h, w = shape
+    vr, vc = np.nonzero(valid)
+    mask = np.zeros(shape, dtype=bool)
+    if vr.size == 0:
+        return mask
+    k = int(min(n, vr.size))
+    idx = rng.choice(vr.size, size=k, replace=False)
+    rad = int(cluster) // 2
+    for i in idx:
+        r, c = int(vr[i]), int(vc[i])
+        mask[max(0, r - rad):min(h, r + rad + 1),
+             max(0, c - rad):min(w, c + rad + 1)] = True
+    return mask & valid
+
+
+def column_defect_mask(shape, rng, valid, *, n_cols=2, length_frac=1.0):
+    """Boolean footprint of ``n_cols`` random (partial) columns within ``valid``.
+
+    Models Jungfrau ASIC/column faults. Draw order: columns first, then a segment
+    start per column when ``length_frac < 1``."""
+    h, w = shape
+    mask = np.zeros(shape, dtype=bool)
+    cols = rng.choice(w, size=int(min(n_cols, w)), replace=False)
+    seg = int(round(float(length_frac) * h))
+    for c in cols:
+        if seg >= h:
+            r0, r1 = 0, h
+        else:
+            r0 = int(rng.integers(0, max(1, h - seg)))
+            r1 = r0 + seg
+        mask[r0:r1, int(c)] = True
+    return mask & valid
+
+
+def _apply_point_value(image, valid, spots, *, polarity, amplitude_sigma):
+    """Return a copy of ``image`` with ``spots`` set dead (0) or hot (high)."""
+    out = np.array(image, dtype=np.float64, copy=True)
+    if polarity == "dead":
+        out[spots] = 0.0
+    elif polarity == "hot":
+        med, sd = _robust_stats(out[valid])
+        out[spots] = med + amplitude_sigma * sd
+    else:
+        raise ValueError(f"polarity must be dead/hot, got {polarity!r}")
+    return out
+
+
+def dead_pixels(image, valid, rng, *, n=200, cluster=1):
+    """Set ``n`` random valid pixels/clusters to 0 (dead pixels)."""
+    spots = point_defect_mask(image.shape, rng, valid, n=n, cluster=cluster)
+    return _apply_point_value(image, valid, spots, polarity="dead",
+                              amplitude_sigma=0.0), spots
+
+
+def hot_pixels(image, valid, rng, *, n=200, cluster=1, amplitude_sigma=15.0):
+    """Set ``n`` random valid pixels/clusters to a high stuck value (hot pixels)."""
+    spots = point_defect_mask(image.shape, rng, valid, n=n, cluster=cluster)
+    return _apply_point_value(image, valid, spots, polarity="hot",
+                              amplitude_sigma=amplitude_sigma), spots
+
+
+def bad_column(image, valid, rng, *, n_cols=2, length_frac=1.0, polarity="dead",
+               amplitude_sigma=15.0):
+    """Set ``n_cols`` random (partial) columns dead or hot (ASIC/column fault)."""
+    spots = column_defect_mask(image.shape, rng, valid, n_cols=n_cols,
+                               length_frac=length_frac)
+    return _apply_point_value(image, valid, spots, polarity=polarity,
+                              amplitude_sigma=amplitude_sigma), spots
+
+
 # Registry: name -> generator. Order is the deterministic iteration order used
-# by the evaluation loop (and therefore by the per-example seed derivation).
+# by the evaluation loop (and therefore by the per-example seed derivation). NEW
+# artifacts are APPENDED so existing per-example seeds stay stable.
 # `beamstop_small` reuses the same generator; the config gives it a smaller radius
 # range (~half the extent -> ~1/4 the injected footprint) to cover small shadows.
 ARTIFACTS = {
     "streak": straight_streak,
     "beamstop": beamstop_shadow,
     "beamstop_small": beamstop_shadow,
+    "dead_pixels": dead_pixels,
+    "hot_pixels": hot_pixels,
+    "bad_column": bad_column,
 }
