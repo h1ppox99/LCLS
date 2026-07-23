@@ -1,10 +1,8 @@
 # xppl1016922 — local copy + automatic detector masking
 
-A local copy of LCLS experiment **`xppl1016922`** (XPP instrument, SLAC), plus the research
-project built on top of it: an **automatic, run-agnostic masker for the Jungfrau1M detector**
-to replace the lab's manual hand-drawn mask. Working guide for the codebase: **[`CLAUDE.md`](CLAUDE.md)**.
-Background docs: **[`docs/DATA_OVERVIEW.md`](docs/DATA_OVERVIEW.md)** (the experiment, every
-data file, detector geometry) and **[`docs/PSANA_XTC.md`](docs/PSANA_XTC.md)** (reading raw XTC).
+Recovered local copy of LCLS experiment **`xppl1016922`** (XPP) and its
+Jungfrau1M masking project. The verified notebook reference is available only
+for run 475; run 389 raw XTC is incomplete.
 
 ## Layout
 
@@ -24,10 +22,10 @@ xpp_sharing/       the lab's current production method (read-only baseline)
 ## Setup
 
 ```bash
-source psana_env.sh                  # only for XTC / psana (activates ana-4.0.62)
-pip install -e . --no-deps           # make `import automask` work everywhere
-# --no-deps protects the ana env; for a plain numpy env instead:
-# pip install -r requirements.txt
+pip install -e .                     # installs declared dependencies from pyproject.toml
+# In the psana environment, protect its pinned numerical stack instead:
+source psana_env.sh
+pip install -e . --no-deps
 ```
 
 ## Read the experiment (`automask.io`)
@@ -46,11 +44,20 @@ img = sd.sum_image()             # (1030,1064) calibrated run-sum image
 geo = sd.jungfrau_geometry()     # distance, wavelength, beam center, masks, ...
 ```
 
-## Run the masker
+## Build and run
 
 ```bash
-python -m automask.masking                 # production report (IoU vs the hand mask)
-bash automask/scripts/eval_production.sh   # the Hydra regression anchor
+# Verified run-475 notebook reference; needs complete run-475 XTC.
+python -m automask.producers.baseline_mask --run 475
+python -m automask.producers.extract_dataset
+python -m automask.producers.build_features
+# Faithful lit-beam umean/ustd for run 475; needs XTC, time, and ~3+ GiB cache.
+python -m automask.producers.normalized_median --run 475 --n 800
+
+python -m automask.masking
+python -m automask.synthetic.evaluate \
+  --config automask/synthetic/config/synthetic_pipeline_smoke.yaml
 ```
 
-Full details in [`automask/README.md`](automask/README.md).
+See [`automask/README.md`](automask/README.md) for masking, sweeps, and known
+recovery limitations; [`docs/`](docs/) covers the local data and XTC access.

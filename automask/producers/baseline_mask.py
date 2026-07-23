@@ -1,0 +1,168 @@
+#!/usr/bin/env python3
+"""Build the recovered manual Jungfrau1M masking baseline.
+
+The baseline mirrors the lab notebook's mask recipe: mark non-positive pixels
+in an accumulated calibrated image, dilate them with a 5x5 neighbourhood, and
+add the three fixed geometry regions.  Masks use ``True == masked``.
+
+Two input modes are provided:
+
+* ``--source xtc`` reproduces the notebook most closely: select events using
+  ``ipm2/sum``, sum the first selected calibrated XTC images, then mask them.
+  It requires the psana environment and complete local XTC streams.
+* ``--source smalldata`` uses the calibrated full-run sum already
+  stored in small-data HDF5.  This is a practical recovery baseline when raw
+  XTC is not available; it is not byte-identical to the 100-event notebook
+  accumulation.
+
+Run ``python -m automask.producers.baseline_mask --help`` for options.
+"""
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+
+import numpy as np
+
+from automask.io.lcls_xpp import SmallData
+
+RUN = 475
+DETNAME = "jungfrau1M_alcove"
+ASM_SHAPE = (1064, 1030)
+DILATION_STRUCTURE = np.ones((5, 5), dtype=bool)
+
+
+def assemble(panel: np.ndarray, ix: np.ndarray, iy: np.ndarray) -> np.ndarray:
+    """Assemble a panel stack in the frozen-data orientation, ``(1064, 1030)``."""
+    image = np.zeros(ASM_SHAPE, dtype=np.asarray(panel).dtype)
+    image[np.asarray(ix, dtype=np.int64), np.asarray(iy, dtype=np.int64)] = panel
+    return image
+
+
+def small_data_sum(run: int = RUN) -> np.ndarray:
+    """Return the calibrated full-run sum in the project's assembled orientation."""
+    with SmallData(run) as sd:
+        panel = sd.h5[f"Sums/{DETNAME}_calib"][()].astype(np.float32)
+        geo = sd.jungfrau_geometry(DETNAME)
+    return assemble(panel, geo["ix"], geo["iy"])
+
+
+def select_events_by_ipm2(run: int = RUN, drop_top_percent: float = 1.0) -> np.ndarray:
+    """Keep events below the top ``drop_top_percent`` of the ipm2 monitor."""
+    with SmallData(run) as sd:
+        ipm2 = sd.i0("ipm2")
+    threshold = np.percentile(ipm2, 100.0 - drop_top_percent)
+    keep = ipm2 < threshold
+    print(f"[ipm2] {keep.sum()}/{keep.size} events kept (threshold {threshold:.1f})")
+    return keep
+
+
+def xtc_sum(run: int = RUN, n_images: int = 100) -> np.ndarray:
+    """Recreate the notebook's selected, negative-clipped XTC accumulation."""
+    import psana
+    from automask.io.read_xtc import open_local_run
+
+    keep = select_events_by_ipm2(run)
+    ds, _ = open_local_run(run)
+    detector = psana.Detector(DETNAME)
+    total = np.zeros(ASM_SHAPE, dtype=np.float64)
+    used = 0
+    for event_index, event in enumerate(ds.events()):
+        if event_index >= len(keep) or not keep[event_index]:
+            continue
+        image = detector.image(event)
+        if image is None:
+            continue
+        image = np.maximum(np.asarray(image), 0)
+        if image.shape != ASM_SHAPE:
+            raise ValueError(f"psana image has shape {image.shape}; expected {ASM_SHAPE}")
+        total += image
+        used += 1
+        if used >= n_images:
+            break
+    if used != n_images:
+        raise RuntimeError(f"only accumulated {used}/{n_images} selected XTC images")
+    print(f"[xtc] accumulated {used} selected images")
+    return total.astype(np.float32)
+
+
+def geometry_mask(shape: tuple[int, int] = ASM_SHAPE) -> np.ndarray:
+    """Notebook's three rectangular regions plus its triangular corner."""
+    if shape != ASM_SHAPE:
+        raise ValueError(f"baseline geometry is defined only for {ASM_SHAPE}, got {shape}")
+    mask = np.zeros(shape, dtype=bool)
+    mask[970:1006, 100:1064] = True
+    mask[1000:, 0:300] = True
+    mask[990:1000, 0:100] = True
+
+    # Triangle vertices are (axis-0, axis-1); avoid matplotlib for this simple
+    # right triangle so the mask is buildable in the minimal numerical env.
+    rows, cols = np.indices(shape)
+    mask |= ((rows >= 970) & (rows < 990) & (cols >= 50) & (cols < 100)
+             & (5 * rows + 2 * cols >= 5050))
+    return mask
+
+
+def zero_mask(sum_image: np.ndarray) -> np.ndarray:
+    """Dilated mask of pixels that never registered positive signal."""
+    from scipy.ndimage import binary_dilation
+
+    return binary_dilation(np.asarray(sum_image) <= 0, structure=DILATION_STRUCTURE)
+
+
+def build_mask(sum_image: np.ndarray) -> np.ndarray:
+    """Build the union of zero/dead pixels and the notebook geometry mask."""
+    mask = zero_mask(sum_image) | geometry_mask(sum_image.shape)
+    print(f"[mask] {mask.sum()}/{mask.size} pixels masked ({mask.mean():.2%})")
+    return mask
+
+
+def save_baseline(mask: np.ndarray, out: str | Path) -> Path:
+    """Save ``mask`` and create its parent directory if necessary."""
+    path = Path(out)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    np.save(path, mask.astype(bool))
+    print(f"[saved] {path}")
+    return path
+
+
+def save_plot(mask: np.ndarray, out: str | Path, title: str) -> Path:
+    """Save a headless-safe visualisation of one baseline mask."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    path = Path(out)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig, axis = plt.subplots(figsize=(10, 8))
+    image = axis.imshow(mask, cmap="Reds", interpolation="nearest", vmin=0, vmax=1)
+    axis.set_title(f"{title} — {mask.mean():.2%} masked")
+    axis.set_xlabel("assembled axis 1")
+    axis.set_ylabel("assembled axis 0")
+    fig.colorbar(image, ax=axis, ticks=(0, 1), label="masked")
+    fig.tight_layout()
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+    print(f"[plot] {path}")
+    return path
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--run", type=int, default=RUN)
+    parser.add_argument("--source", choices=("smalldata", "xtc"), default="xtc")
+    parser.add_argument("--n-images", type=int, default=100, help="XTC images to accumulate")
+    parser.add_argument("--out", type=Path, default=None)
+    parser.add_argument("--plot", type=Path, default=None, help="optional PNG output path")
+    args = parser.parse_args()
+
+    image = small_data_sum(args.run) if args.source == "smalldata" else xtc_sum(args.run, args.n_images)
+    default = Path("automask/data/masks/human_Mask_source.npy")
+    mask = build_mask(image)
+    save_baseline(mask, args.out or default)
+    if args.plot:
+        save_plot(mask, args.plot, f"Jungfrau1M baseline ({args.source}, run {args.run:04d})")
+
+
+if __name__ == "__main__":
+    main()

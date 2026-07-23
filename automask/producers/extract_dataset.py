@@ -30,7 +30,7 @@ import h5py
 
 HERE = os.path.dirname(os.path.abspath(__file__))               # .../automask/producers
 AUTOMASK = os.path.dirname(HERE)                                # .../automask
-ROOT = os.path.dirname(os.path.dirname(AUTOMASK))              # .../LCLS
+ROOT = os.path.dirname(AUTOMASK)                               # .../LCLS
 SMALLDATA = os.path.join(ROOT, "hdf5", "smalldata")
 HUMAN_MASK = os.path.join(AUTOMASK, "data", "masks", "human_Mask_source.npy")
 
@@ -53,6 +53,8 @@ def assemble(panel: np.ndarray, ix: np.ndarray, iy: np.ndarray) -> np.ndarray:
 
 
 def main() -> None:
+    os.makedirs(IMG_DIR, exist_ok=True)
+    os.makedirs(MSK_DIR, exist_ok=True)
     manifest = {
         "created": datetime.datetime.now().isoformat(timespec="seconds"),
         "detector": DET,

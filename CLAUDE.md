@@ -49,7 +49,7 @@ that runs python: `source psana_env.sh && python -m automask.masking`.
 
 - One-time setup: `pip install -e . --no-deps` makes `import automask` work from anywhere
   (`--no-deps` so pip doesn't touch numpy/scipy in the ana env and break psana).
-- Reading small-data HDF5 and `calib/` needs only `numpy`/`h5py` (`pip install -r requirements.txt`).
+- Reading small-data HDF5 and `calib/` needs `numpy`/`h5py`; dependencies are declared in `pyproject.toml`.
 - Reading raw XTC frames needs psana (the env above). See `docs/PSANA_XTC.md`.
 
 ## Data on disk
@@ -62,9 +62,9 @@ status, ebeam, EPICS, per-event azimuthal average), run-level `Sums/` images, an
 
 **`xtc/xppl1016922-r<RUN>-s<STREAM>-c00.xtc`** — full event stream, needs psana. A run is
 split across parallel DAQ streams `s00…s04` that psana normally merges by timestamp. Present:
-- **Run 475** — all 5 streams complete (~1.3 GB each).
-- **Run 389** — only stream **s01**, and it is a **partially-downloaded, truncated file**
-  (~13 GB of an expected ~30 GB). See the gotcha below.
+- **Run 475** — all 5 streams (s00–s04) complete (~1.36 GB each).
+- **Run 389** — only stream **s00**, and it is a **partially-downloaded, truncated file**
+  (~19 GB of an expected ~30 GB). See the gotcha below.
 
 **`calib/`** — psana calib store: `calib/<DetType::CalibV1>/<Source>/<constant>/<START>-end.data`.
 Each `<START>-end.data` applies from run `START` until superseded. Files are numpy-loadable
@@ -91,11 +91,12 @@ small-data files already embed the applied calibration, so you rarely need `cali
   replaced by the private-use char **U+F022**. Typing a literal colon path fails ("No such
   file or directory"). Use glob/tab-completion, `os.listdir`/`os.walk`, `lcls_xpp.resolve()`,
   or a `calib/Epix100a*` wildcard — never a hand-typed colon path.
-- **Truncated run 389 (s01).** It reads fine in psana: ~3272 events decode cleanly (full
+- **Truncated run 389 (s00).** It reads fine in psana: ~4606 events decode cleanly (full
   Jungfrau raw frames included), then it stops at the truncation with just a warning, no
   crash. But: (a) **open it by explicit file path**, not `exp=xppl1016922:run=389` — the
   run-resolver rejects the single-stream layout ("XTC file(s) is empty"):
-  `psana.DataSource("/Data/.../xtc/xppl1016922-r0389-s01-c00.xtc")`. (b) Stream s01 carries
-  Jungfrau + beamline monitors but **not** the Epix panels. (c) `.calib()` needs the calib
-  dir wired into psana's search path (`automask/io/setup_psdm_layout.py`); `.raw()` works regardless.
+  `psana.DataSource("/Data/.../xtc/xppl1016922-r0389-s00-c00.xtc")`. (b) Stream s00 carries
+  Jungfrau + beamline monitors (EBeam, gas detector, BMMONs, IPMs, a Zyla camera) but **not**
+  the Epix panels. (c) `.calib()` needs the calib dir wired into psana's search path
+  (`automask/io/setup_psdm_layout.py`); `.raw()` works regardless.
 - **`results/` is empty** — never assume analysis code or outputs live there.

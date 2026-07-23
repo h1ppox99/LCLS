@@ -1,3 +1,60 @@
+#!/usr/bin/env python3
+"""Hydra sweep driver for the recovered masking pipeline."""
+from __future__ import annotations
+
+import csv
+import os
+
+import hydra
+import yaml
+from omegaconf import DictConfig, OmegaConf
+
+from automask.combine.base import COMBINERS
+from automask.evaluation import evaluate, load_sample
+from automask.masking import Detector, Pipeline
+from automask.regularization.base import REGULARIZERS
+from automask.stats.base import STATS
+
+AUTOMASK = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _params(registry, name, cfg_params):
+    kwargs = OmegaConf.to_container(cfg_params, resolve=True) if cfg_params else {}
+    return registry[name].params(**kwargs)
+
+
+def _detector_from_dict(detector: dict) -> Detector:
+    stat = detector["stat"]
+    field_reg = detector.get("field_reg")
+    mask_reg = detector.get("mask_reg")
+    return Detector(
+        stat, STATS[stat].params(**(detector.get("stat_params") or {})),
+        field_reg=field_reg,
+        field_reg_params=(REGULARIZERS[field_reg].params(**(detector.get("field_reg_params") or {}))
+                          if field_reg else None),
+        mask_reg=mask_reg,
+        mask_reg_params=(REGULARIZERS[mask_reg].params(**(detector.get("mask_reg_params") or {}))
+                         if mask_reg else None),
+    )
+
+
+def build_pipeline(cfg: DictConfig) -> Pipeline:
+    combiner = cfg.combine.name
+    combiner_params = _params(COMBINERS, combiner, cfg.combine.get("params"))
+    if cfg.get("detectors"):
+        detectors = [_detector_from_dict(OmegaConf.to_container(d, resolve=True)) for d in cfg.detectors]
+    else:
+        field_reg, mask_reg = cfg.regularization.name, cfg.mask_reg.name
+        detectors = [Detector(
+            cfg.stat.name, _params(STATS, cfg.stat.name, cfg.stat.get("params")),
+            field_reg=field_reg,
+            field_reg_params=_params(REGULARIZERS, field_reg, cfg.regularization.get("params")) if field_reg else None,
+            mask_reg=mask_reg,
+            mask_reg_params=_params(REGULARIZERS, mask_reg, cfg.mask_reg.get("params")) if mask_reg else None,
+        )]
+    return Pipeline(detectors, combiner=combiner, combiner_params=combiner_params)
+
+
 def _synthetic_scores(cfg: DictConfig, pipe: Pipeline, runs, out_dir: str) -> dict:
     """Score `pipe` with the synthetic-artifact evaluation. Returns a metric dict
     exposing the same iou/precision/recall keys the sweep row expects, plus a
@@ -78,3 +135,29 @@ def main(cfg: DictConfig):
         if not os.path.isabs(base):
             base = os.path.join(hc.runtime.cwd, base)
     except Exception:
+        base = os.getcwd()
+    os.makedirs(base, exist_ok=True)
+    csv_path = os.path.join(base, "results.csv")
+    write_header = not os.path.exists(csv_path)
+    with open(csv_path, "a", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(row))
+        if write_header:
+            writer.writeheader()
+        writer.writerow(row)
+    print(f"  [saved] {csv_path}")
+
+    if cfg.figures and not synthetic:
+        from automask import viz
+        figure_dir = os.path.join(AUTOMASK, "outputs", "figures")
+        os.makedirs(figure_dir, exist_ok=True)
+        for run in runs:
+            sample = load_sample(run)
+            out = os.path.join(figure_dir, f"sweep_{cfg.stat.name}_run{run:04d}.png")
+            viz.save_agreement(pipe.run(sample), pipe.floor(sample), sample.human, run, out,
+                               title=f"{label} — run {run}")
+            print(f"  [saved] {out}")
+    return mean["iou"]
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,15 @@
+# Fast end-to-end smoke test for the production pipeline on synthetic artifacts.
+# It still runs streak, beamstop, beamstop_small, and the original-mask case.
+mode: pipeline
+runs: [475]
+combiner: union
+output_dir: automask/outputs/synthetic_pipeline_smoke
+seed: 0
+n_per_artifact: 1
+rotations: [0]
+save_figures: false
+
+artifacts:
+  streak: {angle_deg: 45.0, width: 2.0, amplitude_sigma: 8.0, band_sigmas: 1.0}
+  beamstop: {shape: ellipse, radius: 60.0, axis_ratio: 1.0, transmission: 0.2, softness: 0.15}
+  beamstop_small: {shape: rect, radius: 30.0, axis_ratio: 1.0, transmission: 0.2, softness: 0.15}
