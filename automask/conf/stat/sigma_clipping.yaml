@@ -1,0 +1,7 @@
+name: sigma_clipping
+params:
+  bin_width: 3.0
+  thres: 5.0      # sigma-clip cut-off (sigma_clip_ng)
+  max_iter: 5     # sigma-clip iterations
+  k: 5.0
+  mode: both

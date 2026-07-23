@@ -55,8 +55,8 @@ class Sample:
     @cached_property
     def center(self) -> Tuple[float, float]:
         """Beam center in (axis0, axis1) index order. Lazily read from the run's
-        small-data HDF5 (the only h5py dependency, needed by the radial_median /
-        azimuthal_sigma stats); cached so the core numpy-only stats never pay it."""
+        small-data HDF5 (the only h5py dependency, needed by the sigma_clipping
+        stat); cached so the core numpy-only stats never pay it."""
         from automask.geometry import get_center
         return get_center(self.run)
 

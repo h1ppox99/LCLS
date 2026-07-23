@@ -8,7 +8,7 @@ Two questions:
       render the response FIELD directly (log), not just the thresholded mask.
   (2) Does preprocessing help? We compare three inputs to Frangi:
         raw    : the raw sum image (what the threshold-sweep study used)
-        med    : current radial_median field (per-bin median sub + GLOBAL z)
+        med    : current sigma_clipping field (azimuthal sigma-clip z-score)
         full   : per-bin FULL normalization (median sub + per-bin 1.4826*MAD)
       and both polarities (black_ridges False=bright ridge, True=dark ridge).
 
@@ -30,7 +30,7 @@ import matplotlib.pyplot as plt
 from automask.evaluation import load_sample, EVAL_RUNS
 from automask.masking import production_pipeline
 from automask.dataset import score
-from automask.stats.radial_median import radial_median_stat
+from automask.stats.sigma_clipping import sigma_clipping_stat
 from automask.regularization.frangi import frangi_ridges, auto_threshold
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -79,7 +79,7 @@ def responses(sample):
     """dict label -> (input_field, frangi_response) for the input variants."""
     s = sample
     raw = s.sumimg.astype(np.float64)
-    med = radial_median_stat(s.sumimg, s.real, s.center)          # current
+    med = sigma_clipping_stat(s.sumimg, s.real, s.center)         # current
     full = radial_full_norm(s.sumimg, s.real, s.center)           # proposed
     out = {}
     out["raw (bright)"] = (raw, frangi_ridges(raw, sigmas=SIGMAS, black_ridges=False))

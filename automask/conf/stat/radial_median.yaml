@@ -1,5 +1,0 @@
-name: radial_median
-params:
-  bin_width: 3.0
-  k: 5.0
-  mode: both

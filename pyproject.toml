@@ -17,7 +17,7 @@ dependencies = [
     "scikit-image",   # stats/blackhat.py
     "tifffile",       # review.py TIFF input
     "hydra-core",     # studies/sweep_hyperparameters.py
-    "pyFAI",          # optional azimuthal cross-check
+    "pyFAI",          # stats/radial_median.py azimuthal sigma-clip
 ]
 
 [tool.setuptools.packages.find]

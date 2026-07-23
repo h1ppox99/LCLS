@@ -14,8 +14,8 @@ its own folder (one file per method), plus an intensity-free floor:
 The three registries below are the catalogue of everything available. Each is a
 dict name -> spec, populated by importing the component packages:
 
-    STATS         variance, blackhat, radial_median,
-                  azimuthal_sigma, geometry (floor), calib (floor)
+    STATS         variance, blackhat, sigma_clipping,
+                  geometry (floor), calib (floor)
     REGULARIZERS  tv (field), frangi (field), pad (mask), close_open (mask)
     COMBINERS     union (picks), weighted_sum (fields), mahalanobis (fields)
 
