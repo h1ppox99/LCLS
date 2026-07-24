@@ -1,6 +1,6 @@
 # @package _global_
-# The live production recipe: TV variance + TV+pad black-hat
-# on the geometry+calib floor, unioned. Regression anchor (matches masking.main()).
+# The default recipe: TV variance + sigma-clipping
+# on the geometry+calib floor, unioned. Matches masking.main().
 # Use combine=weighted_sum to reproduce combo_sum instead.
 detectors:
   - stat: variance
@@ -8,9 +8,8 @@ detectors:
     field_reg: tv
     field_reg_params: {weight: 4.0}
     mask_reg: null
-  - stat: blackhat
-    stat_params: {radius: 5, k: 6.0, mode: high}
+  - stat: sigma_clipping
+    stat_params: {k: 5.0, mode: both}
     field_reg: tv
     field_reg_params: {weight: 1.0}
-    mask_reg: pad
-    mask_reg_params: {pad: 2}
+    mask_reg: null

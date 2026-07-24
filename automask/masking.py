@@ -140,21 +140,19 @@ class Pipeline:
 #  production pipeline -- the live 3-detector recipe (regression anchor)
 # ==========================================================================
 def production_pipeline(combiner: str = "union") -> Pipeline:
-    """The current production recipe: TV variance + TV+pad black-hat on the
-    geometry+calib floor. combiner="union" reproduces `combo`;
+    """The default recipe: TV variance + sigma-clipping on the geometry+calib
+    floor. combiner="union" reproduces `combo`;
     combiner="weighted_sum" reproduces `combo_sum`."""
     from automask.stats.variance import VarianceParams
-    from automask.stats.blackhat import BlackhatParams
+    from automask.stats.sigma_clipping import SigmaClippingParams
     from automask.regularization.tv import TVParams
-    from automask.regularization.pad import PadParams
     from automask.combine.weighted_sum import WeightedSumParams
 
     detectors = [
         Detector("variance", VarianceParams(k=3.5, mode="low"),
                  field_reg="tv", field_reg_params=TVParams(4.0), mask_reg=None),
-        Detector("blackhat", BlackhatParams(radius=5, k=6.0, mode="high"),
-                 field_reg="tv", field_reg_params=TVParams(1.0),
-                 mask_reg="pad", mask_reg_params=PadParams(2)),
+        Detector("sigma_clipping", SigmaClippingParams(k=5.0, mode="both"),
+                 field_reg="tv", field_reg_params=TVParams(1.0), mask_reg=None),
     ]
     if combiner == "weighted_sum":
         return Pipeline(detectors, combiner="weighted_sum",
@@ -168,6 +166,7 @@ def production_pipeline(combiner: str = "union") -> Pipeline:
 def mask_image(
     image: np.ndarray,
     *,
+    calib: Optional[np.ndarray] = None,
     blackhat_radius: int = 5,
     blackhat_k: float = 6.0,
     blackhat_weight: float = 1.0,
@@ -175,8 +174,13 @@ def mask_image(
 ) -> np.ndarray:
     """Honest single-image subset of the run-level pipeline: invalid pixels and
     geometry lines form the floor, then a TV+pad black-hat pick is unioned onto
-    it. The variance detector is absent (per-pixel variance needs many frames)
-    and so is the run-specific calib mask. True == masked."""
+    it. The variance detector is absent (per-pixel variance needs many frames).
+
+    `calib` is the run's psana pixel-status bad-pixel mask (a boolean array in
+    the same assembled space as `image`, True == masked) -- the single image is
+    built from that run, so its dead pixels apply. Pass e.g.
+    `load_mask("statusMask_run0475_asm")`; when omitted the floor is geometry
+    only. True == masked."""
     from automask.stats.geometry import geometry_mask
     from automask.stats.blackhat import blackhat_stat
     from automask.regularization.tv import tv_denoise
@@ -193,13 +197,19 @@ def mask_image(
 
     carrying_data = finite & (work != 0)
     floor = ~finite | geometry_mask(carrying_data, pad=pad)
+    if calib is not None:
+        calib = np.asarray(calib, dtype=bool)
+        if calib.shape != image.shape:
+            raise ValueError(
+                f"calib mask shape {calib.shape} != image shape {image.shape}")
+        floor = floor | calib
     bh = tv_denoise(blackhat_stat(work, finite, radius=blackhat_radius), blackhat_weight)
     bh = pad_mask(threshold_stat(bh, blackhat_k, "high") & finite, pad) & finite
     return combine_masks(floor, {"blackhat": bh}).astype(bool, copy=False)
 
 
 # ==========================================================================
-#  main -- production report (regression anchor, run 475)
+#  main -- default recipe report (run 475)
 # ==========================================================================
 def main():
     RUN = 475
