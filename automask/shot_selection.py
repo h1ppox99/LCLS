@@ -92,8 +92,8 @@ class ShotSelection:
     """
 
     xray: XRayClass = "on"
-    laser: LaserClass = "any"
-    n_shots: Optional[int] = None
+    laser: LaserClass = "off"
+    n_shots: Optional[int] = 800
     filter_low: float = 0.03
     filter_high: float = 0.03
     normalization: Normalization = "none"
