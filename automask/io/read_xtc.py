@@ -135,8 +135,7 @@ def scan_shots(run: int = 475, max_events: int | None = None):
             break
     if not intensity:
         raise RuntimeError(f"run {run}: no events scanned")
-    print(f"[scan] run {run:04d}: {len(intensity)} shots "
-          f"({int(np.sum(xray_on))} x-ray-on)")
+    print(f"[scan] run {run:04d}: {len(intensity)} shots read")
     return ShotMeta(run=run, intensity=np.asarray(intensity),
                     xray_on=np.asarray(xray_on), laser_on=np.asarray(laser_on))
 

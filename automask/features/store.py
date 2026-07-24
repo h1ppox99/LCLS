@@ -22,8 +22,9 @@ convention of ``automask.producers.normalized_median``.
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
-from typing import Tuple
+from typing import Optional, Tuple
 
 import numpy as np
 
@@ -33,6 +34,17 @@ from automask.shot_selection import ShotMeta, ShotSelection
 ROOT = Path(__file__).resolve().parents[2]
 PANEL_SHAPE = (2, 512, 1024)
 ASM_SHAPE = (1064, 1030)
+
+
+def _select_line(run: int, selection: ShotSelection, counts: dict) -> str:
+    """The ``[select] ...`` log line, built from a counts dict (compute or cache)."""
+    n_used = counts.get("n_used")
+    used = "" if n_used is None or n_used == counts.get("n_selected") else \
+        f", {n_used} used"
+    return (f"[select] run {run:04d}: {counts['n_events']} shots total, "
+            f"{counts['n_accessible']} accessible "
+            f"(xray={selection.xray}, laser={selection.laser}), "
+            f"{counts['n_selected']} selected{used}")
 
 
 def _assemble(panel: np.ndarray, ix: np.ndarray, iy: np.ndarray) -> np.ndarray:
@@ -52,11 +64,34 @@ class FeatureStore:
     def path(self, run: int, spec: FeatureSpec, form: str = "asm") -> Path:
         return self.cache_dir / f"{spec.cache_stub(run)}_{form}.npy"
 
+    def meta_path(self, run: int, spec: FeatureSpec) -> Path:
+        return self.cache_dir / f"{spec.cache_stub(run)}_meta.json"
+
+    def counts(self, run: int, spec: FeatureSpec) -> Optional[dict]:
+        """Persisted shot counts for a cached feature, or ``None`` if unavailable
+        (miss, or a cache written before sidecars existed). Keys: ``n_events``,
+        ``n_accessible``, ``n_selected``, ``n_used``."""
+        p = self.meta_path(run, spec)
+        if not p.exists():
+            return None
+        try:
+            return json.loads(p.read_text())
+        except (json.JSONDecodeError, OSError):
+            return None
+
     def get(self, run: int, spec: FeatureSpec, form: str = "asm") -> np.ndarray:
-        """Return the feature array for ``run``, computing + caching on a miss."""
+        """Return the feature array for ``run``, computing + caching on a miss.
+
+        On a hit the ``[select]`` count line is still emitted (from the sidecar),
+        so cached and freshly-computed runs report the same shot bookkeeping.
+        """
         target = self.path(run, spec, form)
         if not target.exists():
             self._materialize(run, spec)
+        else:
+            c = self.counts(run, spec)
+            if c is not None:
+                print(_select_line(run, spec.selection, c))
         return np.load(target)
 
     # -- compute -----------------------------------------------------------
@@ -70,23 +105,26 @@ class FeatureStore:
                 f"reduction {spec.reduction!r} not implemented in FeatureStore")
 
     def _save_pair(self, run: int, selection: ShotSelection,
-                   pairs, ix: np.ndarray, iy: np.ndarray) -> None:
-        """Cache ``(reduction, panel)`` pairs as both panel and assembled forms."""
+                   pairs, ix: np.ndarray, iy: np.ndarray, counts: dict) -> None:
+        """Cache ``(reduction, panel)`` pairs as both panel and assembled forms,
+        plus a ``_meta.json`` sidecar of shot counts (same stub as the arrays)."""
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+        blob = json.dumps(counts)
         for reduction, panel in pairs:
             panel = panel.astype(np.float32)
             stub = FeatureSpec("_", reduction, selection).cache_stub(run)
             np.save(self.cache_dir / f"{stub}_panel.npy", panel)
             np.save(self.cache_dir / f"{stub}_asm.npy", _assemble(panel, ix, iy))
+            (self.cache_dir / f"{stub}_meta.json").write_text(blob)
 
     def _materialize_mean_std(self, run: int, selection: ShotSelection) -> None:
         """One XTC pass -> cache both the mean and std for this selection."""
         from automask.io.read_xtc import panel_geometry
 
-        mean_panel, std_panel = self._accumulate(run, selection)
+        mean_panel, std_panel, counts = self._accumulate(run, selection)
         ix, iy = panel_geometry(run)
         self._save_pair(run, selection,
-                        (("mean", mean_panel), ("std", std_panel)), ix, iy)
+                        (("mean", mean_panel), ("std", std_panel)), ix, iy, counts)
 
     def _materialize_median_mad(self, run: int, selection: ShotSelection) -> None:
         """Stage selected frames to disk, then cache median + scaled MAD.
@@ -101,23 +139,27 @@ class FeatureStore:
         stage_path = self.cache_dir / f"{stub}_frames.h5"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         try:
-            self._stage_frames(run, selection, stage_path)
+            counts = self._stage_frames(run, selection, stage_path)
             median_panel, mad_panel = self._robust_reduce(stage_path)
         finally:
             stage_path.unlink(missing_ok=True)
         ix, iy = panel_geometry(run)
         self._save_pair(run, selection,
-                        (("median", median_panel), ("mad", mad_panel)), ix, iy)
+                        (("median", median_panel), ("mad", mad_panel)), ix, iy, counts)
 
     def _stage_frames(self, run: int, selection: ShotSelection,
-                      stage_path: Path) -> None:
-        """Decode the selected (optionally i0-normalized) frames into HDF5."""
+                      stage_path: Path) -> dict:
+        """Decode the selected (optionally i0-normalized) frames into HDF5.
+
+        Returns the shot-count dict (with the final ``n_used`` = frames staged)."""
         import h5py
 
         from automask.io.read_xtc import iter_calibrated, scan_shots
 
         meta: ShotMeta = scan_shots(run)
         indices = selection.resolve(meta)
+        counts = {**selection.describe(meta), "n_selected": int(indices.size)}
+        print(_select_line(run, selection, counts))
         normalize = selection.normalization == "ipm2"
         reference = selection.reference_intensity(meta, indices) if normalize else 1.0
 
@@ -141,6 +183,8 @@ class FeatureStore:
                     f"run {run}: selection {selection} yielded no frames")
             if staged != indices.size:          # some .calib() returned None
                 frames.resize(staged, axis=0)
+        counts["n_used"] = int(staged)
+        return counts
 
     @staticmethod
     def _robust_reduce(stage_path: Path, row_block: int = 32
@@ -164,12 +208,17 @@ class FeatureStore:
         return median, mad
 
     def _accumulate(self, run: int, selection: ShotSelection
-                    ) -> Tuple[np.ndarray, np.ndarray]:
-        """Stream selected calibrated frames into per-pixel (mean, std) panels."""
+                    ) -> Tuple[np.ndarray, np.ndarray, dict]:
+        """Stream selected calibrated frames into per-pixel (mean, std) panels.
+
+        Returns ``(mean, std, counts)`` where ``counts['n_used']`` is the number of
+        frames actually reduced (``.calib()`` misses excluded)."""
         from automask.io.read_xtc import iter_calibrated, scan_shots
 
         meta: ShotMeta = scan_shots(run)
         indices = selection.resolve(meta)
+        counts = {**selection.describe(meta), "n_selected": int(indices.size)}
+        print(_select_line(run, selection, counts))
         normalize = selection.normalization == "ipm2"
         reference = selection.reference_intensity(meta, indices) if normalize else 1.0
 
@@ -190,4 +239,5 @@ class FeatureStore:
             raise RuntimeError(f"run {run}: selection {selection} yielded no frames")
         mean = total / n_used
         std = np.sqrt(np.maximum(squared / n_used - mean * mean, 0.0))
-        return mean, std
+        counts["n_used"] = int(n_used)
+        return mean, std, counts

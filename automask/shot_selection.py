@@ -149,6 +149,13 @@ class ShotSelection:
         pick = np.linspace(0, survivors.size - 1, self.n_shots).round().astype(np.int64)  # TODO: Refine selection strategy later
         return survivors[np.unique(pick)]
 
+    def describe(self, meta: ShotMeta) -> dict:
+        """Shot-count breakdown for this selection over ``meta``: total events in
+        the run and how many are *accessible* under the current x-ray/laser config
+        (before the intensity trim / ``n_shots`` cap). Pure, testable, no psana."""
+        return {"n_events": int(meta.n_events),
+                "n_accessible": int(self._shot_class(meta).sum())}
+
     def reference_intensity(self, meta: ShotMeta, indices: np.ndarray) -> float:
         """Reference i0 for ``normalization='ipm2'``: median intensity over the
         selected shots. Frames are then scaled by ``reference / i0[shot]``."""
