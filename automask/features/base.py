@@ -23,7 +23,7 @@ from typing import Dict, Literal
 
 from automask.shot_selection import ShotSelection
 
-# mean/std stream in one pass; median/mad need every frame (see store.py).
+# mean/std stream in one pass; median/mad stage frames to disk first (see store.py).
 Reduction = Literal["mean", "std", "median", "mad"]
 
 

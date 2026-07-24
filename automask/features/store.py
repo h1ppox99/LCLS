@@ -14,8 +14,11 @@ share one file. A mean or std request co-computes and caches BOTH (one XTC pass)
 since they share a selection.
 
 Reductions: ``mean``/``std`` stream (O(1) memory in shot count). ``median``/``mad``
-need every frame held at once and are not implemented here yet -- use
-``automask.producers.normalized_median`` for robust lit features meanwhile.
+are order statistics -- there is no streaming form, so the selected frames are
+first staged to a temporary HDF5 cache and then reduced in panel-row blocks
+(bounded RAM, ~n*4 MiB of disk). ``mad`` is the 1.4826-scaled median absolute
+deviation (the robust analogue of ``std``), matching the ``umean``/``ustd``
+convention of ``automask.producers.normalized_median``.
 """
 from __future__ import annotations
 
@@ -60,10 +63,21 @@ class FeatureStore:
     def _materialize(self, run: int, spec: FeatureSpec) -> None:
         if spec.reduction in ("mean", "std"):
             self._materialize_mean_std(run, spec.selection)
+        elif spec.reduction in ("median", "mad"):
+            self._materialize_median_mad(run, spec.selection)
         else:
             raise NotImplementedError(
-                f"reduction {spec.reduction!r} not implemented in FeatureStore; "
-                f"use automask.producers.normalized_median for median/mad features")
+                f"reduction {spec.reduction!r} not implemented in FeatureStore")
+
+    def _save_pair(self, run: int, selection: ShotSelection,
+                   pairs, ix: np.ndarray, iy: np.ndarray) -> None:
+        """Cache ``(reduction, panel)`` pairs as both panel and assembled forms."""
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        for reduction, panel in pairs:
+            panel = panel.astype(np.float32)
+            stub = FeatureSpec("_", reduction, selection).cache_stub(run)
+            np.save(self.cache_dir / f"{stub}_panel.npy", panel)
+            np.save(self.cache_dir / f"{stub}_asm.npy", _assemble(panel, ix, iy))
 
     def _materialize_mean_std(self, run: int, selection: ShotSelection) -> None:
         """One XTC pass -> cache both the mean and std for this selection."""
@@ -71,12 +85,83 @@ class FeatureStore:
 
         mean_panel, std_panel = self._accumulate(run, selection)
         ix, iy = panel_geometry(run)
+        self._save_pair(run, selection,
+                        (("mean", mean_panel), ("std", std_panel)), ix, iy)
+
+    def _materialize_median_mad(self, run: int, selection: ShotSelection) -> None:
+        """Stage selected frames to disk, then cache median + scaled MAD.
+
+        Order statistics can't stream, so this holds one XTC pass in a temporary
+        HDF5 file and reduces it in panel-row blocks (bounded RAM). Median and
+        MAD share the frame set and are co-computed, mirroring mean/std.
+        """
+        from automask.io.read_xtc import panel_geometry
+
+        stub = FeatureSpec("_", "median", selection).cache_stub(run)
+        stage_path = self.cache_dir / f"{stub}_frames.h5"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
-        for reduction, panel in (("mean", mean_panel), ("std", std_panel)):
-            stub = FeatureSpec("_", reduction, selection).cache_stub(run)
-            np.save(self.cache_dir / f"{stub}_panel.npy", panel.astype(np.float32))
-            np.save(self.cache_dir / f"{stub}_asm.npy",
-                    _assemble(panel.astype(np.float32), ix, iy))
+        try:
+            self._stage_frames(run, selection, stage_path)
+            median_panel, mad_panel = self._robust_reduce(stage_path)
+        finally:
+            stage_path.unlink(missing_ok=True)
+        ix, iy = panel_geometry(run)
+        self._save_pair(run, selection,
+                        (("median", median_panel), ("mad", mad_panel)), ix, iy)
+
+    def _stage_frames(self, run: int, selection: ShotSelection,
+                      stage_path: Path) -> None:
+        """Decode the selected (optionally i0-normalized) frames into HDF5."""
+        import h5py
+
+        from automask.io.read_xtc import iter_calibrated, scan_shots
+
+        meta: ShotMeta = scan_shots(run)
+        indices = selection.resolve(meta)
+        normalize = selection.normalization == "ipm2"
+        reference = selection.reference_intensity(meta, indices) if normalize else 1.0
+
+        with h5py.File(stage_path, "w") as h5:
+            frames = h5.create_dataset(
+                "frames", shape=(indices.size, *PANEL_SHAPE), dtype=np.float32,
+                maxshape=(None, *PANEL_SHAPE), chunks=(1, 2, 64, 1024),
+                compression="gzip", compression_opts=1)
+            staged = 0
+            for event_index, panel in iter_calibrated(run, indices):
+                frame = panel.astype(np.float32)
+                if normalize:
+                    frame *= np.float32(reference / meta.intensity[event_index])
+                frames[staged] = frame
+                staged += 1
+                if staged % 50 == 0:
+                    print(f"[features] run {run:04d}: staged {staged}/{indices.size} "
+                          "frames", flush=True)
+            if staged == 0:
+                raise RuntimeError(
+                    f"run {run}: selection {selection} yielded no frames")
+            if staged != indices.size:          # some .calib() returned None
+                frames.resize(staged, axis=0)
+
+    @staticmethod
+    def _robust_reduce(stage_path: Path, row_block: int = 32
+                       ) -> Tuple[np.ndarray, np.ndarray]:
+        """Per-pixel median and 1.4826-scaled MAD from staged frames, block-wise."""
+        import h5py
+
+        with h5py.File(stage_path, "r") as h5:
+            frames = h5["frames"]
+            _, modules, rows, cols = frames.shape
+            median = np.empty((modules, rows, cols), dtype=np.float32)
+            mad = np.empty_like(median)
+            for row0 in range(0, rows, row_block):
+                row1 = min(row0 + row_block, rows)
+                block = frames[:, :, row0:row1, :].astype(np.float32)
+                med = np.median(block, axis=0)
+                median[:, row0:row1, :] = med
+                mad[:, row0:row1, :] = 1.4826 * np.median(
+                    np.abs(block - med), axis=0)
+                print(f"[features] rows {row0}:{row1}/{rows}", flush=True)
+        return median, mad
 
     def _accumulate(self, run: int, selection: ShotSelection
                     ) -> Tuple[np.ndarray, np.ndarray]:
