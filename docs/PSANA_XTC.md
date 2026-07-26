@@ -6,8 +6,8 @@ Complete run-475 XTC is required to reproduce the notebook reference exactly.
 ```bash
 source psana_env.sh
 python -m automask.producers.baseline_mask --source xtc --run 475 --n-images 100
-# Builds robust IPM2-normalized umean/ustd; needs ~3+ GiB temporary cache.
-python -m automask.producers.normalized_median --run 475 --n 800
+# Optional: prewarm the FeatureStore cache so evaluation stays numpy-only.
+python -m automask.producers.build_features --run 389 475
 ```
 
 `psana_env.sh` sets the `SIT_*` variables and activates the expected psana

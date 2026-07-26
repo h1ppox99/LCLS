@@ -13,14 +13,12 @@ missing after recovery.  Recreate them in this order:
 python -m automask.producers.baseline_mask --source xtc --run 475
 python -m automask.producers.extract_dataset
 python -m automask.producers.build_features
-python -m automask.producers.normalized_median --run 475 --n 800
 ```
 
 The first command reproduces the original run-475 notebook recipe. The
 HDF5-only `--source smalldata` mode is diagnostic only and is not a reference.
-`build_features` supplies a fast fallback. Run `normalized_median` afterwards
-to replace run-475 `umean`/`ustd` with the robust IPM2-normalized features used
-by the lit-beam statistics. It needs complete XTC and roughly 3+ GiB of cache.
+`build_features` is optional: it only prewarms the FeatureStore cache, which the
+evaluation loop otherwise fills on demand from raw XTC.
 
 ## Adding a method
 
@@ -98,7 +96,6 @@ print(score(pred, gt))                     # {'iou':.., 'precision':.., 'recall'
 python -m automask.producers.baseline_mask --run 475
 python -m automask.producers.extract_dataset
 python -m automask.producers.build_features
-python -m automask.producers.normalized_median --run 475 --n 800
 ```
 
 ## Baseline to beat

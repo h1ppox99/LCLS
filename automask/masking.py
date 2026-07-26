@@ -151,8 +151,8 @@ def production_pipeline(combiner: str = "union") -> Pipeline:
     detectors = [
         Detector("variance", VarianceParams(k=3.5, mode="low"),
                  field_reg="tv", field_reg_params=TVParams(4.0), mask_reg=None),
-        Detector("sigma_clipping", SigmaClippingParams(k=5.0, mode="both"),
-                 field_reg="tv", field_reg_params=TVParams(1.0), mask_reg=None),
+        # Detector("sigma_clipping", SigmaClippingParams(k=5.0, mode="both"),
+        #          field_reg="tv", field_reg_params=TVParams(1.0), mask_reg=None),
     ]
     if combiner == "weighted_sum":
         return Pipeline(detectors, combiner="weighted_sum",

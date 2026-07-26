@@ -17,8 +17,7 @@ Reductions: ``mean``/``std`` stream (O(1) memory in shot count). ``median``/``ma
 are order statistics -- there is no streaming form, so the selected frames are
 first staged to a temporary HDF5 cache and then reduced in panel-row blocks
 (bounded RAM, ~n*4 MiB of disk). ``mad`` is the 1.4826-scaled median absolute
-deviation (the robust analogue of ``std``), matching the ``umean``/``ustd``
-convention of ``automask.producers.normalized_median``.
+deviation (the robust analogue of ``std``).
 """
 from __future__ import annotations
 

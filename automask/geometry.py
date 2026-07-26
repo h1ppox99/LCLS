@@ -10,7 +10,7 @@ hand-rounded approximation.
 
 Axis-order gotcha: CLAUDE.md's "(col 1005, row 45)" describes the true
 assembled image (1030 rows x 1064 cols). But every `_asm` array frozen by
-producers/extract_dataset.py and producers/normalized_median.py is built with
+producers/extract_dataset.py and features/store.py is built with
 `out[ix, iy] = panel` on an array of shape (1064, 1030) -- i.e. TRANSPOSED:
 axis0 is the ix/"column" index (0..1063), axis1 is the iy/"row" index
 (0..1029). Verified directly: sumimg[1005, 45] equals the raw panel value at

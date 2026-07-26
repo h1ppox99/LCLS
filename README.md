@@ -59,8 +59,6 @@ geo = sd.jungfrau_geometry()     # distance, wavelength, beam center, masks, ...
 python -m automask.producers.baseline_mask --run 475
 python -m automask.producers.extract_dataset
 python -m automask.producers.build_features
-# Faithful lit-beam umean/ustd for run 475; needs XTC, time, and ~3+ GiB cache.
-python -m automask.producers.normalized_median --run 475 --n 800
 
 python -m automask.masking
 python -m automask.synthetic.evaluate \

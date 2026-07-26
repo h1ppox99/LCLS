@@ -32,8 +32,8 @@ python -m automask.producers.extract_dataset
 # it just makes the first evaluation numpy-only instead of paying one XTC pass:
 source psana_env.sh
 python -m automask.producers.build_features --run 389 475   # prewarm the catalogue
-# Alternative lit features via robust median/MAD instead of mean/std:
-python -m automask.producers.normalized_median --run 475 --n 800
+# Robust median/MAD lit features are just other reductions in the same catalogue
+# (features/base.py: mean|std|median|mad) -- no separate producer.
 ```
 
 The HDF5-only `--source smalldata` mode is a diagnostic approximation, not a
