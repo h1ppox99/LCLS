@@ -130,21 +130,23 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", type=int, default=RUN)
     parser.add_argument("--n-images", type=int, default=100, help="XTC images to accumulate")
-    parser.add_argument("--out", type=Path, default=None)
-    parser.add_argument(
-        "--plot",
-        type=Path,
-        default=Path("automask/outputs/figures/reference_mask_run0475.png"),
-        help="PNG output path",
-    )
+    parser.add_argument("--out", type=Path, default=None,
+                        help="mask .npy output path (default: run-specific)")
+    parser.add_argument("--plot", type=Path, default=None,
+                        help="PNG output path (default: run-specific); pass '' to skip")
     args = parser.parse_args()
 
     image = xtc_sum(args.run, args.n_images)
-    default = Path("automask/data/masks/human_Mask_source.npy")
+    # Run 475 keeps the canonical name consumed as ground truth by
+    # extract_dataset.py; other runs get a run-specific file so they don't clobber it.
+    default_out = (Path("automask/data/masks/human_Mask_source.npy") if args.run == RUN
+                   else Path(f"automask/data/masks/human_Mask_source_run{args.run:04d}.npy"))
+    default_plot = Path(f"automask/outputs/figures/reference_mask_run{args.run:04d}.png")
     mask = build_mask(image)
-    save_baseline(mask, args.out or default)
-    if args.plot:
-        save_plot(mask, args.plot, f"Jungfrau1M baseline (xtc, run {args.run:04d})")
+    save_baseline(mask, args.out or default_out)
+    plot = default_plot if args.plot is None else args.plot
+    if str(plot):
+        save_plot(mask, plot, f"Jungfrau1M baseline (xtc, run {args.run:04d})")
 
 
 if __name__ == "__main__":

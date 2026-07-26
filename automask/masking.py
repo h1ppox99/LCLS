@@ -137,7 +137,7 @@ class Pipeline:
 
 
 # ==========================================================================
-#  production pipeline -- the live 3-detector recipe (regression anchor)
+#  production pipeline 
 # ==========================================================================
 def production_pipeline(combiner: str = "union") -> Pipeline:
     """The default recipe: TV variance + sigma-clipping on the geometry+calib
