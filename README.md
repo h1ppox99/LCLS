@@ -33,7 +33,7 @@ pip install -e . --no-deps
 ```python
 python -m automask.studies.sweep_hyperparameters \
     experiment=production combine=union \
-    eval.runs=[475] eval.synthetic=false figures=true
+    eval.runs=[389,475] eval.synthetic=false figures=true
 ```
 
 ## Read the experiment (`automask.io`)

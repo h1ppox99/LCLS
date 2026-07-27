@@ -52,6 +52,10 @@ that runs python: `source psana_env.sh && python -m automask.masking`.
 - Reading small-data HDF5 and `calib/` needs `numpy`/`h5py`; dependencies are declared in `pyproject.toml`.
 - Reading raw XTC frames needs psana (the env above). See `docs/PSANA_XTC.md`.
 
+## Coding requirements
+
+- **Comments** : limit the quantity of comments used in Python files to a small level
+
 ## Data on disk
 
 **`hdf5/smalldata/xppl1016922_Run<NNNN>.h5`** (4-digit run) — one row per event, loads fully
