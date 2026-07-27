@@ -46,6 +46,7 @@ class Sample:
     mean: Optional[np.ndarray] = None   # beam-OFF dark/pedestal frame
     umean: Optional[np.ndarray] = None  # lit-beam per-pixel mean
     ustd: Optional[np.ndarray] = None   # lit-beam per-pixel std
+    umad: Optional[np.ndarray] = None   # lit-beam per-pixel MAD (robust std)
 
     @property
     def real(self) -> np.ndarray:

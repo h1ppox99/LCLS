@@ -1,6 +1,8 @@
 # @package _global_
-# The default recipe: TV variance + sigma-clipping
-# on the geometry+calib floor, unioned. Matches masking.main().
+# The default recipe: TV variance + TV mad_variance + hough_lines on the
+# geometry+calib floor, unioned. Mirrors masking.production_pipeline() -- keep
+# the two in step when either changes; masking.main() asserts they agree, since
+# this file had silently drifted (it named sigma_clipping) once already.
 # Use combine=weighted_sum to reproduce combo_sum instead.
 detectors:
   - stat: variance
@@ -8,8 +10,13 @@ detectors:
     field_reg: tv
     field_reg_params: {weight: 4.0}
     mask_reg: null
-  - stat: sigma_clipping
-    stat_params: {k: 5.0, mode: both}
+  - stat: mad_variance
+    stat_params: {k: 3.5, mode: high}
     field_reg: tv
-    field_reg_params: {weight: 1.0}
+    field_reg_params: {weight: 4.0}
+    mask_reg: null
+  # kind="pick": emits a mask, so field_reg MUST be null (a field_reg here raises).
+  - stat: hough_lines
+    stat_params: {defectiveness_scale: 5.0}
+    field_reg: null
     mask_reg: null

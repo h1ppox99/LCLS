@@ -7,15 +7,17 @@ Runs in assembled space (1064, 1030) on the frozen numpy dataset in ./data.
 The pipeline is three separable, independently-registered stages, each living in
 its own folder (one file per method), plus an intensity-free floor:
 
-    STATISTICS    (stats/)          raw Sample -> continuous z-field (or floor mask)
+    STATISTICS    (stats/)          raw Sample -> continuous z-field, or a mask
+                                    directly (kind="pick" shape detectors, and
+                                    the kind="floor" geometry masks)
     REGULARIZATION(regularization/) field->field (TV) or mask->mask (pad/close_open)
     COMBINATION   (combine/)        fuse per-detector evidence onto the floor
 
 The three registries below are the catalogue of everything available. Each is a
 dict name -> spec, populated by importing the component packages:
 
-    STATS         variance, blackhat, sigma_clipping,
-                  geometry (floor), calib (floor)
+    STATS         variance, mad_variance, blackhat, sigma_clipping,
+                  hough_lines (pick), geometry (floor), calib (floor)
     REGULARIZERS  tv (field), frangi (field), pad (mask), close_open (mask)
     COMBINERS     union (picks), weighted_sum (fields), mahalanobis (fields)
 
@@ -53,9 +55,19 @@ os.makedirs(MASK_DIR, exist_ok=True)
 # ==========================================================================
 @dataclass
 class Detector:
-    """A single evidence channel: statistic -> field-regularizer -> threshold ->
-    mask-regularizer. `stat_params` (a stat's Params dataclass) supplies both the
-    stat inputs and the threshold (k, mode); None uses the stat's defaults."""
+    """A single evidence channel.
+
+    For a kind="field" stat the chain is the full one -- statistic ->
+    field-regularizer -> threshold -> mask-regularizer -- and `stat_params`
+    supplies both the stat inputs and the threshold (k, mode).
+
+    For a kind="pick" stat (`hough_lines`) the statistic already returns the
+    boolean decision, so only the mask-regularizer applies; `field_reg` must be
+    None and `field()` is an error. Nothing about a pick is silently ignored:
+    setting a field-regularizer on one raises rather than being dropped, because
+    the failure it would cause otherwise is invisible (TV on a 0/1 indicator
+    flattens it below any threshold and the detector quietly returns nothing).
+    """
     stat: str
     stat_params: object = None
     field_reg: Optional[str] = "tv"
@@ -63,21 +75,42 @@ class Detector:
     mask_reg: Optional[str] = None
     mask_reg_params: object = None
 
+    def __post_init__(self):
+        spec = STATS[self.stat]
+        if spec.kind == "pick" and self.field_reg:
+            raise ValueError(
+                f"stat '{self.stat}' is kind='pick': it emits a boolean mask, so "
+                f"there is no field for field_reg={self.field_reg!r} to act on. "
+                f"Pass field_reg=None (Hydra: regularization=none).")
+        if spec.kind == "floor":
+            raise ValueError(
+                f"stat '{self.stat}' is a floor stat -- put it in "
+                f"Pipeline.floor_stats, not in a Detector.")
+
     def _params(self):
         return self.stat_params if self.stat_params is not None else STATS[self.stat].params()
 
     def field(self, sample) -> np.ndarray:
         """Continuous statistic field, field-regularized (e.g. TV-denoised)."""
-        z = STATS[self.stat].compute(sample, self._params())
+        spec = STATS[self.stat]
+        if spec.emits_mask:
+            raise TypeError(
+                f"stat '{self.stat}' is kind='{spec.kind}' and has no continuous "
+                f"field; use .pick(sample).")
+        z = spec.compute(sample, self._params())
         if self.field_reg:
             z = REGULARIZERS[self.field_reg].apply(z, self.field_reg_params)
         return z
 
     def pick(self, sample) -> np.ndarray:
-        """Boolean pick: threshold the (regularized) field, gate by real, mask-reg."""
+        """Boolean pick, gated by `real` and mask-regularized. A pick stat supplies
+        the mask directly; a field stat is thresholded at (k, mode) to get one."""
         spec, p = STATS[self.stat], self._params()
-        mode = getattr(p, "mode", spec.mode)
-        m = threshold_stat(self.field(sample), p.k, mode) & sample.real
+        if spec.kind == "pick":
+            m = np.asarray(spec.compute(sample, p), dtype=bool) & sample.real
+        else:
+            mode = getattr(p, "mode", spec.mode)
+            m = threshold_stat(self.field(sample), p.k, mode) & sample.real
         if self.mask_reg:
             m = REGULARIZERS[self.mask_reg].apply(m, self.mask_reg_params) & sample.real
         return m
@@ -85,11 +118,31 @@ class Detector:
     def defectiveness(self, sample) -> np.ndarray:
         """Sign-aligned DEFECTIVENESS field (large > 0 == wants masking), 0 outside
         `real`. Folds low/both stats so every field points the same way for the
-        continuous-fusion combiners (weighted_sum, mahalanobis)."""
+        continuous-fusion combiners (weighted_sum, mahalanobis).
+
+        A pick stat has no z-scale of its own -- its mask is a decision, not a
+        measurement -- so fusing it means choosing what one masked pixel is worth
+        on the other detectors' robust-z scale. That choice is required to be
+        explicit (`defectiveness_scale` on the stat's params), because the default
+        of 1.0 an indicator would imply is silently below every sensible fusion
+        threshold: `weighted_sum` cuts at k=3.5, so an unscaled pick could never
+        carry a pixel and the detector would vanish from the mask with no error."""
         spec, p = STATS[self.stat], self._params()
-        mode = getattr(p, "mode", spec.mode)
-        z = self.field(sample)
-        d = -z if mode == "low" else (np.abs(z) if mode == "both" else z)
+        if spec.kind == "pick":
+            scale = getattr(p, "defectiveness_scale", None)
+            if scale is None:
+                raise ValueError(
+                    f"stat '{self.stat}' is kind='pick' and carries no robust-z "
+                    f"scale, so it cannot be fused by a consumes='fields' "
+                    f"combiner. Use combiner='union', or set "
+                    f"{type(p).__name__}.defectiveness_scale to the z-value one "
+                    f"picked pixel should be worth (must exceed the combiner's k "
+                    f"to mask on its own).")
+            d = np.where(self.pick(sample), float(scale), 0.0)
+        else:
+            mode = getattr(p, "mode", spec.mode)
+            z = self.field(sample)
+            d = -z if mode == "low" else (np.abs(z) if mode == "both" else z)
         d = np.array(d, dtype=np.float64, copy=True)
         d[~sample.real] = 0.0
         return d
@@ -139,21 +192,56 @@ class Pipeline:
 # ==========================================================================
 #  production pipeline 
 # ==========================================================================
-def production_pipeline(combiner: str = "union") -> Pipeline:
-    """The default recipe: TV variance + sigma-clipping on the geometry+calib
-    floor. combiner="union" reproduces `combo`;
-    combiner="weighted_sum" reproduces `combo_sum`."""
+# z-worth of one hough_lines pixel for the consumes="fields" combiners. Chosen
+# to sit above weighted_sum's k=3.5 so the detector masks on its own there, as it
+# does under union -- the two recipes then differ in HOW evidence is fused, not in
+# which detectors can act. A pick has no measured z-scale, so this is a modelling
+# choice; it is here, in the recipe, rather than defaulted in the stat.
+_HOUGH_FUSION_Z = 5.0
+
+
+def production_pipeline(combiner: str = "union",
+                        line_detector: bool = True) -> Pipeline:
+    """The default recipe: TV variance + TV mad_variance + hough_lines on the
+    geometry+calib floor. combiner="union" reproduces `combo`;
+    combiner="weighted_sum" reproduces `combo_sum`.
+
+    The two dispersion detectors read the SAME shot selection and differ only in
+    estimator and side: `variance` flags LOW log-std (dead/shadowed), while
+    `mad_variance` flags HIGH log-MAD (persistently unstable pixels -- the MAD
+    ignores a minority of outlying shots, so a pixel must be noisy across the
+    bulk of the run to score). They target different defect classes, so the
+    union is the intended combination.
+
+    `hough_lines` is the odd one out and the reason it earns a slot: both
+    dispersion detectors are per-pixel, so an extended straight defect whose
+    pixels are individually unremarkable is invisible to them however `k` is
+    tuned. It is a kind="pick" stat (hence field_reg=None) and contributes only
+    where such lines exist -- on run 389 it adds ~0.96% of the chip at 0.74
+    precision; on run 475, where the per-pixel detectors already reach IoU 0.949,
+    it finds no segments at all and the mask is unchanged.
+
+    `line_detector=False` drops it, giving the pre-promotion two-detector recipe
+    -- the baseline `studies/line_detection.py` measures line finders against."""
     from automask.stats.variance import VarianceParams
+    from automask.stats.mad_variance import MadVarianceParams
     from automask.stats.sigma_clipping import SigmaClippingParams
+    from automask.stats.hough_lines import HoughLinesParams
     from automask.regularization.tv import TVParams
     from automask.combine.weighted_sum import WeightedSumParams
 
     detectors = [
         Detector("variance", VarianceParams(k=3.5, mode="low"),
                  field_reg="tv", field_reg_params=TVParams(4.0), mask_reg=None),
+        Detector("mad_variance", MadVarianceParams(k=3.5, mode="high"),
+                 field_reg="tv", field_reg_params=TVParams(4.0), mask_reg=None),
         # Detector("sigma_clipping", SigmaClippingParams(k=5.0, mode="both"),
         #          field_reg="tv", field_reg_params=TVParams(1.0), mask_reg=None),
     ]
+    if line_detector:
+        detectors.append(Detector(
+            "hough_lines", HoughLinesParams(defectiveness_scale=_HOUGH_FUSION_Z),
+            field_reg=None, mask_reg=None))
     if combiner == "weighted_sum":
         return Pipeline(detectors, combiner="weighted_sum",
                         combiner_params=WeightedSumParams(k=3.5, pad=2))
@@ -209,10 +297,34 @@ def mask_image(
 
 
 # ==========================================================================
-#  main -- default recipe report (run 475)
+#  main -- default recipe report, every evaluation run
 # ==========================================================================
-def main():
-    RUN = 475
+def _check_experiment_config():
+    """Warn if conf/experiment/production.yaml has drifted from the Python recipe.
+
+    The Hydra experiment duplicates `production_pipeline` as data, and the README
+    points users at it -- so a silent divergence means the documented production
+    command runs a different mask than the library does. That had already
+    happened once (the yaml still named sigma_clipping long after main() moved to
+    mad_variance), which is exactly the failure this catches. Compares the stat
+    names only: knob-level drift is the sweep's whole point."""
+    path = os.path.join(HERE, "conf", "experiment", "production.yaml")
+    try:
+        import yaml
+        with open(path) as f:
+            cfg = yaml.safe_load(f)
+        cfg_stats = [d["stat"] for d in cfg.get("detectors", [])]
+    except Exception as e:                      # config is optional at runtime
+        print(f"  [warn] could not read {path}: {e}")
+        return
+    py_stats = [d.stat for d in production_pipeline("union").detectors]
+    if cfg_stats != py_stats:
+        print(f"  [warn] conf/experiment/production.yaml is out of step with "
+              f"production_pipeline(): yaml={cfg_stats} python={py_stats}")
+
+
+def report(RUN: int):
+    """Per-detector + combined scores for one run, with agreement figures."""
     pipe = production_pipeline("union")
     pipe_sum = production_pipeline("weighted_sum")
     sample = load_sample(RUN, features=pipe.features_needed())
@@ -244,6 +356,30 @@ def main():
     np.save(os.path.join(MASK_DIR, f"geometry_mask_run{RUN:04d}.npy"), floor)
     np.save(os.path.join(MASK_DIR, f"combo_run{RUN:04d}.npy"), combo)
     np.save(os.path.join(MASK_DIR, f"combo_sum_run{RUN:04d}.npy"), combo_sum)
+
+    # One agreement figure per detector plus the combined masks, so each
+    # channel's contribution is visible rather than only tabulated.
+    from automask import viz
+    fig_dir = os.path.join(HERE, "outputs", "figures")
+    os.makedirs(fig_dir, exist_ok=True)
+    for name, M in {**picks, "combo": combo, "combo_sum": combo_sum}.items():
+        out = os.path.join(fig_dir, f"{name}_run{RUN:04d}.png")
+        viz.save_agreement(floor | M, floor, human, RUN, out,
+                           title=f"run {RUN} — {name}")
+        print(f"[figure] {out}")
+
+
+def main(runs=None):
+    """Report the production recipe on every evaluation run.
+
+    All of EVAL_RUNS, not one hardcoded run: the detectors are complementary and
+    a single run hides that. `hough_lines` in particular contributes nothing on
+    475 (no straight defects to find) and carries run 389 -- reporting only 475
+    would show it as dead weight."""
+    _check_experiment_config()
+    for run in (EVAL_RUNS if runs is None else runs):
+        report(run)
+        print()
 
 
 if __name__ == "__main__":

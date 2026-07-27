@@ -6,12 +6,25 @@ per-pixel evidence field (or, for the intensity-free FLOOR statistics, straight
 into a boolean mask). Every stat module registers one :class:`StatSpec` here so
 masking.py and the sweep driver can look them up by name.
 
-Two kinds:
+Three kinds:
   * kind="field"  -- compute(sample, params) -> float field. By convention the
     sign follows the RAW detector (e.g. variance flags LOW z); `mode` on the spec
     says which side is defect-like so the pipeline can threshold and sign-fold it.
+    Field stats are expected to emit a robust-z scale, which is what lets the
+    fusion combiners sum them with equal weights.
+  * kind="pick"   -- compute(sample, params) -> bool mask (True == masked), for
+    detectors whose decision is not per-pixel and so has no meaningful graded
+    field: `hough_lines` votes on SEGMENTS, and a pixel is on one or it is not.
+    Its knobs live upstream of any threshold, so it carries no `k`/`mode` and
+    skips the field-regularizer + threshold stages of Detector entirely (both
+    are errors on a pick -- see Detector.field). Still swept: unlike a floor, a
+    pick has hyperparameters and is not 100%-precision.
   * kind="floor"  -- compute(sample, params) -> bool mask (True == masked). These
     are the 100%-precision geometry/calibration masks; they carry no sweep space.
+
+The pick/field split is the reason `Detector.defectiveness` is not total: a pick
+has no z-scale to fuse, so it is usable with the "picks" combiners (union) and
+must be given an explicit scale to take part in the "fields" ones.
 """
 from __future__ import annotations
 from dataclasses import dataclass, field
@@ -26,9 +39,9 @@ STATS: Dict[str, "StatSpec"] = {}
 @dataclass
 class StatSpec:
     name: str
-    compute: Callable            # (sample, params) -> np.ndarray (field) or bool mask (floor)
+    compute: Callable            # (sample, params) -> float field, or bool mask (pick/floor)
     params: Type                 # dataclass type holding this stat's hyperparameters
-    kind: str = "field"          # "field" or "floor"
+    kind: str = "field"          # "field", "pick" or "floor"
     mode: str = "low"            # default defect side for field stats: low|high|both
     needs: Tuple[str, ...] = ()  # Sample attributes this stat reads (documentation)
     doc: str = ""
@@ -37,6 +50,11 @@ class StatSpec:
     def swept(self) -> bool:
         """Floor stats are always-on and carry no hyperparameters to sweep."""
         return self.kind != "floor"
+
+    @property
+    def emits_mask(self) -> bool:
+        """True when `compute` returns a boolean mask rather than a float field."""
+        return self.kind in ("pick", "floor")
 
 
 def register_stat(spec: StatSpec) -> StatSpec:

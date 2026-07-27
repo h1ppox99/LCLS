@@ -1,0 +1,4 @@
+name: mad_variance
+params:
+  k: 3.5
+  mode: high
