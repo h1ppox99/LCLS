@@ -1,0 +1,22 @@
+{
+  "selection": {
+    "require_xray_on": true,
+    "low_ipm_exclusion": {
+      "run": true,
+      "threshold": 200.0,
+      "rationale": "Near-zero pile of 398 shots (12.5% of xray-on) with ipm2c < 200; median photon_px 41 vs 5076 for normal shots — noise-dominated, no usable diffraction signal. Exclusion mandatory: normalization is planned downstream and 321+ of these would have near-zero/negative monitor values. Threshold at 200 per operator hint (gap between pile and main body); the 200-3000 mid-band (998 shots) is retained. Since mid-band is below the linear plateau, normalization form must be ratio_of_sums to avoid amplifying the +4.5% det/ipm2c ratio bias in that band."
+    },
+    "high_ipm_exclusion": {
+      "run": true,
+      "percentile": 99.0,
+      "rationale": "Operator hint: RUN at p99 to match human baseline convention (Taekeun's calibration sum). Drops 32 shots above ipm2(raw) = 31221. Linearity evidence: det_total/ipm2c ratio on the plateau is flat at ~21.3 from ipm2c 3000 to the top — no droop, no signal-driven gain switching (LaB6 at ~0.01 photon/pixel, far below the 34-photon G0 headroom). Cut is protective/baseline-compatible, not evidence-driven."
+    }
+  },
+  "normalization": {
+    "run": true,
+    "monitor": "ipm2",
+    "form": "ratio_of_sums",
+    "offset": "auto",
+    "rationale": "Bin-CV test (8 chronological bins, 2747 kept shots after both selection cuts): unnormalized 13.06%, ratio-of-sums 3.15%, per-shot-division 18.71% (WORSE — 998 mid-band shots at ipm2c 200-3000 have a +4.5% det/ipm2c ratio bias vs plateau; per-shot division amplifies this into bin-variance). Ratio-of-sums avoids per-shot division entirely and is robust to the mid-band nonlinearity. r(det_total, ipm2c) = 0.856 over kept shots. ipm2 offset = 4.50 (median over 24 xray-off shots). Residual bin-CV ~3.2% is the pointing/spectral systematic floor that no scalar monitor can remove. Cross-check: ipmfex22_sum (different electronics — diode box vs wave8, r=0.909, bin-CV 3.41%) tied with ipm2 statistically; ipm2 retained as verdict because all documented thresholds are calibrated on it."
+  }
+}

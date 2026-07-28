@@ -1,0 +1,44 @@
+{
+  "iteration": 1,
+  "overall": "pass",
+  "criteria": [
+    {
+      "id": "iq_quality",
+      "pass": true,
+      "measured": {
+        "C1_ring_presence": {
+          "367": {"found": true, "found_px": 367, "delta_px": 0},
+          "531": {"found": true, "found_px": 531, "delta_px": 0},
+          "734": {"found": true, "found_px": 735, "delta_px": 1},
+          "847": {"found": true, "found_px": 846, "delta_px": -1}
+        },
+        "C2_ring_contrast": {
+          "367": 0.6521,
+          "531": 0.0304,
+          "734": 0.0947,
+          "847": 2.009
+        },
+        "C3_background": {
+          "neg_bin_fraction": 0.0,
+          "rel_noise": 0.01237,
+          "bump_max_sigma": 4.5
+        },
+        "C4_coverage": {
+          "panel_mask_fraction": 0.058141,
+          "valid_bins": 1356
+        }
+      },
+      "threshold": {
+        "C1_ring_delta_px_max": 5,
+        "C2_ring_contrast_min": {"367": 0.30, "531": 0.010, "734": 0.045, "847": 1.0},
+        "C3_neg_bin_fraction_max": 0.02,
+        "C3_rel_noise_max": 0.03,
+        "C3_bump_max_sigma_max": 10.0,
+        "C4_panel_mask_fraction_max": 0.25,
+        "C4_valid_bins_min": 1200
+      },
+      "note": "All 4 LaB6 rings found within ±1 px of expected positions; all contrasts well above minima (weakest ring 531 at 3.0x threshold); background clean with zero negative bins, low noise (0.012 vs 0.03 limit), and no anomalous bumps (4.5σ vs 10σ limit); mask coverage conservative at 5.8% with 1356/1405 valid bins."
+    }
+  ],
+  "feedback": null
+}
