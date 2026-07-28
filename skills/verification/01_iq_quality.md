@@ -1,14 +1,19 @@
 ---
 name: xray-verification-iq-quality
 description: First-line acceptance criterion for the pipeline endpoint — LaB6 ring presence and contrast in I(q), background sanity (no negative bins, bounded noise/bumps), and mask-coverage bounds. Thresholds calibrated on the validated Run0475 endpoints (agent_trial_02/03); machine-readable block at the bottom.
+category: verification
+role: endpoint acceptance criterion
+gate: always — judged on every verify pass
+status: wired
 ---
 
-# Verification · Criterion 1 — I(q) quality (rings + background + coverage)
+# Verification · 01 — I(q) quality (rings + background + coverage)
 
-**Family:** endpoint acceptance. **Part of:** [verification](README.md).
 **Inputs:** `iq_metrics.json` (from `pipeline/step4_iq.py`), `iq.png` for a visual sanity look.
 
-## What is checked, and why
+## Decision rules
+
+What is checked, and why:
 
 ### C1 — Ring presence & position
 All four LaB6 rings visible on this detector must be found within **±5 px** of their
@@ -49,14 +54,19 @@ Computed over the ring-free windows `[150–330, 410–500, 570–700, 770–820
   Over-masking is a **mask**-side failure.
 - `valid_bins` ≥ **1200** of 1405 — the radial range must stay usable (validated 1335–1352).
 
-## Verdict & feedback routing
+## Outputs
 
-FAIL any sub-check ⇒ criterion fails ⇒ run fails. Route feedback:
+Verdict & feedback routing, written into `verify_report.json`
+(schema in [README](README.md)): FAIL any sub-check ⇒ criterion fails ⇒ run fails.
+Route feedback:
 C1/C2 → `reduction` (unless the mask obviously ate the rings — check `panel_mask_fraction`
 first); C3/C4 → `mask`. Always quote the measured number, the threshold, and a concrete
 suggested change.
 
-## Machine thresholds
+## Machine block
+
+Machine-readable thresholds — parsed verbatim by `agent/entrypoint.py` (`baseline_verify`);
+keep this the only fenced json block in the file:
 
 ```json
 {
@@ -71,3 +81,10 @@ suggested change.
   "valid_bins_min": 1200
 }
 ```
+
+## Links
+
+Part of: [verification](README.md). Judges metrics from `pipeline/step4_iq.py`.
+C3/C4 failures route to the [masking](../masking/README.md) phase; C1/C2 to
+reduction ([selection](../selection/README.md) /
+[normalization](../normalization/README.md)).

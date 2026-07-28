@@ -1,6 +1,9 @@
 ---
 name: xray-verification
 description: Verification skill category — quantitative acceptance criteria for the pipeline endpoint (masked, normalized, azimuthally-averaged I(q)). Each criterion is its own md file with a machine-readable threshold block; the VERIFIER agent reads every criterion, judges the measured metrics against it, and on failure writes actionable feedback targeted at the responsible upstream phase (reduction or mask).
+category: verification
+role: category-index
+status: wired
 ---
 
 # Verification (category index)
@@ -9,6 +12,8 @@ description: Verification skill category — quantitative acceptance criteria fo
 deterministic metrics computed by `pipeline/step4_iq.py` (`iq_metrics.json` + `iq.png`).
 The verifier never recomputes physics by hand and never edits upstream files — it *judges*
 and it *writes feedback*.
+
+## Methods
 
 | File | Criterion | Catches |
 |---|---|---|
