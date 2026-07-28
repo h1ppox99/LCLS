@@ -1,14 +1,20 @@
 ---
 name: xray-normalization-per-shot-flux-alternatives
 description: Per-shot flux normalization using the IN-HUTCH alternative monitors — four IPM/PIM diode boxes (ipmfex22/23/26/28 - 4 diode channels + sum + x/y each) and the second XPP BMMON (bmmon4c_sum). Same division as method 01, different reference. Three of them tie ipm2 on Run0475 (r ~= 0.91, bin-CV 3.4-4.1% vs ipm2's 3.42%) — true redundancy. Carries the mandatory channel-health screen (dead ch, saturated ch that poisons a box sum, pinned positions) and the cross-check protocol (ratio drift vs ipm2). Choose as cross-check or fallback verdict; keep ipm2 as verdict while healthy.
+category: normalization
+role: reference — in-hutch alternative monitors (diode boxes, SB3 BMMON)
+gate: always as cross-check (nearly free); fallback verdict when ipm2 fails its health screen
+status: wired
 ---
 
-# Normalization · Method 3 — Per-shot flux via in-hutch alternative monitors
+# Normalization · 03 — Per-shot flux via in-hutch alternative monitors
 
 **Same operation as [method 01](01_per_shot_flux_ipm2.md), different reference.**
 Part of the [monitor menu](README.md). Columns from `pipeline/step0b_extend_shot_table.py`.
 
-## The references
+## Principle
+
+The references:
 
 | Columns | Device (per BldInfo enum — confirm vs elog) | Notes |
 |---|---|---|
@@ -21,7 +27,9 @@ Part of the [monitor menu](README.md). Columns from `pipeline/step0b_extend_shot
 Different electronics from ipm2 (diode boxes vs wave8) — which is exactly what makes
 them useful: shared-mode failures become detectable.
 
-## Mandatory channel-health screen (before ever dividing)
+## Decision rules
+
+### Mandatory channel-health screen (before ever dividing)
 
 1. **Dead channel** — always reads 0 (`ipmfex22_ch1`): harmless inside a sum, but know it.
 2. **Saturated channel** — pinned near a constant (`ipmfex26_ch1` ≈ 1.21): **poisons the
@@ -33,21 +41,7 @@ them useful: shared-mode failures become detectable.
 Never use a box's `sum` without this look. This is the single most damaging trap in
 the monitor menu.
 
-## Evidence on Run0475 (1 781 plateau-kept shots, 8 chronological bins)
-
-Unnormalized **9.33 %**; ipm2 (method 01) **3.42 %**.
-
-| Reference | r(det_total) | bin-CV after norm | Health |
-|---|---|---|---|
-| `ipmfex22_sum` | 0.909 | **3.41 %** | dead ch1 harmless — best alternative |
-| `ipmfex22_ch0`+`ch2` | 0.912 | 3.54 % | hand-built from healthy channels |
-| `bmmon4c_sum` | 0.639 | 3.94 % | sum usable, positions opaque |
-| `ipmfex28_sum` | 0.905 | 4.06 % | fully healthy box |
-| `ipmfex26_ch0`+`ch3` | 0.909 | 4.09 % | must exclude ch1 |
-| `ipmfex23_sum` | 0.562 | 4.37 % | near saturation — avoid |
-| `ipmfex26_sum` (naive) | 0.606 | 5.89 % | **the saturated-channel trap, measured** |
-
-## The cross-check protocol (this reference's main job)
+### The cross-check protocol (this reference's main job)
 
 Designate ONE healthy alternative (Run0475: `ipmfex22_sum`) as the standing
 cross-check of the verdict monitor and record, per run:
@@ -62,7 +56,22 @@ cross-check of the verdict monitor and record, per run:
 Dual-monitor form (geometric mean of ipm2 and ipmfex22): bin-CV 3.29 % vs 3.41–3.42 %
 single — real but marginal; use only if the provenance complexity is worth ~0.1 %.
 
-## When to choose this reference
+## Evidence (Run0475)
+
+1 781 plateau-kept shots, 8 chronological bins. Unnormalized **9.33 %**;
+ipm2 (method 01) **3.42 %**.
+
+| Reference | r(det_total) | bin-CV after norm | Health |
+|---|---|---|---|
+| `ipmfex22_sum` | 0.909 | **3.41 %** | dead ch1 harmless — best alternative |
+| `ipmfex22_ch0`+`ch2` | 0.912 | 3.54 % | hand-built from healthy channels |
+| `bmmon4c_sum` | 0.639 | 3.94 % | sum usable, positions opaque |
+| `ipmfex28_sum` | 0.905 | 4.06 % | fully healthy box |
+| `ipmfex26_ch0`+`ch3` | 0.909 | 4.09 % | must exclude ch1 |
+| `ipmfex23_sum` | 0.562 | 4.37 % | near saturation — avoid |
+| `ipmfex26_sum` (naive) | 0.606 | 5.89 % | **the saturated-channel trap, measured** |
+
+## When to use
 
 - **Cross-check** (always, it is nearly free) — the protocol above.
 - **Fallback verdict** when ipm2 fails its health screen: `ipmfex22_sum` ties it
@@ -73,7 +82,9 @@ single — real but marginal; use only if the provenance complexity is worth ~0.
   low-cut/plateau against the new column and sanity-check the resulting weight range
   (a per-shot weight of 5.8 means the cut and the monitor no longer match).
 
-## Execution
+## Outputs
+
+Executed via `decisions.json`:
 
 ```json
 "normalization": { "run": true, "monitor": "ipmfex22_sum", "form": "per_shot",
@@ -82,3 +93,10 @@ single — real but marginal; use only if the provenance complexity is worth ~0.
 
 Executable today — `step2_accumulate.py` resolves any shot_table column and its own
 x-ray-off offset (smoke-tested: monitor_offset 8.8e-4, 1 781 shots, weights finite).
+
+## Links
+
+Part of: the [monitor menu](README.md). Same operation as
+[01](01_per_shot_flux_ipm2.md); if promoted to verdict, re-derive the low-cut/plateau
+([selection/01a](../selection/01a_low_ipm_exclusion.md)) against the new column.
+Columns from `pipeline/step0b_extend_shot_table.py`.

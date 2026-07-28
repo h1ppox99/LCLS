@@ -1,11 +1,15 @@
 ---
 name: xray-normalization-per-shot-flux
 description: Per-shot incident-flux (ipm2) normalization — an AGENT-DECIDED step. The agent runs a cheap bin-consistency test (chronological bins, CV with vs without normalization) and decides whether to normalize, with which monitor, and in which form (per-shot division vs ratio-of-sums). Evidence on Run0475 - bin-to-bin CV 6.03%→3.55%; decision was NORMALIZE. Mandatory prerequisite - low-ipm exclusion. Includes the harmonic-vs-arithmetic-mean reference subtlety.
+category: normalization
+role: reference — ipm2 (SB2 BMMON wave8), the default verdict monitor
+gate: agent-decided — run the bin-CV evidence test before choosing
+status: wired
 ---
 
-# Normalization · Method 1 — Per-shot incident-flux (ipm2) normalization (agent decides)
+# Normalization · 01 — Per-shot incident-flux (ipm2) normalization (agent decides)
 
-**Acts on:** shot ↔ shot. **Part of:** [normalization](README.md). **The load-bearing one.**
+**Acts on:** shot ↔ shot. **The load-bearing one.**
 
 ## The decision the agent owns
 
@@ -30,7 +34,9 @@ S(q) = Σ_i f_i(q) / Σ_i n_i          # ratio-of-sums form  (robust to monitor 
 
 `ipm2c = ipm2 − offset`, offset = median ipm2 over x-ray-off shots (Run0475: +4.5).
 
-## The evidence test (run this before deciding)
+## Decision rules
+
+### The evidence test (run this before deciding)
 
 1. Keep only shots passing [01a low-ipm exclusion](../selection/01a_low_ipm_exclusion.md)
    at the linear-plateau threshold.
@@ -39,23 +45,6 @@ S(q) = Σ_i f_i(q) / Σ_i n_i          # ratio-of-sums form  (robust to monitor 
    without dividing each shot by `n_i`.
 4. Sanity anchors: correlation of per-shot detector total with the monitor; ratio
    flatness across the intensity range.
-
-### Run0475 results (worked example)
-
-| Test | unnormalized | normalized by ipm2 |
-|---|---|---|
-| chronological bins (the realistic case) | CV 6.03 % | **3.55 %** |
-| intensity-sorted bins (pure-flux control) | 61.5 % | 2.15 % |
-| random bins (drift hidden — underestimates value) | 2.99 % | 2.42 % |
-| per-shot CV, brighter half | 63 % | 45 % (identical to sample_diode's 45 %) |
-
-det~ipm2 r = 0.841 ≈ det~sample_diode r = 0.840; Poisson floor for these bins ≈ 0.09 %,
-so the removed spread was systematic drift, not counting noise.
-**Decision on Run0475: NORMALIZE** (flux-driven half of the drift removed; residual
-~3.5 % is pointing/spectral drift that no monitor division can remove — that residual is
-what pump-on/off referencing is for).
-
-## Decision rules
 
 **Decide NORMALIZE when any of these hold**
 - The bin test shows a material CV drop (it did: 6.0 → 3.5 %);
@@ -78,25 +67,50 @@ what pump-on/off referencing is for).
   parameters (upstream GMD/BMMON, in-hutch diode boxes, self-normalization) each have
   their own method file — see the [monitor menu](README.md) comparison table.
 
-## Hard prerequisite
+### Hard prerequisite
 
 [Low-ipm exclusion](../selection/01a_low_ipm_exclusion.md) **must run first**: near-zero
 shots have monitor readings that are pure noise (often negative — 321/394 low shots on
 Run0475 had sample_diode ≤ 0); dividing by them destroys bins. A guard against NaN/0 is
 not sufficient — it does not catch −0.0002.
 
-## Reference-convention subtlety (important)
+## Evidence (Run0475)
+
+Worked example — the evidence test's results:
+
+| Test | unnormalized | normalized by ipm2 |
+|---|---|---|
+| chronological bins (the realistic case) | CV 6.03 % | **3.55 %** |
+| intensity-sorted bins (pure-flux control) | 61.5 % | 2.15 % |
+| random bins (drift hidden — underestimates value) | 2.99 % | 2.42 % |
+| per-shot CV, brighter half | 63 % | 45 % (identical to sample_diode's 45 %) |
+
+det~ipm2 r = 0.841 ≈ det~sample_diode r = 0.840; Poisson floor for these bins ≈ 0.09 %,
+so the removed spread was systematic drift, not counting noise.
+**Decision on Run0475: NORMALIZE** (flux-driven half of the drift removed; residual
+~3.5 % is pointing/spectral drift that no monitor division can remove — that residual is
+what pump-on/off referencing is for).
+
+## Trade-offs
+
+### Reference-convention subtlety (important)
 
 `Σwf/Σw` with `w = ⟨ipm2⟩/ipm2` is algebraically referenced to the **harmonic-mean** flux;
 a plain mean references the **arithmetic mean**. On Run0475 this is a constant ×0.63
 rescale (HM/AM = 5213/8264), *not* a physical difference — multiply by AM/HM to compare.
 
-## Record the decision
+## Outputs
 
 Log: normalize yes/no, monitor, form, offset used, kept-shot definition, the bin-test
 numbers that justified it, and the residual CV (hand it to the QA/differencing stage).
+Executed via `decisions.json → normalization`. Provenance: `weighted_sum_v2.py`,
+`Normalization_method.md`, `Normalization_方法与对比.md`, `run475_weighted_sum.npy`,
+`run475_pershot_weights.npy`.
 
-## Repo
+## Links
 
-`weighted_sum_v2.py`, `Normalization_method.md`, `Normalization_方法与对比.md`,
-`run475_weighted_sum.npy`, `run475_pershot_weights.npy`.
+Part of: the [monitor menu](README.md). Hard prerequisite:
+[selection/01a](../selection/01a_low_ipm_exclusion.md). Alternative references:
+[02 upstream](02_per_shot_flux_upstream.md) ·
+[03 in-hutch alternatives](03_per_shot_flux_alternatives.md) ·
+[04 self](04_per_shot_flux_self.md).

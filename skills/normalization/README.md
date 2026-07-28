@@ -1,6 +1,9 @@
 ---
 name: xray-normalization
 description: Normalization skill category — per-shot flux normalization as ONE operation (offset-correct, divide each shot by its own reference) with a MENU of reference parameters, one file per reference class - 01 ipm2 (the default verdict monitor), 02 upstream machine monitors (GMD gas detectors, SB1 BMMON), 03 in-hutch alternatives (diode boxes, SB3 BMMON), 04 the detector itself (self-normalization, last resort). The agent picks the reference by evidence (correlation + bin-CV test + channel health), records the choice, and step 2 executes any shot_table column via decisions.json "monitor".
+category: normalization
+role: category-index
+status: wired
 ---
 
 # Normalization (category index)
@@ -10,6 +13,8 @@ each shot by it (per-shot division or ratio-of-sums — see
 [01](01_per_shot_flux_ipm2.md)). Normalization *rescales*; it never removes pixels
 (that is [masking](../masking/README.md)) and never removes shots (that is
 [selection](../selection/README.md)).
+
+## Methods
 
 **One operation, a menu of reference parameters.** Each file covers one reference
 class — what the device measures, where it sits in the beam path, its Run0475
@@ -22,9 +27,10 @@ evidence, and when to pick it:
 | [03_per_shot_flux_alternatives.md](03_per_shot_flux_alternatives.md) | diode boxes (`ipmfex22/23/26/28_*`), SB3 BMMON (`bmmon4c_sum`) | in-hutch, around the sample | **cross-check** + fallback verdict; carries the channel-health screen |
 | [04_per_shot_flux_self.md](04_per_shot_flux_self.md) | the detector itself (`det_total`, band integrals) | the data | last resort — shape-only analyses; never pump–probe |
 
-## The comparison table (Run0475, 1 781 plateau-kept shots, 8 chronological bins)
+## Evidence (Run0475): the monitor comparison
 
-Unnormalized chronological bin-CV: **9.33 %**.
+1 781 plateau-kept shots, 8 chronological bins. Unnormalized chronological
+bin-CV: **9.33 %**.
 
 | Reference (column) | r(det_total) | bin-CV after norm | Health / note |
 |---|---|---|---|
@@ -40,7 +46,9 @@ Unnormalized chronological bin-CV: **9.33 %**.
 | `bmmon43_sum` | 0.505 | 6.93 % | upstream — anchor only |
 | `det_total` (self) | 1 by construction | 0 by construction | the perfect score IS the warning |
 
-## Choosing (agent decides, records the choice)
+## Choosing
+
+The agent decides and records the choice:
 
 - **Default verdict: `ipm2` (01) while it passes its health look** — every documented
   threshold (low cut 200 / plateau 3000, offsets, baseline conventions) is calibrated
