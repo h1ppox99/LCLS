@@ -5,7 +5,7 @@ A regularizer smooths/cleans one stage of the pipeline under a single tunable
 knob, replacing ad-hoc morphology. Two kinds by what they operate on:
   * KIND="field" -- continuous field -> continuous field (e.g. TV denoising),
     applied BEFORE thresholding.
-  * KIND="mask"  -- boolean mask -> boolean mask (e.g. padding / close-open),
+  * KIND="mask"  -- boolean mask -> boolean mask (e.g. padding / hole filling),
     applied AFTER thresholding.
 """
 from __future__ import annotations

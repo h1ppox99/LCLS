@@ -10,7 +10,7 @@ its own folder (one file per method), plus an intensity-free floor:
     STATISTICS    (stats/)          raw Sample -> continuous z-field, or a mask
                                     directly (kind="pick" shape detectors, and
                                     the kind="floor" geometry masks)
-    REGULARIZATION(regularization/) field->field (TV) or mask->mask (pad/close_open)
+    REGULARIZATION(regularization/) field->field (TV) or mask->mask (pad)
     COMBINATION   (combine/)        fuse per-detector evidence onto the floor
 
 The three registries below are the catalogue of everything available. Each is a
@@ -18,7 +18,7 @@ dict name -> spec, populated by importing the component packages:
 
     STATS         variance, mad_variance, blackhat, sigma_clipping,
                   hough_lines (pick), geometry (floor), calib (floor)
-    REGULARIZERS  tv (field), frangi (field), pad (mask), close_open (mask)
+    REGULARIZERS  tv (field), frangi (field), pad (mask)
     COMBINERS     union (picks), weighted_sum (fields), mahalanobis (fields)
 
 A Pipeline composes floor stats + a list of Detectors + one combiner. Sweeping is
