@@ -158,6 +158,88 @@ def compare_selections(run, selections, reduction="mean", store=None,
     return fig
 
 
+def show_mask(mask, ax=None, color=(0.85, 0.1, 0.1), title=""):
+    """Render a boolean mask on its own: masked pixels in ``color``, rest white."""
+    mask = np.asarray(mask, dtype=bool)
+    rgb = np.full((*mask.shape, 3), 0.96)
+    rgb[mask] = color
+    if ax is None:
+        _, ax = plt.subplots(figsize=(6, 6.2))
+    ax.imshow(rgb)
+    ax.set_xticks([]); ax.set_yticks([])
+    # Off-white rather than white, with a frame: a sparse mask on a white page is
+    # indistinguishable from an empty panel (hough_lines beyond the floor is 0.00%
+    # on run 475 -- that has to read as "found nothing", not as a broken figure).
+    for spine in ax.spines.values():
+        spine.set_color("0.7")
+    if title:
+        ax.set_title(title, fontsize=11)
+    return ax
+
+
+def _detector_input(detector, sample):
+    """The image a detector reads, as (feature name, assembled array), or None."""
+    from automask.stats.base import STATS
+    from automask.geometry import panel_to_asm
+    for name in STATS[detector.stat].needs:
+        if name in ("real", "center", "calib"):
+            continue
+        arr = getattr(sample, name, None)
+        if not isinstance(arr, np.ndarray):
+            continue
+        if arr.ndim == 3:
+            arr = panel_to_asm(arr, sample.run)
+        if arr.shape == sample.sumimg.shape:
+            return name, arr
+    return None
+
+
+def detector_panels(pipeline, sample, out=None, floor_row=True, store=None):
+    """One row per masking channel: its input image left, the mask it gives right."""
+    from automask.features import FEATURES, FeatureStore
+
+    base = pipeline.floor(sample)
+    rows, skipped = [], []
+    if floor_row:
+        rows.append((None, "sumimg", sample.sumimg))
+    for d in pipeline.detectors:
+        got = _detector_input(d, sample)
+        if got is None:
+            skipped.append(d.stat)
+            continue
+        rows.append((d, *got))
+    if not rows:
+        raise ValueError("no detector in this pipeline reads an assembled image")
+
+    store = store or FeatureStore()
+    fig, axes = plt.subplots(len(rows), 2, figsize=(11, 5.4 * len(rows)),
+                             squeeze=False)
+    for (d, fname, img), (ax_l, ax_r) in zip(rows, axes):
+        spec = FEATURES.get(fname)
+        if spec is not None and spec.selection is not None:
+            label = f"{fname} — {_sel_label(spec.selection, _n_used(store, sample.run, spec))}"
+        elif spec is not None:
+            label = f"{fname} — calib constant (assembled)"
+        else:
+            label = f"{fname} — run sum"
+        if d is None:
+            mask, name = base, "+".join(pipeline.floor_stats) + " floor"
+        else:
+            mask, name = d.pick(sample) & ~base, f"{d.stat} (beyond floor)"
+        show(img, ax=ax_l, title=label, cbar=False)
+        show_mask(mask, ax=ax_r,
+                  title=f"{name} — {100 * mask.mean():.2f}% masked")
+
+    note = f"   (skipped: {', '.join(skipped)} — non-assembled input)" if skipped else ""
+    fig.suptitle(f"run {sample.run:04d} — pipeline inputs and masks{note}",
+                 fontsize=13)
+    fig.tight_layout(rect=[0, 0, 1, 0.97])
+    if out:
+        fig.savefig(out, dpi=110, bbox_inches="tight")
+        plt.close(fig)
+    return fig
+
+
 # ── 3. mask evaluation ────────────────────────────────────────────────────────
 def agree_rgb(pred, truth):
     """RGB agreement map: green=TP, red=FP, blue=FN, white=TN."""

@@ -243,38 +243,22 @@ _HOUGH_FUSION_Z = 5.0
 
 def production_pipeline(combiner: str = "union",
                         line_detector: bool = True) -> Pipeline:
-    """The default recipe: TV variance + TV mad_variance + hough_lines on the
+    """The default recipe: TV variance + hough_lines + asic_polish on the
     geometry+calib floor. combiner="union" reproduces `combo`;
     combiner="weighted_sum" reproduces `combo_sum`.
-
-    The two dispersion detectors read the SAME shot selection and differ only in
-    estimator and side: `variance` flags LOW log-std (dead/shadowed), while
-    `mad_variance` flags HIGH log-MAD (persistently unstable pixels -- the MAD
-    ignores a minority of outlying shots, so a pixel must be noisy across the
-    bulk of the run to score). They target different defect classes, so the
-    union is the intended combination.
-
-    `hough_lines` is the odd one out and the reason it earns a slot: both
-    dispersion detectors are per-pixel, so an extended straight defect whose
-    pixels are individually unremarkable is invisible to them however `k` is
-    tuned. It is a kind="pick" stat (hence field_reg=None) and contributes only
-    where such lines exist -- on run 389 it adds ~0.96% of the chip at 0.74
-    precision; on run 475, where the per-pixel detectors already reach IoU 0.949,
-    it finds no segments at all and the mask is unchanged.
-
-    `line_detector=False` drops it, giving the pre-promotion two-detector recipe
-    -- the baseline `studies/line_detection.py` measures line finders against."""
+    """
     from automask.stats.variance import VarianceParams
-    from automask.stats.mad_variance import MadVarianceParams
     from automask.stats.sigma_clipping import SigmaClippingParams
     from automask.stats.hough_lines import HoughLinesParams
+    from automask.stats.asic_polish import AsicPolishParams
     from automask.regularization.tv import TVParams
+    from automask.regularization.blob_scale import BlobScaleParams
+    from automask.regularization.fill_holes import FillHolesParams
+    from automask.regularization.area_gate import AreaGateParams
     from automask.combine.weighted_sum import WeightedSumParams
 
     detectors = [
         Detector("variance", VarianceParams(k=3.5, mode="low"),
-                 field_reg="tv", field_reg_params=TVParams(4.0), mask_reg=None),
-        Detector("mad_variance", MadVarianceParams(k=3.5, mode="high"),
                  field_reg="tv", field_reg_params=TVParams(4.0), mask_reg=None),
         # Detector("sigma_clipping", SigmaClippingParams(k=5.0, mode="both"),
         #          field_reg="tv", field_reg_params=TVParams(1.0), mask_reg=None),
@@ -283,6 +267,11 @@ def production_pipeline(combiner: str = "union",
         detectors.append(Detector(
             "hough_lines", HoughLinesParams(defectiveness_scale=_HOUGH_FUSION_Z),
             field_reg=None, mask_reg=None))
+    detectors.append(Detector(
+        "asic_polish", AsicPolishParams(asic=256, n_iter=3, k=15.0, mode="high"),
+        field_reg=["blob_scale"], field_reg_params=[BlobScaleParams()],
+        mask_reg=["fill_holes", "area_gate"],
+        mask_reg_params=[FillHolesParams(), AreaGateParams()]))
     if combiner == "weighted_sum":
         return Pipeline(detectors, combiner="weighted_sum",
                         combiner_params=WeightedSumParams(k=3.5, pad=2))
@@ -409,14 +398,13 @@ def report(RUN: int):
                            title=f"run {RUN} — {name}")
         print(f"[figure] {out}")
 
+    panels = os.path.join(fig_dir, f"panels_run{RUN:04d}.png")
+    viz.detector_panels(pipe, sample, out=panels)
+    print(f"[figure] {panels}")
+
 
 def main(runs=None):
-    """Report the production recipe on every evaluation run.
-
-    All of EVAL_RUNS, not one hardcoded run: the detectors are complementary and
-    a single run hides that. `hough_lines` in particular contributes nothing on
-    475 (no straight defects to find) and carries run 389 -- reporting only 475
-    would show it as dead weight."""
+    """Report the production recipe on every evaluation run."""
     _check_experiment_config()
     for run in (EVAL_RUNS if runs is None else runs):
         report(run)

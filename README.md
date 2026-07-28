@@ -28,12 +28,10 @@ source psana_env.sh
 pip install -e . --no-deps
 ```
 
-## Run the production pipeline on a given run
+## Run the production pipeline 
 
 ```python
-python -m automask.studies.sweep_hyperparameters \
-    experiment=production combine=union \
-    eval.runs=[389,475] eval.synthetic=false figures=true
+ python -m automask.masking
 ```
 
 ## Read the experiment (`automask.io`)

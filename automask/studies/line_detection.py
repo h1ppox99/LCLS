@@ -3,8 +3,8 @@
 studies/line_detection.py -- straight-line defect detection by Radon transform
 and by probabilistic Hough segments, scored as a candidate production detector.
 
-Motivation. The production pipeline (geometry+calib floor + TV variance + TV
-mad_variance, see masking.production_pipeline) is *per-pixel*: every detector
+Motivation. The production pipeline (geometry+calib floor + TV variance, see
+masking.production_pipeline) is *per-pixel*: every detector
 decides pixel-by-pixel and knows nothing about shape. The defects it misses most
 visibly are extended STRAIGHT structures -- wire/edge shadows, scratches, the
 dark seams between ASIC groups, the beam-stop arm -- whose individual pixels sit

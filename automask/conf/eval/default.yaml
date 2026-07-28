@@ -8,7 +8,9 @@ runs: [389, 475]
 synthetic: true
 synthetic_seed: 0
 synthetic_n_per: 3
-synthetic_rotations: [0, 180]     # 90/270 transpose the non-square grid
+synthetic_rotations: [0]          # production pipeline now includes asic_polish,
+                                   # which needs `pedestal` (panel-form -- dropped
+                                   # under any non-zero rotation, see rotate_sample)
 # Artifact parameter suite (streak / beamstop / beamstop_small). Loaded from the
 # shipped pipeline config so the definitions live in one place.
 synthetic_config: synthetic/config/synthetic_pipeline.yaml

@@ -18,7 +18,9 @@ combiner: union
 output_dir: automask/outputs/synthetic_pipeline
 seed: 0
 n_per_artifact: 3
-rotations: [0, 180]               # 90/270 transpose the (non-square) grid; 0/180 keep it
+rotations: [0]                    # production pipeline now includes asic_polish,
+                                   # which needs `pedestal` (panel-form -- dropped
+                                   # under any non-zero rotation, see rotate_sample)
 
 artifacts:
   # 1. straight Gaussian streak (additive; out of the production polarity)

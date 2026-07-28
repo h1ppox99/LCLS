@@ -7,7 +7,7 @@ import os
 
 import hydra
 import yaml
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, ListConfig, OmegaConf
 
 from automask.combine.base import COMBINERS
 from automask.evaluation import evaluate, load_sample
@@ -18,8 +18,16 @@ from automask.stats.base import STATS
 AUTOMASK = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
+def _to_plain(value):
+    """Convert an OmegaConf node to a plain dict/list; pass plain Python objects through
+    (needed because `_detector_from_dict` already converted its input in one shot)."""
+    if isinstance(value, (DictConfig, ListConfig)):
+        return OmegaConf.to_container(value, resolve=True)
+    return value
+
+
 def _params(registry, name, cfg_params):
-    kwargs = OmegaConf.to_container(cfg_params, resolve=True) if cfg_params else {}
+    kwargs = _to_plain(cfg_params) if cfg_params else {}
     return registry[name].params(**kwargs)
 
 
@@ -31,7 +39,7 @@ def _reg_params(names, cfg_params):
     the params in the shape `Detector` expects."""
     if not names:
         return None
-    raw = OmegaConf.to_container(cfg_params, resolve=True) if cfg_params else None
+    raw = _to_plain(cfg_params) if cfg_params else None
     if isinstance(names, str):
         return REGULARIZERS[names].params(**(raw or {}))
     names = list(names)
@@ -47,8 +55,7 @@ def _reg_names(value):
     """Normalize a conf `name:` field that may be a string or a list."""
     if value is None or isinstance(value, str):
         return value
-    return list(OmegaConf.to_container(value, resolve=True)
-                if not isinstance(value, list) else value)
+    return list(_to_plain(value))
 
 
 def _detector_from_dict(detector: dict) -> Detector:
@@ -183,6 +190,9 @@ def main(cfg: DictConfig):
             viz.save_agreement(pipe.run(sample), pipe.floor(sample), sample.human, run, out,
                                title=f"{label} — run {run}")
             print(f"  [saved] {out}")
+            panels = os.path.join(figure_dir, f"panels_{cfg.stat.name}_run{run:04d}.png")
+            viz.detector_panels(pipe, sample, out=panels)
+            print(f"  [saved] {panels}")
     return mean["iou"]
 
 
