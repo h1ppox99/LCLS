@@ -34,7 +34,12 @@ from dataclasses import replace
 
 import numpy as np
 
-from automask.synthetic.artifacts import beamstop_factor, streak_profile, _robust_stats
+from automask.synthetic.artifacts import (beamstop_factor, hot_patch_profile,
+                                          streak_profile, _robust_stats)
+
+# Sample fields served in native panel geometry rather than assembled space.
+# They cannot be rotated with the assembled arrays (see rotate_sample).
+PANEL_FIELDS = ("pedestal", "pixel_rms")
 
 
 def rotate_sample(sample, degrees: int):
@@ -44,14 +49,24 @@ def rotate_sample(sample, degrees: int):
     is preserved; the production detectors used here (variance/blackhat +
     geometry/calib floor) read no absolute geometry, so the stale
     ``center`` cached-property is irrelevant.
+
+    Panel-form fields (``pedestal``, ``pixel_rms``) are DROPPED to None under a
+    non-zero rotation. They live in native (2, 512, 1024) geometry, which has no
+    meaningful image rotation, and the frozen ix/iy maps relating them to
+    assembled space would no longer apply. Leaving them unrotated would misalign
+    them against every other array with no error, which is the one outcome to
+    avoid; dropping them instead makes any consumer fail loudly at the point of
+    use (``asic_polish`` raises on a missing ``pedestal``). Cases that need these
+    features therefore declare ``rotations: [0]``.
     """
     if int(degrees) % 90 != 0:
         raise ValueError(f"rotations must be multiples of 90, got {degrees}")
     k = (int(degrees) // 90) % 4
     rot = lambda a: np.rot90(a, k)
+    dropped = {f: None for f in PANEL_FIELDS if k and getattr(sample, f, None) is not None}
     return replace(sample, sumimg=rot(sample.sumimg), mean=rot(sample.mean),
                    umean=rot(sample.umean), ustd=rot(sample.ustd),
-                   human=rot(sample.human), calib=rot(sample.calib))
+                   human=rot(sample.human), calib=rot(sample.calib), **dropped)
 
 
 def corrupt_sample(sample, name: str, rng, params: dict):
@@ -88,8 +103,31 @@ def corrupt_sample(sample, name: str, rng, params: dict):
             updates[field] = arr
         injected = core & region
 
+    elif name == "hot_patch":
+        # Additive bright patch in the PEDESTAL constants -- a leaky/high-dark-
+        # current region of sensor. Geometry is drawn in assembled space (so the
+        # injected mask is comparable with the other artifacts and with `human`)
+        # and mapped into native panel geometry to corrupt the constant itself.
+        if sample.pedestal is None:
+            raise ValueError(
+                "hot_patch corrupts the 'pedestal' feature, which this Sample "
+                "was not loaded with; the pipeline under test must declare it "
+                "(see Pipeline.features_needed)")
+        from automask.geometry import asm_to_panel
+
+        p.setdefault("shape_kind", p.pop("shape", "random"))
+        amplitude_sigma = p.pop("amplitude_sigma", 8.0)
+        profile, core = hot_patch_profile(grid, rng, **p)
+        ped = np.array(sample.pedestal, dtype=np.float64, copy=True)
+        valid_panel = asm_to_panel(region, sample.run)
+        _, sd = _robust_stats(ped[valid_panel])
+        ped[valid_panel] += (amplitude_sigma * sd
+                             * asm_to_panel(profile, sample.run)[valid_panel])
+        updates = {"pedestal": ped}
+        injected = core & region
+
     else:
         raise ValueError(f"no Sample adapter for artifact {name!r} "
-                         f"(supported: streak, beamstop, beamstop_small)")
+                         f"(supported: streak, beamstop, beamstop_small, hot_patch)")
 
     return replace(sample, **updates), injected

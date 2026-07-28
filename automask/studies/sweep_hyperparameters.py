@@ -23,18 +23,44 @@ def _params(registry, name, cfg_params):
     return registry[name].params(**kwargs)
 
 
+def _reg_params(names, cfg_params):
+    """Build regularizer params for a slot that may name one stage or several.
+
+    Mirrors `Detector._stages`: `names` is None / a name / a list of names, and
+    `cfg_params` is correspondingly None / a mapping / a list of mappings. Returns
+    the params in the shape `Detector` expects."""
+    if not names:
+        return None
+    raw = OmegaConf.to_container(cfg_params, resolve=True) if cfg_params else None
+    if isinstance(names, str):
+        return REGULARIZERS[names].params(**(raw or {}))
+    names = list(names)
+    if raw is None:
+        raw = [None] * len(names)
+    if len(raw) != len(names):
+        raise ValueError(f"regularizer list {names} has {len(names)} entries but "
+                         f"{len(raw)} params entries")
+    return [REGULARIZERS[n].params(**(r or {})) for n, r in zip(names, raw)]
+
+
+def _reg_names(value):
+    """Normalize a conf `name:` field that may be a string or a list."""
+    if value is None or isinstance(value, str):
+        return value
+    return list(OmegaConf.to_container(value, resolve=True)
+                if not isinstance(value, list) else value)
+
+
 def _detector_from_dict(detector: dict) -> Detector:
     stat = detector["stat"]
-    field_reg = detector.get("field_reg")
-    mask_reg = detector.get("mask_reg")
+    field_reg = _reg_names(detector.get("field_reg"))
+    mask_reg = _reg_names(detector.get("mask_reg"))
     return Detector(
         stat, STATS[stat].params(**(detector.get("stat_params") or {})),
         field_reg=field_reg,
-        field_reg_params=(REGULARIZERS[field_reg].params(**(detector.get("field_reg_params") or {}))
-                          if field_reg else None),
+        field_reg_params=_reg_params(field_reg, detector.get("field_reg_params")),
         mask_reg=mask_reg,
-        mask_reg_params=(REGULARIZERS[mask_reg].params(**(detector.get("mask_reg_params") or {}))
-                         if mask_reg else None),
+        mask_reg_params=_reg_params(mask_reg, detector.get("mask_reg_params")),
     )
 
 
@@ -44,13 +70,14 @@ def build_pipeline(cfg: DictConfig) -> Pipeline:
     if cfg.get("detectors"):
         detectors = [_detector_from_dict(OmegaConf.to_container(d, resolve=True)) for d in cfg.detectors]
     else:
-        field_reg, mask_reg = cfg.regularization.name, cfg.mask_reg.name
+        field_reg = _reg_names(cfg.regularization.name)
+        mask_reg = _reg_names(cfg.mask_reg.name)
         detectors = [Detector(
             cfg.stat.name, _params(STATS, cfg.stat.name, cfg.stat.get("params")),
             field_reg=field_reg,
-            field_reg_params=_params(REGULARIZERS, field_reg, cfg.regularization.get("params")) if field_reg else None,
+            field_reg_params=_reg_params(field_reg, cfg.regularization.get("params")),
             mask_reg=mask_reg,
-            mask_reg_params=_params(REGULARIZERS, mask_reg, cfg.mask_reg.get("params")) if mask_reg else None,
+            mask_reg_params=_reg_params(mask_reg, cfg.mask_reg.get("params")),
         )]
     return Pipeline(detectors, combiner=combiner, combiner_params=combiner_params)
 

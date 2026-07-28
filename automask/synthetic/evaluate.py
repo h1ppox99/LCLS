@@ -252,6 +252,14 @@ def evaluate_config(cfg: dict, pipeline=None) -> dict:
       for rot_idx, degrees in enumerate(rotations):
         run_example = for_rotation(degrees)
         for type_idx, name in enumerate(cases):
+            # An artifact may restrict which rotations it is valid under (e.g.
+            # `hot_patch` corrupts a panel-form feature, which has no image
+            # rotation -- see sample_adapter.rotate_sample). Popped here so it
+            # never reaches the generator as a parameter.
+            acfg = dict(artifact_cfg.get(name) or {})
+            allowed = acfg.pop("rotations", None)
+            if allowed is not None and int(degrees) not in [int(a) for a in allowed]:
+                continue
             # the original-mask case injects nothing and is deterministic -> run once.
             n = 1 if name == ORIGINAL else n_per
             for i in range(n):
@@ -259,7 +267,7 @@ def evaluate_config(cfg: dict, pipeline=None) -> dict:
                 seed = (base_seed + src_idx * 1_000_000 + rot_idx * 100_000
                         + type_idx * 10_000 + i)
                 rng = np.random.default_rng(seed)
-                params = _sample_params(rng, artifact_cfg.get(name))
+                params = _sample_params(rng, acfg)
 
                 original, corrupted, injected, pred, region = run_example(name, rng, params)
                 metrics = masking_metrics(pred, injected, region)

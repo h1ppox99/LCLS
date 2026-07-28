@@ -1,0 +1,6 @@
+# Keep only extended components -- separates real defects from the speck scatter
+# any threshold produces. 
+name: area_gate
+params:
+  min_area: 200
+  connectivity: 2

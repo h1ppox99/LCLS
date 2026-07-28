@@ -21,3 +21,7 @@ register(FeatureSpec("umean", "mean", _LIT))   # lit-beam per-pixel mean
 register(FeatureSpec("ustd", "std", _LIT))     # lit-beam per-pixel std
 register(FeatureSpec("umad", "mad", _LIT))     # lit-beam per-pixel MAD (robust std)
 register(FeatureSpec("mean", "mean", _DARK))   # beam-off dark frame
+register(FeatureSpec("pedestal", source="calib", constant="pedestals",
+                     gain=0, form="panel"))
+register(FeatureSpec("pixel_rms", source="calib", constant="pixel_rms",
+                     gain=0, form="panel"))

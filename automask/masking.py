@@ -67,17 +67,26 @@ class Detector:
     setting a field-regularizer on one raises rather than being dropped, because
     the failure it would cause otherwise is invisible (TV on a 0/1 indicator
     flattens it below any threshold and the detector quietly returns nothing).
+
+    Both regularizer slots accept either a single name or a LIST of names, applied
+    left to right, with `*_params` given in the same shape (a bare params object
+    for a single name, a list aligned with the names otherwise; `None` anywhere
+    means that stage's defaults). Composition is what several methods actually
+    need -- `asic_polish` wants `blob_scale` to aggregate before thresholding, and
+    a thresholded graded field wants `fill_holes` then `area_gate` after -- and
+    keeping each step a registered, separately-parameterised stage is what keeps
+    it visible to the sweep driver instead of hard-coded inside a stat.
     """
     stat: str
     stat_params: object = None
-    field_reg: Optional[str] = "tv"
+    field_reg: Optional[str | List[str]] = "tv"
     field_reg_params: object = None
-    mask_reg: Optional[str] = None
+    mask_reg: Optional[str | List[str]] = None
     mask_reg_params: object = None
 
     def __post_init__(self):
         spec = STATS[self.stat]
-        if spec.kind == "pick" and self.field_reg:
+        if spec.kind == "pick" and self._stages(self.field_reg, self.field_reg_params):
             raise ValueError(
                 f"stat '{self.stat}' is kind='pick': it emits a boolean mask, so "
                 f"there is no field for field_reg={self.field_reg!r} to act on. "
@@ -86,6 +95,38 @@ class Detector:
             raise ValueError(
                 f"stat '{self.stat}' is a floor stat -- put it in "
                 f"Pipeline.floor_stats, not in a Detector.")
+        for names, params, kind in ((self.field_reg, self.field_reg_params, "field"),
+                                    (self.mask_reg, self.mask_reg_params, "mask")):
+            for name, _ in self._stages(names, params):
+                got = REGULARIZERS[name].kind
+                if got != kind:
+                    raise ValueError(
+                        f"regularizer '{name}' is kind='{got}' but was given as a "
+                        f"{kind}_reg on stat '{self.stat}'; a {got} regularizer "
+                        f"acts on {'a continuous field' if got == 'field' else 'a boolean mask'}.")
+
+    @staticmethod
+    def _stages(names, params) -> List[tuple]:
+        """Normalize a regularizer slot to an ordered [(name, params), ...] list.
+
+        Accepts None, a single name, or a list of names; `params` may be None, a
+        single params object, or a list aligned with `names`."""
+        if not names:
+            return []
+        if isinstance(names, str):
+            return [(names, params)]
+        names = list(names)
+        if params is None:
+            params = [None] * len(names)
+        elif not isinstance(params, (list, tuple)):
+            raise ValueError(
+                f"regularizer list {names} needs a list of params (or None), "
+                f"got a single {type(params).__name__}")
+        if len(params) != len(names):
+            raise ValueError(
+                f"regularizer list {names} has {len(names)} entries but "
+                f"{len(params)} params")
+        return list(zip(names, params))
 
     def _params(self):
         return self.stat_params if self.stat_params is not None else STATS[self.stat].params()
@@ -98,8 +139,8 @@ class Detector:
                 f"stat '{self.stat}' is kind='{spec.kind}' and has no continuous "
                 f"field; use .pick(sample).")
         z = spec.compute(sample, self._params())
-        if self.field_reg:
-            z = REGULARIZERS[self.field_reg].apply(z, self.field_reg_params)
+        for name, params in self._stages(self.field_reg, self.field_reg_params):
+            z = REGULARIZERS[name].apply(z, params)
         return z
 
     def pick(self, sample) -> np.ndarray:
@@ -111,8 +152,8 @@ class Detector:
         else:
             mode = getattr(p, "mode", spec.mode)
             m = threshold_stat(self.field(sample), p.k, mode) & sample.real
-        if self.mask_reg:
-            m = REGULARIZERS[self.mask_reg].apply(m, self.mask_reg_params) & sample.real
+        for name, params in self._stages(self.mask_reg, self.mask_reg_params):
+            m = REGULARIZERS[name].apply(m, params) & sample.real
         return m
 
     def defectiveness(self, sample) -> np.ndarray:

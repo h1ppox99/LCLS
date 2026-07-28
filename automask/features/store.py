@@ -34,6 +34,12 @@ ROOT = Path(__file__).resolve().parents[2]
 PANEL_SHAPE = (2, 512, 1024)
 ASM_SHAPE = (1064, 1030)
 
+# psana calib-store coordinates for the Jungfrau1M, and its gain-stage count.
+# Constants are stored as (gain, panel, row, col) flattened to (3*2*512, 1024).
+JUNGFRAU_CALIB_TYPE = "Jungfrau::CalibV1"
+JUNGFRAU_CALIB_SOURCE = "XppEndstation.0:Jungfrau.0"
+N_GAIN = 3
+
 
 def _select_line(run: int, selection: ShotSelection, counts: dict) -> str:
     """The ``[select] ...`` log line, built from a counts dict (compute or cache)."""
@@ -87,7 +93,9 @@ class FeatureStore:
         target = self.path(run, spec, form)
         if not target.exists():
             self._materialize(run, spec)
-        else:
+        elif spec.source == "events":
+            # Shot bookkeeping only means something for a reduction over events;
+            # a calib constant has no shots (and no ShotSelection to describe).
             c = self.counts(run, spec)
             if c is not None:
                 print(_select_line(run, spec.selection, c))
@@ -95,13 +103,49 @@ class FeatureStore:
 
     # -- compute -----------------------------------------------------------
     def _materialize(self, run: int, spec: FeatureSpec) -> None:
-        if spec.reduction in ("mean", "std"):
+        if spec.source == "calib":
+            self._materialize_calib(run, spec)
+        elif spec.reduction in ("mean", "std"):
             self._materialize_mean_std(run, spec.selection)
         elif spec.reduction in ("median", "mad"):
             self._materialize_median_mad(run, spec.selection)
         else:
             raise NotImplementedError(
                 f"reduction {spec.reduction!r} not implemented in FeatureStore")
+
+    def _materialize_calib(self, run: int, spec: FeatureSpec) -> None:
+        """Cache one gain stage of a psana calibration constant, both forms.
+
+        ``lcls_xpp.load_calib`` already resolves the ``<START>-end.data`` run
+        range and the U+F022 colon encoding. It cannot infer the shape, though:
+        the Jungfrau constants carry no ``NDARRAY_DIMS`` header, so it returns a
+        flat ``(3*2*512, 1024)`` and the (gain, panel, row, col) split has to be
+        made here.
+
+        No psana: the panel->assembled maps come from the frozen index maps, so a
+        calib feature resolves in a numpy-only environment.
+        """
+        from automask.geometry import index_maps
+        from automask.io.lcls_xpp import load_calib
+
+        arr = load_calib(JUNGFRAU_CALIB_TYPE, JUNGFRAU_CALIB_SOURCE,
+                         spec.constant, run)
+        expected = (N_GAIN,) + PANEL_SHAPE
+        if arr.size != int(np.prod(expected)):
+            raise ValueError(
+                f"calib constant {spec.constant!r} for run {run} has {arr.size} "
+                f"values, expected {int(np.prod(expected))} for {expected}")
+        panel = arr.reshape(expected)[spec.gain].astype(np.float32)
+        ix, iy = index_maps(run)
+        stub = spec.cache_stub(run)
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        np.save(self.cache_dir / f"{stub}_panel.npy", panel)
+        np.save(self.cache_dir / f"{stub}_asm.npy", _assemble(panel, ix, iy))
+        (self.cache_dir / f"{stub}_meta.json").write_text(json.dumps(
+            {"source": "calib", "constant": spec.constant, "gain": spec.gain,
+             "run": run}))
+        print(f"[calib] run {run:04d}: {spec.constant} gain {spec.gain} "
+              f"-> {stub}")
 
     def _save_pair(self, run: int, selection: ShotSelection,
                    pairs, ix: np.ndarray, iy: np.ndarray, counts: dict) -> None:

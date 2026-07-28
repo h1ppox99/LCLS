@@ -47,6 +47,11 @@ class Sample:
     umean: Optional[np.ndarray] = None  # lit-beam per-pixel mean
     ustd: Optional[np.ndarray] = None   # lit-beam per-pixel std
     umad: Optional[np.ndarray] = None   # lit-beam per-pixel MAD (robust std)
+    # Calibration constants, PANEL form (2, 512, 1024) -- not assembled space.
+    # These describe the detector, not this run's beam, so they are shared by
+    # every run in the same calibration epoch.
+    pedestal: Optional[np.ndarray] = None   # psana pedestals, gain stage 0
+    pixel_rms: Optional[np.ndarray] = None  # psana dark rms, gain stage 0
 
     @property
     def real(self) -> np.ndarray:
@@ -75,7 +80,10 @@ def load_sample(run: int, features: Optional[Sequence[str]] = None,
     if features is None:
         features = tuple(FEATURES)
     sumimg = load_image(f"sum_calib_run{run:04d}").astype(np.float64)
-    feats = {name: store.get(run, get_spec(name)).astype(np.float64) for name in features}
+    # Each spec declares the layout it is served in: intensity reductions come in
+    # assembled space, calib constants in native panel geometry (see FeatureSpec.form).
+    feats = {name: store.get(run, get_spec(name), form=get_spec(name).form)
+             .astype(np.float64) for name in features}
     # Prefer a run-specific target (lab recipe re-run on this run); fall back to
     # the shared 475-built human_Mask.
     per_run = os.path.join(HERE, "data", "masks", f"human_Mask_run{run:04d}_asm.npy")

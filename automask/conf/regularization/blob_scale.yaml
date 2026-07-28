@@ -1,0 +1,6 @@
+# Multi-scale disk matched filter: aggregates spatially coherent but per-pixel
+# weak evidence, keeping unit variance so `k` stays in sigma. Sweep the radii
+# list rather than hand-picking one scale.
+name: blob_scale
+params:
+  radii: [6, 9, 12, 16]

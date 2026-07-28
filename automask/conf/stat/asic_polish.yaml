@@ -1,0 +1,10 @@
+# Per-ASIC median-polish z of the pedestal calibration constants.
+# Per-pixel this field is WEAK by design (defect z ~1.5 vs chip p99.9 ~3.2):
+# it only becomes thresholdable after aggregation, so sweep it with
+# regularization=blob_scale. `k` is therefore in POST-aggregation sigma.
+name: asic_polish
+params:
+  asic: 256
+  n_iter: 3
+  k: 15.0
+  mode: high

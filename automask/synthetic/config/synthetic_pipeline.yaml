@@ -44,3 +44,20 @@ artifacts:
     axis_ratio: [0.6, 1.6]
     transmission: [0.05, 0.30]
     softness: 0.15
+
+  # 4. hot patch -- additive bright region injected into the PEDESTAL constants,
+  #    the polarity of a high-dark-current sensor defect (the real one on run 475).
+  #    Only asic_polish reads `pedestal`, so this case scores that channel; the
+  #    production intensity/dispersion detectors are out of polarity and will
+  #    (correctly) score near zero on it, exactly as `streak` does for them.
+  #    `axis_ratio` away from 1.0 is the point: it measures how much a compact-blob
+  #    detector degrades on shapes that are NOT disks.
+  #    NOTE: rotations must stay [0] -- panel-form features cannot be rotated with
+  #    the assembled arrays (rotate_sample raises).
+  hot_patch:
+    shape: random
+    radius: [12.0, 30.0]          # brackets the real defect (r ~ 19 px)
+    axis_ratio: [0.6, 1.6]
+    amplitude_sigma: [1.0, 2.0]   # robust-std units of the pedestal
+    softness: 0.15
+    rotations: [0]

@@ -157,6 +157,45 @@ def beamstop_shadow(image, valid, rng, *, center=None, radius=60.0,
     return out, injected
 
 
+# --------------------------------------------------------------------------
+# 3. hot patch -- additive bright compact region (dark-current / pedestal defect)
+# --------------------------------------------------------------------------
+def hot_patch(image, valid, rng, *, center=None, radius=20.0, axis_ratio=1.0,
+              amplitude_sigma=8.0, softness=0.15, shape="random"):
+    """Add a compact bright region: the polarity of a leaky / high-dark-current
+    patch of sensor, as seen in the pedestal constants.
+
+    Deliberately reuses ``beamstop_factor``'s geometry (ellipse or rectangle,
+    ``axis_ratio`` controlling elongation) but ADDS instead of multiplying, so
+    the two artifacts differ only in polarity and the shape sweep is shared.
+    Sweeping ``axis_ratio`` is what measures how a compact-blob detector degrades
+    on shapes that are not circles -- ``axis_ratio`` 1.0 is a disk, 0.6/1.6 are
+    ellipses or boxes half again as long in one axis.
+
+    ``amplitude_sigma`` is in robust-std units of the array being corrupted, so
+    the same number means the same detectability across pedestal / intensity
+    arrays. The injected footprint is the core (normalised distance <= 1).
+    """
+    out = np.array(image, dtype=np.float64, copy=True)
+    profile, core = hot_patch_profile(
+        image.shape, rng, center=center, radius=radius, axis_ratio=axis_ratio,
+        softness=softness, shape_kind=shape)
+    _, sd = _robust_stats(out[valid])
+    out[valid] += amplitude_sigma * sd * profile[valid]      # invalid untouched
+    return out, core & valid
+
+
+def hot_patch_profile(shape, rng, *, center=None, radius=20.0, axis_ratio=1.0,
+                      softness=0.15, shape_kind="random"):
+    """Unit-amplitude additive profile for a hot patch: 1 in the core, ramping to
+    0 through the soft boundary. Derived from ``beamstop_factor`` (transmission 0)
+    so both artifacts draw identical geometry from the same rng state."""
+    factor, core = beamstop_factor(
+        shape, rng, center=center, radius=radius, axis_ratio=axis_ratio,
+        transmission=0.0, softness=softness, shape_kind=shape_kind)
+    return 1.0 - factor, core
+
+
 # Registry: name -> generator. Order is the deterministic iteration order used
 # by the evaluation loop (and therefore by the per-example seed derivation).
 # `beamstop_small` reuses the same generator; the config gives it a smaller radius
@@ -165,4 +204,5 @@ ARTIFACTS = {
     "streak": straight_streak,
     "beamstop": beamstop_shadow,
     "beamstop_small": beamstop_shadow,
+    "hot_patch": hot_patch,
 }
