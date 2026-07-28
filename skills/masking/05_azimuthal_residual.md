@@ -1,11 +1,14 @@
 ---
 name: xray-masking-azimuthal-residual
 description: Signal-based mask for DIFFUSE azimuthal-symmetry-breaking features (parasitic-scattering blobs, ghosts, window scatter) on the assembled sum — radial-median model, destriped residual, matched-scale smoothing, hysteresis growth. Catches low-contrast extended anomalies that per-pixel sigma-clip (method 02) cannot see; validated on the Run0475 off-ring blob at (row 686, col 387).
+category: masking
+role: signal-dependent
+gate: diffuse parasitic blobs / scatter ghosts on a summed assembled image where powder symmetry holds
+status: wired
 ---
 
-# Masking · Method 5 — azimuthal-residual blob detection (signal-based)
+# Masking · 05 — azimuthal-residual blob detection (signal-based)
 
-**Family:** signal-dependent. **Part of:** [masking](README.md).
 **Complements** [02_pyfai_azimuthal_sigmaclip.md](02_pyfai_azimuthal_sigmaclip.md): method 02
 clips *per-pixel* outliers versus the ring statistics, so it needs the outlier to stand out of
 the single-pixel noise. A diffuse blob (e.g. FWHM ~33 px, +70% over background but only
@@ -39,7 +42,9 @@ parametric refinement masks out to a *stated contamination level* instead of a z
 
 Masked pixels are the grown components; union onto the run's other mask layers.
 
-## Parameters (tested on Run0475, agent_trial_02 sum)
+## Parameters
+
+Tested on Run0475, agent_trial_02 sum:
 
 | Param | Value | Why |
 |---|---|---|
@@ -55,7 +60,9 @@ Masked pixels are the grown components; union onto the run's other mask layers.
 | beam center | (row 992, col 35), assembled coords | same geometry as the beamstop layer |
 | disjointness | `layer &= ~base_mask` | smoothing interpolates z across masked speckles, so grown components can leak a few px into already-masked area; subtracting keeps per-layer accounting exact |
 
-## Reference implementation (numpy/scipy only)
+## Implementation
+
+Reference implementation (numpy/scipy only):
 
 ```python
 import numpy as np
@@ -147,7 +154,9 @@ def azimuthal_residual_layer(img, base_mask, bc=(992.0, 35.0),
     return layer, zmap
 ```
 
-## Scale range (validated by synthetic injection at r=648, off-ring)
+## Evidence (Run0475)
+
+### Scale range (validated by synthetic injection at r=648, off-ring)
 
 Gaussian blobs injected into the real Run0475 sum, default `sigma_smooth=8`:
 
@@ -177,7 +186,7 @@ Refinement note: the fit runs on the **smoothed field** with exact kernel deconv
 (σ_true² = σ_fit² − σ_smooth²) — fitting the raw residual fragments on mask gaps for large
 components; a nonparametric contour is noise-limited below ε ≈ σ_floor/bg ≈ 9 %.
 
-## Result (Run0475, agent_trial_02 sum, off-ring policy)
+### Result (agent_trial_02 sum, off-ring policy)
 
 Exactly **one** off-ring component: the parasitic blob at (row 686, col 387), radius 466 px,
 azimuth −42° — peak z = 6.2. Envelope (grow) stage: ~900 px covering the FWHM core, which
@@ -209,7 +218,15 @@ than ~30 px. Destriping assumes stripes are separable row/column structure (true
 Jungfrau column noise); pathological large-area gradients would need a 2-D background model
 instead.
 
-## Repo
+## Outputs
 
-Validated in `outputs/agent_trial_02/`: `_blob_proposal.png` (evidence figure),
-`_blob_det_z2.npy` (z-map). First applied run: `outputs/agent_trial_02_azres/`.
+Blob-mask layer (grown components, ε-contour refined), unioned onto the run's other
+mask layers. Provenance: validated in `outputs/agent_trial_02/`: `_blob_proposal.png`
+(evidence figure), `_blob_det_z2.npy` (z-map). First applied run:
+`outputs/agent_trial_02_azres/`.
+
+## Links
+
+Part of: [masking](README.md). Complements [02](02_pyfai_azimuthal_sigmaclip.md)
+(per-pixel clip). Screener front-end: [06](06_azimuthal_sector_itheta.md) finds the
+violations; this method builds the footprint for blob-like positives.

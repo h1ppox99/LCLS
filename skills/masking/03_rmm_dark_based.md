@@ -1,11 +1,13 @@
 ---
 name: xray-masking-rmm-dark-based
 description: RMM (Robust Mask Maker, Sadri 2022) dark-based mask — robustly models normal pixels per ASIC block from calibration constants and flags offset (Feature 2) and noise (Feature 3) outliers. Signal-independent, so it removes detector defects while preserving all diffraction signal. Preferred default defect mask.
+category: masking
+role: signal-independent
+gate: dark calibration constants available — preferred default defect mask
+status: wired
 ---
 
-# Masking · Method 3 — RMM dark-based mask (robust statistics on calibration)
-
-**Family:** signal-independent. **Part of:** [masking](README.md).
+# Masking · 03 — RMM dark-based mask (robust statistics on calibration)
 
 ## Principle
 
@@ -33,7 +35,7 @@ Final mask = offset-outliers ∪ std-outliers.
 | `asic_block` | 256 | Jungfrau ASIC size — the natural local unit for offset/noise. |
 | `gain_stage` | 0 (high gain) | Stage actually used in this low-flux run; union across stages for completeness. |
 
-## Result (Run0475)
+## Evidence (Run0475)
 
 2 363 / 1 048 576 ≈ **0.225 %** (offset-high 1231, offset-low 1, std-high 565, std-low 566).
 Overlaps the [pyFAI mask](02_pyfai_azimuthal_sigmaclip.md) on 1661 pixels (the "smoking-gun"
@@ -51,9 +53,16 @@ signal-independent, so it never eats Bragg peaks. Preferred default defect mask.
 Needs dark calibration inputs; static between calibrations; won't catch pixels that only
 misbehave under illumination (→ [Feature-6](04_rmm_feature6_light.md)).
 
-## Repo
+## Outputs
 
+RMM defect-mask layer (offset-outliers ∪ std-outliers). Provenance:
 `masking_RMM_darkbased/` — `build_rmm_mask.py`, `rmm_mask.npz`, `README_RMM方法说明.md`.
 Install: `pip install RobustGaussianFittingLibrary`. On Apple Silicon the bundled `RGFLib.so`
 is a Windows DLL — recompile the C core once:
 `cc -O3 -fPIC -shared -o RGFLib.so RGFLib.c -lm`.
+
+## Links
+
+Part of: [masking](README.md). Illumination-dependent complement:
+[04](04_rmm_feature6_light.md). Signal-dependent complement:
+[02](02_pyfai_azimuthal_sigmaclip.md).

@@ -1,11 +1,13 @@
 ---
 name: xray-masking-status-baseline
 description: Static bad-pixel mask from the detector's pixel_status calibration array. The floor every other mask is unioned onto. Use as the always-on baseline before any other masking method.
+category: masking
+role: signal-independent (baseline)
+gate: always — the floor every other mask layer is unioned onto
+status: wired
 ---
 
-# Masking · Method 0 — Static status mask from calibration
-
-**Family:** signal-independent (baseline). **Part of:** [masking](README.md).
+# Masking · 00 — Static status mask from calibration
 
 ## Principle
 
@@ -32,6 +34,13 @@ are unioned onto.
 Static only — misses pixels that go bad between calibrations, and misses signal-dependent
 outliers. Necessary but never sufficient on its own.
 
-## Repo
+## Outputs
 
-Used in `accumulate_calib.py` and `weighted_sum_v2.py` (`good_px`).
+Baseline mask layer, unioned into the run mask. Used in `accumulate_calib.py` and
+`weighted_sum_v2.py` (`good_px`).
+
+## Links
+
+Part of: [masking](README.md). The floor for
+[01](01_geometry_gap.md) / [02](02_pyfai_azimuthal_sigmaclip.md) /
+[03](03_rmm_dark_based.md) / [04](04_rmm_feature6_light.md).

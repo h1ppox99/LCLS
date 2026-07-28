@@ -1,6 +1,9 @@
 ---
 name: xray-masking
 description: Masking skill category for area-detector scattering (Jungfrau1M). Each method that decides which pixels to exclude before integration lives in its own file in this folder. Use when a raw or averaged frame has bad columns, hot/dead pixels, panel gaps, cosmic rays, or Bragg spots contaminating an isotropic pattern.
+category: masking
+role: category-index
+status: wired
 ---
 
 # Masking (category index)
@@ -10,7 +13,7 @@ not enter any azimuthal average, sum, or fit. Masking is *spatial* — it remove
 whole shots (that is [selection](../selection/README.md)) and never rescales (that is
 [normalization](../normalization/README.md)).
 
-Each method is a **separate file** in this folder:
+## Methods
 
 | File | Method | Family | Masked % (Run0475) |
 |---|---|---|---|
@@ -29,7 +32,8 @@ Each method is a **separate file** in this folder:
 - **Signal-dependent** (02) — from the diffraction pattern; catches azimuthal outliers
   (cosmics, Bragg spots) but will eat real texture/Bragg signal if unguarded.
 
-**Choosing:**
+## Choosing
+
 - Remove defects, keep all signal → `00 ∪ 03` (status + RMM-dark).
 - Clean an isotropic/amorphous background → add `02` (azimuthal sigma-clip).
 - Working in assembled coords → always union `01` (geometry gaps).
@@ -40,4 +44,9 @@ Each method is a **separate file** in this folder:
   negative block deficits) → run `06` (I(θ) sector scan) and route each detection per its
   classification table; blob-like positives get their footprint from `05`.
 
-Apply as `clean = np.where(mask, np.nan, img)` and **always log** masked-pixel count + %.
+## Golden rules
+
+1. Apply as `clean = np.where(mask, np.nan, img)` — never zero-fill masked pixels.
+2. **Always log** masked-pixel count + % per layer; keep layers disjoint for exact accounting.
+3. A mask is not a selection ([selection](../selection/README.md)) and never rescales
+   ([normalization](../normalization/README.md)).

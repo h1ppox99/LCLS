@@ -1,11 +1,13 @@
 ---
 name: xray-masking-rmm-feature6-light
 description: RMM Feature-6 mask — catches pixels that pass dark tests (F2/F3) but are persistently high/low under illumination, via a local robust plane fit and per-pixel SNR. Use when you suspect illumination-dependent bad pixels. Note the faithful version needs per-frame images (psana); the local approximation here uses the run-average image.
+category: masking
+role: signal-independent
+gate: suspected illumination-dependent bad pixels that dark masks miss
+status: wired
 ---
 
-# Masking · Method 4 — RMM Feature-6 mask (robust statistics under illumination)
-
-**Family:** signal-independent. **Part of:** [masking](README.md).
+# Masking · 04 — RMM Feature-6 mask (robust statistics under illumination)
 
 ## Principle
 
@@ -24,7 +26,7 @@ map (`|SNR| > λ` ⇒ bad).
 | `asic_block` | 256 | Grouping unit for the outlier-detection stage (Jungfrau ASIC). |
 | `lambda_SNR` (λ) | 8.0 | Final flag threshold, consistent with F2/F3. |
 
-## Result (Run0475)
+## Evidence (Run0475)
 
 1 635 / 1 048 576 ≈ **0.156 %** (persistently bright 668, dark/dead 967).
 
@@ -33,13 +35,18 @@ map (`|SNR| > λ` ⇒ bad).
 You suspect illumination-dependent bad pixels (flickers, response nonlinearities) that dark
 masks ([method 3](03_rmm_dark_based.md)) miss.
 
-## Trade-offs / caveat
+## Trade-offs
 
 The faithful version needs **per-frame 2D images** (raw XTC via `psana`, Linux-only). This
 machine's approximation runs the *identical* math on the whole-run **average** image, so it
 catches pixels *persistently* anomalous vs their neighborhood but **not** intermittent
 flickers. State this limitation when reporting.
 
-## Repo
+## Outputs
 
+Feature-6 mask layer (persistently bright ∪ dark/dead). Provenance:
 `masking_RMM_feature6_light/` — `build_feature6.py`, `feature6.npz`, `README_Feature6说明.md`.
+
+## Links
+
+Part of: [masking](README.md). Dark-based sibling: [03](03_rmm_dark_based.md).

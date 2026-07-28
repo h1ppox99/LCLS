@@ -1,11 +1,14 @@
 ---
 name: xray-masking-azimuthal-sector-itheta
 description: Shape-agnostic azimuthal screening — build I(theta) curves per radial band on the destriped residual, robust-z the (band, sector) cells with BOTH signs, hysteresis-cluster the outliers. Catches any azimuthal-symmetry violation at fixed r — parasitic blobs, arcs, streaks, shadows, AND negative deficits/ASIC-block offsets that the positive-only blob detector (method 05) ignores. Detection front-end; hand blob-like positives to method 05's contamination contour for the final footprint.
+category: masking
+role: signal-dependent (screener)
+gate: routine screening of any summed assembled image before azimuthal integration
+status: wired
 ---
 
-# Masking · Method 6 — azimuthal I(θ) sector screening (signal-based)
+# Masking · 06 — azimuthal I(θ) sector screening (signal-based)
 
-**Family:** signal-dependent. **Part of:** [masking](README.md).
 **Relationship to [05](05_azimuthal_residual.md):** 06 is the *screener* (1-D, shape-agnostic,
 two-signed), 05 is the *footprint builder* (2-D matched filter + parametric contour, positive
 excesses). Run 06 to find and localize every violation of powder symmetry; mask blob-like
@@ -28,16 +31,9 @@ detect   : seeds |z| > 4.5  →  binary_propagation into |z| > 2.5  →  cluster
 policy   : skip ring bands (|r_band − r_ring| ≤ 25) — Bragg texture is real signal
 ```
 
-## Classification of detections (what to do with each)
+## Parameters
 
-| Signature | Physical meaning | Action |
-|---|---|---|
-| **positive, compact** (few cells, one band-group) | parasitic scattering blob / ghost | mask — hand to method 05's ε-contour for a shape-faithful footprint |
-| **positive, elongated along θ** | scatter arc / streak (e.g. reflection line) | mask the flagged cells + 1-cell margin |
-| **negative, aligned with ASIC/panel boundaries** | residual block gain/pedestal offset the row/col destripe cannot remove | do NOT silently mask — report in `mask_rationale.md`; route to calibration/normalization discussion; mask only if the deficit biases target bins beyond the noise floor |
-| **negative, full-width band** | missed beamstop/shadow structure | route to the beamstop layer |
-
-## Parameters (tested on Run0475, agent_trial_03 sum)
+Tested on Run0475, agent_trial_03 sum:
 
 | Param | Value | Why |
 |---|---|---|
@@ -49,7 +45,7 @@ policy   : skip ring bands (|r_band − r_ring| ≤ 25) — Bragg texture is rea
 | ring-band margin | 25 px | band-level analogue of 05's `ring_margin` |
 | signs | both (use \|z\|) | negative anomalies (shadows, block deficits) are equally symmetry violations — method 05 cannot see them |
 
-## Radial resolution (Δr): two-scale guidance
+### Radial resolution (Δr): two-scale guidance
 
 Δr sweep on Run0475 (strong blob + two weak |z|≈5 negative block offsets):
 
@@ -75,7 +71,20 @@ Three lessons:
 Recommended flow: **screen at Δr=15** (full range, stable statistics) → **re-scan each
 detection at Δr=5–8** for radial localization and the robustness check of lesson 1.
 
-## Reference implementation (numpy/scipy only)
+## Decision rules
+
+Classification of detections — what to do with each:
+
+| Signature | Physical meaning | Action |
+|---|---|---|
+| **positive, compact** (few cells, one band-group) | parasitic scattering blob / ghost | mask — hand to method 05's ε-contour for a shape-faithful footprint |
+| **positive, elongated along θ** | scatter arc / streak (e.g. reflection line) | mask the flagged cells + 1-cell margin |
+| **negative, aligned with ASIC/panel boundaries** | residual block gain/pedestal offset the row/col destripe cannot remove | do NOT silently mask — report in `mask_rationale.md`; route to calibration/normalization discussion; mask only if the deficit biases target bins beyond the noise floor |
+| **negative, full-width band** | missed beamstop/shadow structure | route to the beamstop layer |
+
+## Implementation
+
+Reference implementation (numpy/scipy only):
 
 ```python
 import numpy as np
@@ -137,7 +146,9 @@ def itheta_sector_scan(resid, base_mask, bc=(992.0, 35.0), r0=120, r1=1100,
     return clusters, z, kept, layer
 ```
 
-## Result (Run0475, agent_trial_03 sum, blob un-masked for the test)
+## Evidence (Run0475)
+
+Agent_trial_03 sum, blob un-masked for the test.
 
 Three clusters, all physically interpretable, **zero noise false positives**:
 
@@ -149,28 +160,6 @@ Three clusters, all physically interpretable, **zero noise false positives**:
 
 A and B are invisible to method 05 by design (positive seeds only) — 06 is the only method
 in this set that surfaces them.
-
-## Report contract
-
-After running the scan, write **`outputs/<run>/_itheta_screen.json`**:
-
-```json
-{
-  "skill": "skills/masking/06_azimuthal_sector_itheta.md",
-  "grid": {"dr_px": 15, "dtheta_deg": 2.0, "z_seed": 4.5, "z_grow": 2.5, "min_cells": 2},
-  "clusters": [
-    {"r_px": 468, "theta_deg": -41, "cells": 7, "max_abs_z": 11.2, "sign": 1,
-     "classification": "parasitic blob", "action": "masked via method-05 contour"},
-    {"r_px": 284, "theta_deg": -44, "cells": 5, "max_abs_z": 5.0, "sign": -1,
-     "classification": "ASIC-block offset", "action": "reported (calibration systematics)"}
-  ]
-}
-```
-
-Every cluster carries a `classification` and an `action` per the table above, and the same
-findings are summarized in `mask_rationale.md` — the report is what makes "nothing found"
-distinguishable from "nobody looked", and it is the channel through which negative
-(calibration) findings reach the humans.
 
 ## When to use
 
@@ -187,8 +176,35 @@ cells directly. θ coverage is partial and r-dependent (off-center beam). Negati
 are calibration diagnostics, not automatic mask layers — masking them without thought hides a
 flat-field problem the normalization side should know about.
 
-## Repo
+## Outputs
 
-Prototype + validation artifacts: `outputs/agent_trial_03_refined/_itheta_*.npy`,
-`_itheta_method.png` (I(θ) curve, |z| map, footprint comparison),
+After running the scan, write **`outputs/<run>/_itheta_screen.json`**:
+
+```json
+{
+  "skill": "skills/masking/06_azimuthal_sector_itheta.md",
+  "grid": {"dr_px": 15, "dtheta_deg": 2.0, "z_seed": 4.5, "z_grow": 2.5, "min_cells": 2},
+  "clusters": [
+    {"r_px": 468, "theta_deg": -41, "cells": 7, "max_abs_z": 11.2, "sign": 1,
+     "classification": "parasitic blob", "action": "masked via method-05 contour"},
+    {"r_px": 284, "theta_deg": -44, "cells": 5, "max_abs_z": 5.0, "sign": -1,
+     "classification": "ASIC-block offset", "action": "reported (calibration systematics)"}
+  ]
+}
+```
+
+Every cluster carries a `classification` and an `action` per the decision-rules table,
+and the same findings are summarized in `mask_rationale.md` — the report is what makes
+"nothing found" distinguishable from "nobody looked", and it is the channel through
+which negative (calibration) findings reach the humans.
+
+Provenance: prototype + validation artifacts in `outputs/agent_trial_03_refined/`:
+`_itheta_*.npy`, `_itheta_method.png` (I(θ) curve, |z| map, footprint comparison),
 `_itheta_candidates.png` (visual inspection of the two negative block offsets).
+
+## Links
+
+Part of: [masking](README.md). Footprint builder for blob-like positives:
+[05](05_azimuthal_residual.md). The max off-ring |z| of this map is a natural scalar
+for a verifier "azimuthal uniformity" criterion —
+[verification](../verification/README.md).

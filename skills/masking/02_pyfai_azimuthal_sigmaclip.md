@@ -1,11 +1,13 @@
 ---
 name: xray-masking-pyfai-azimuthal-sigmaclip
 description: Signal-based mask via pyFAI azimuthal (χ) sigma-clipping — flags pixels that deviate from the robust per-q-ring model (bad columns, cosmics, Bragg spots from large grains). Use to clean an isotropic/amorphous/powder background where azimuthal symmetry holds. Warning — it removes real anisotropic (single-crystal/texture) signal.
+category: masking
+role: signal-dependent
+gate: isotropic/amorphous or powder background where azimuthal symmetry holds
+status: wired
 ---
 
-# Masking · Method 2 — pyFAI azimuthal sigma-clipping (signal-based)
-
-**Family:** signal-dependent. **Part of:** [masking](README.md).
+# Masking · 02 — pyFAI azimuthal sigma-clipping (signal-based)
 
 ## Principle
 
@@ -19,7 +21,9 @@ for each q-ring:  μ_q, σ_q = robust mean/std;  drop |I-μ_q| > thres·σ_q;  i
 mask = ( |I_pixel - mean_2D(q)| / std_2D(q) ) > thres
 ```
 
-## Parameters (tested values, and why)
+## Parameters
+
+Tested values, and why:
 
 | Param | Value | Why |
 |---|---|---|
@@ -36,7 +40,7 @@ mask = ( |I_pixel - mean_2D(q)| / std_2D(q) ) > thres
 (35.51, −35.22) mm, 75 µm pixels, `rot1=rot2=rot3=0`. Verified against stored `matrix_q`
 to 4×10⁻¹² Å⁻¹.
 
-## Result (Run0475)
+## Evidence (Run0475)
 
 9 696 / 1 048 576 ≈ **0.925 %** masked — bad columns, hotspots, and Bragg spots from large
 grains sitting on the rings.
@@ -51,7 +55,14 @@ dynamic outliers (cosmics, sporadic Bragg) that dark masks cannot.
 **Will remove real anisotropic signal** (single-crystal Bragg, texture). Requires correct
 geometry (dist, λ, beam center) to build the q-map.
 
-## Repo
+## Outputs
 
-`masking_pyFAI_sigmaclip/` — `build_mask.py`, `mask.npy`, `sigmaclip_mask.npz`, and
-`README_掩膜方法说明.md` with the full geometry and figure set.
+Sigma-clip mask layer. Provenance: `masking_pyFAI_sigmaclip/` — `build_mask.py`,
+`mask.npy`, `sigmaclip_mask.npz`, and `README_掩膜方法说明.md` with the full geometry
+and figure set.
+
+## Links
+
+Part of: [masking](README.md). Geometric corrections live in the pyFAI settings —
+see [normalization](../normalization/README.md). Signal-independent complement:
+[03](03_rmm_dark_based.md).
