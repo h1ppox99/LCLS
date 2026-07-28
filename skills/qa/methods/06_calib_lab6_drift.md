@@ -1,11 +1,20 @@
-# Calibration: LaB6 drift — per-run geometry witness against predicted ring positions
+---
+name: xray-qa-calib-lab6-drift
+description: QA calibration check — per-run geometry witness comparing sub-bin LaB6 ring positions against lattice predictions (|dq/q| vs manifest tolerance); the residual PATTERN across rings localizes the error (L/lambda, tilt, beam center, misidentified ring). The hard-escalation authority on q-scale. Never tune geometry to make rings land.
+category: qa
+role: calibration
+gate: apply when calibration_tolerance.per_run_drift_check_required is true AND at least one LaB6 reflection is visible
+status: not-wired
+---
 
-**Kind**: calibration check (apply when
-`calibration_tolerance.per_run_drift_check_required` is true AND at
-least one LaB6 reflection is visible in the curve; the hard-escalation
-authority on q-scale)
+# QA · 06 — Calibration: LaB6 drift
 
-## What it checks
+Per-run geometry witness against predicted ring positions — the hard-escalation
+authority on q-scale.
+
+## Principle
+
+What it checks:
 
 For each ring in `calibration_tolerance.per_run_drift_rings_to_check`:
 
@@ -21,19 +30,7 @@ Rings must first be identified as such by attribution (sharp + at a
 LaB6 prediction) — a parasitic spot near a predicted q must not silently
 stand in for the ring.
 
-## The residual PATTERN is the diagnosis
-
-Report per-ring residuals, then read their structure — it localizes the
-error for the human:
-
-| Pattern across rings | Points at |
-|---|---|
-| common multiplicative offset (Δq/q same sign and size) | distance L or wavelength λ wrong |
-| offset growing/shrinking systematically with q | geometry model (tilt, small-angle breakdown) |
-| residuals centered but rings broadened vs campaign norm | beam-center error — 1D averaging smears a decentered ring symmetrically without moving its centroid much |
-| single ring off, others clean | misidentified ring or overlapping parasitic — go back to attribution before believing it |
-
-## Three call sites, one contract
+### Three call sites, one contract
 
 This is the same check as mask SKILL step 5 and the pyFAI bridge's
 validation gate — same tolerance, same prediction, same sub-bin
@@ -49,7 +46,23 @@ None of its own — `calibration_tolerance.lab6_max_delta_q_pct` and
 `per_run_drift_rings_to_check` come from the manifest; the lattice
 constant is physics, not configuration.
 
-## Failure modes / escalation
+## Decision rules
+
+### The residual PATTERN is the diagnosis
+
+Report per-ring residuals, then read their structure — it localizes the
+error for the human:
+
+| Pattern across rings | Points at |
+|---|---|
+| common multiplicative offset (Δq/q same sign and size) | distance L or wavelength λ wrong |
+| offset growing/shrinking systematically with q | geometry model (tilt, small-angle breakdown) |
+| residuals centered but rings broadened vs campaign norm | beam-center error — 1D averaging smears a decentered ring symmetrically without moving its centroid much |
+| single ring off, others clean | misidentified ring or overlapping parasitic — go back to attribution before believing it |
+
+## Trade-offs
+
+Failure modes / escalation:
 
 - **hard** `lab6_ring_delta_q_exceeds_tolerance` — the established
   name; attach per-ring residuals and the pattern reading.
@@ -67,7 +80,14 @@ constant is physics, not configuration.
   detected honestly is operational information; drift absorbed silently
   corrupts every curve downstream of the geometry.
 
-## Contributes to `qa_report.json`
+## Outputs
 
-Per curve: `lab6_ring_residuals` — `{hkl, q_pred, q_obs, delta_q_pct}`
-per ring, `drift_pattern`, `drift_verdict`.
+Contributes to `qa_report.json`, per curve: `lab6_ring_residuals` —
+`{hkl, q_pred, q_obs, delta_q_pct}` per ring, `drift_pattern`, `drift_verdict`.
+
+## Links
+
+Part of: [qa](../README.md). Rings are identified by
+[02 attribution](02_attr_feature_width.md); sub-bin positions use the run's
+peak-position estimator ([03a](03a_peak_centroid_window.md) /
+[03b](03b_peak_shape_fit.md)) — one estimator per run.

@@ -20,7 +20,7 @@ follows the same template (see [Method-file template](#method-file-template-v3) 
 | [normalization/](normalization/README.md) | *How do I put shots on a common scale?* | intensities (scale) | 4 files | wired (reduction agent) |
 | [selection/](selection/README.md) | *Which shots do I keep?* | whole shots | 2 files | wired (reduction agent) |
 | [verification/](verification/README.md) | *Is the endpoint scientifically usable?* | I(q) metrics | 1 criterion | wired (verifier agent) |
-| [qa/](qa/SKILL.md) | *Are the 1D curves physically reasonable?* | curves + frames | 10 methods | **not wired** (ported from the old manifest workflow) |
+| [qa/](qa/README.md) | *Are the 1D curves physically reasonable?* | curves + frames | 10 methods | **not wired** (ported from the old manifest workflow) |
 
 ```
 skills/

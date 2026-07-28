@@ -1,11 +1,20 @@
-# Pixel photon statistics — per-pixel Poisson goodness-of-fit across shots
+---
+name: xray-qa-pixel-photon-statistics
+description: QA detector-statistics check — per-pixel Poisson goodness-of-fit across shots (deviance primary, Fano and JS auxiliary) with stratum + MC-calibrated fences; flags hot/flicker/noisy/stuck pixels and global over/underdispersion. The only QA method reading evidence upstream of the 1D curves; its sample is one fixed pixel across T shots, never a pooled single-image histogram.
+category: qa
+role: detector-statistics
+gate: gated on per-shot calibrated frames being available and qa.photon_stats.min_shots
+status: not-wired
+---
 
-**Kind**: detector-statistics check, pixel-level (gated on per-shot
-calibrated frames being available — this is the only QA method that
-reads evidence *upstream* of the 1D curves; it judges the detector,
-not the integration)
+# QA · 08 — Pixel photon statistics
 
-## What it flags
+Per-pixel Poisson goodness-of-fit across shots. The only QA method that reads
+evidence *upstream* of the 1D curves; it judges the detector, not the integration.
+
+## Principle
+
+What it flags:
 
 Pixels whose shot-to-shot intensity fluctuations are inconsistent with
 ideal Poisson photon statistics: hot pixels, gain instability
@@ -14,7 +23,7 @@ saturating pixels. Also, as a *global* verdict: whole-detector over- or
 underdispersion that points at selection/normalization rather than at
 individual pixels.
 
-## The sample definition (load-bearing)
+### The sample definition (load-bearing)
 
 The statistical sample is **one fixed pixel observed across T shots**:
 
@@ -35,7 +44,7 @@ magnitude above any per-pixel score.) Single-image, same-λ variants
 (one narrow q-bin, a flat-field region) are legitimate but are a
 different check; this method is the across-shots form.
 
-## Photon conversion first
+### Photon conversion first
 
 Raw Jungfrau output is ADU, not photon counts; the honest model is
 Poisson–Gaussian: `Y = g·N + b + ε`, `N ~ Poisson(λ)`,
@@ -63,7 +72,7 @@ Known confounders after photonization — expected, not anomalies:
 - **Threshold noise**: pixels whose keV values sit near k+0.5
   boundaries pick up rounding variance.
 
-## Estimator hierarchy (why deviance is primary, KL is not)
+### Estimator hierarchy (why deviance is primary, KL is not)
 
 With T ~ a few hundred shots the empirical PMF of one pixel is sparse;
 a histogram-based KL estimate is dominated by sampling noise (many
@@ -80,7 +89,22 @@ One estimator set per run — mixing estimators across runs mixes their
 systematics into cross-run comparisons (same rule as the peak-position
 methods).
 
-## Verdict: two fences, pixelwise max
+## Parameters
+
+| Manifest field | Default | Meaning |
+|---|---|---|
+| `qa.photon_stats.photon_kev` | — (required) | single-photon energy for photonization |
+| `qa.photon_stats.min_shots` | 200 | below this, skip loudly (`insufficient_shots`) — sparse-T deviance fences are unstable |
+| `qa.photon_stats.monitor_band` | [0.25, 0.75] | keep shots between these monitor quantiles (flux-jitter control) |
+| `qa.photon_stats.fence_k` | 6 | deviance fence in stratum-MAD units |
+| `qa.photon_stats.lambda_strata` | 16 | log-spaced λ̂ strata for fencing |
+| `qa.photon_stats.js_kmax` | 12 | histogram cap; k ≥ K merged into tail bin |
+| `qa.photon_stats.js_epsilon` | 0.5 | additive smoothing count |
+| `qa.photon_stats.max_flag_fraction` | 0.005 | hard escalation if exceeded (see Trade-offs) |
+
+## Decision rules
+
+### Verdict: two fences, pixelwise max
 
 The null distribution of deviance/dof depends on λ (χ² only
 asymptotically; badly wrong for λ ≲ 1 — on Run0475 the null median
@@ -112,50 +136,10 @@ Absolute Fano and the predicted `1 + λ·CV²_monitor` curve are
 *reported* alongside for physics interpretation, but the flag comes
 from the combined fence.
 
-## Parameters
+## Evidence (Run0475)
 
-| Manifest field | Default | Meaning |
-|---|---|---|
-| `qa.photon_stats.photon_kev` | — (required) | single-photon energy for photonization |
-| `qa.photon_stats.min_shots` | 200 | below this, skip loudly (`insufficient_shots`) — sparse-T deviance fences are unstable |
-| `qa.photon_stats.monitor_band` | [0.25, 0.75] | keep shots between these monitor quantiles (flux-jitter control) |
-| `qa.photon_stats.fence_k` | 6 | deviance fence in stratum-MAD units |
-| `qa.photon_stats.lambda_strata` | 16 | log-spaced λ̂ strata for fencing |
-| `qa.photon_stats.js_kmax` | 12 | histogram cap; k ≥ K merged into tail bin |
-| `qa.photon_stats.js_epsilon` | 0.5 | additive smoothing count |
-| `qa.photon_stats.max_flag_fraction` | 0.005 | hard escalation if exceeded (see below) |
-
-## Failure modes / escalation
-
-- **soft** `pixel_photon_stats_flagged` — per flagged pixel (or
-  cluster): panel, (row, col), λ̂, dev/dof, Fano, JS, suspected class.
-  Routing by signature:
-
-  | Signature | Points at |
-  |---|---|
-  | isolated pixel, F ≫ 1, huge deviance | hot/unstable pixel escaped the mask → mask stage |
-  | bimodal PMF (high JS at moderate deviance), F > 1 | gain-mode flicker or unstable calibration constant → calib |
-  | spatially clustered flags on a panel edge/ASIC | common-mode or geometry correction → reduction/calib escalation |
-  | global median F ≫ 1 + λ·CV² prediction | flux normalization or selection too loose → reduction |
-  | global F < 1 | over-processing (double common-mode subtraction), saturation → reduction |
-
-- **hard** `pixel_photon_stats_failed` — flagged fraction (outside the
-  known-bad map) > `max_flag_fraction`: the detector state disagrees
-  with the calibration wholesale; do not trust curves from this run.
-- **skip** `insufficient_shots` / `frames_unavailable` — recorded with
-  reason; never silent.
-
-## Do not
-
-- Don't pool pixels into one histogram (mixture pitfall above).
-- Don't fence on absolute Fano = 1 with a jittering beam.
-- Don't mask pixels from inside this skill — QA judges; the flag list
-  is evidence routed to the mask/calib stages.
-- Don't compare raw-ADU distributions to pure Poisson.
-
-## Validated feasibility (2026-07-27, Run0475)
-
-Implementation: `scripts/photon_stats.py` (self-test: `--selftest`).
+Validated feasibility (2026-07-27). Implementation: `scripts/photon_stats.py`
+(self-test: `--selftest`).
 
 - **Synthetic self-test** (160 k pixels × 600 shots, λ log-uniform
   0.01–20, 300 injected pixels per class): hot 100 % detected at
@@ -184,10 +168,49 @@ Implementation: `scripts/photon_stats.py` (self-test: `--selftest`).
   and Fano ≈ 1.2–1.45 above the flux-jitter prediction on the few
   dozen brightest pixels (beam-vicinity pointing jitter).
 
-## Contributes to `qa_report.json`
+## Trade-offs
 
-`photon_stats`: `{n_shots_used, monitor_cv, n_flagged, flag_fraction,
+Failure modes / escalation:
+
+- **soft** `pixel_photon_stats_flagged` — per flagged pixel (or
+  cluster): panel, (row, col), λ̂, dev/dof, Fano, JS, suspected class.
+  Routing by signature:
+
+  | Signature | Points at |
+  |---|---|
+  | isolated pixel, F ≫ 1, huge deviance | hot/unstable pixel escaped the mask → mask stage |
+  | bimodal PMF (high JS at moderate deviance), F > 1 | gain-mode flicker or unstable calibration constant → calib |
+  | spatially clustered flags on a panel edge/ASIC | common-mode or geometry correction → reduction/calib escalation |
+  | global median F ≫ 1 + λ·CV² prediction | flux normalization or selection too loose → reduction |
+  | global F < 1 | over-processing (double common-mode subtraction), saturation → reduction |
+
+- **hard** `pixel_photon_stats_failed` — flagged fraction (outside the
+  known-bad map) > `max_flag_fraction`: the detector state disagrees
+  with the calibration wholesale; do not trust curves from this run.
+- **skip** `insufficient_shots` / `frames_unavailable` — recorded with
+  reason; never silent.
+
+## Do not
+
+- Don't pool pixels into one histogram (mixture pitfall above).
+- Don't fence on absolute Fano = 1 with a jittering beam.
+- Don't mask pixels from inside this skill — QA judges; the flag list
+  is evidence routed to the mask/calib stages.
+- Don't compare raw-ADU distributions to pure Poisson.
+
+## Outputs
+
+Contributes to `qa_report.json` — `photon_stats`: `{n_shots_used, monitor_cv, n_flagged, flag_fraction,
 overlap_with_known_bad, global_fano_median, strata: [{lambda_range,
 n_pixels, dev_dof_median, dev_dof_mad, fano_median, n_flagged}],
 flags: [{panel, row, col, lambda, dev_dof, fano, js, suspected_class}],
 maps: "photon_stats.npz"}`.
+
+## Links
+
+Part of: [qa](../README.md). Implementation: `scripts/photon_stats.py`.
+Independent of the curve checks — reads per-shot calibrated frames. The flag list is
+evidence for the [masking](../../masking/README.md) and calibration stages, never a
+mask edit; global-dispersion verdicts route to reduction
+([selection](../../selection/README.md) /
+[normalization](../../normalization/README.md)).

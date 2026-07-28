@@ -1,7 +1,7 @@
-"""Per-pixel Poisson goodness-of-fit across shots (QA method: pixel_photon_statistics).
+"""Per-pixel Poisson goodness-of-fit across shots (QA method 08_pixel_photon_statistics).
 
 Sample = one fixed pixel across T shots (never a pooled single-image histogram —
-that is a Poisson mixture; see methods/pixel_photon_statistics.md). Per pixel:
+that is a Poisson mixture; see methods/08_pixel_photon_statistics.md). Per pixel:
 
   lambda_hat  = mean photon count
   deviance    = 2*[sum I*ln(I) - S*ln(S/T)]  (MLE form; primary verdict)

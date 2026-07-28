@@ -1,10 +1,20 @@
-# Attribution: feature width — label every detected feature before any verdict logic
+---
+name: xray-qa-attr-feature-width
+description: QA feature attribution — detect every local maximum and label it by width (sharp/diffuse/ambiguous) as sample peak, calibration ring, named instrument background, or PARASITIC candidate. Always runs second; produces labels, never a verdict; every downstream check consumes them.
+category: qa
+role: attribution
+gate: always — runs SECOND, after the integrity gate; downstream checks consume its labels
+status: not-wired
+---
 
-**Kind**: attribution (always runs, after the integrity gate and BEFORE
-the peak-position and curve-quality checks, which consume its labels;
-produces labels, never a pass/fail verdict of its own)
+# QA · 02 — Attribution: feature width
 
-## What it does
+Label every detected feature before any verdict logic. Produces labels,
+never a pass/fail verdict of its own.
+
+## Principle
+
+What it does:
 
 Detect all local maxima above the noise floor across the full q-range
 (prominence-based, not height-based — a small peak on a low background
@@ -21,7 +31,7 @@ diffuse & q in an instrument_backgrounds entry → labeled background, by name (
 sharp   & none of the above                    → PARASITIC candidate — the load-bearing class
 ```
 
-## Rationale
+### Rationale
 
 Pass/fail logic on unlabeled features conflates three different
 stories. Width is the discriminator this detector affords: Bragg rings
@@ -53,7 +63,9 @@ Noise σ per bin: curves carry no per-bin errors (`np.savez(q=, I=)`
 per the common SKILL), so estimate robustly from first differences:
 `σ ≈ 1.4826 · MAD(ΔI) / √2`. Record the estimate.
 
-## Failure modes / escalation
+## Trade-offs
+
+Failure modes / escalation:
 
 - **soft** `unattributed_sharp_feature` — q, width, intensity in the
   report. On amorphous samples this is operational news (ice forming
@@ -71,6 +83,14 @@ per the common SKILL), so estimate robustly from first differences:
   geometry-tuning anti-pattern in a different coat. Propose the edit
   with evidence from a clean calibration run; a human adopts it.
 
-## Contributes to `qa_report.json`
+## Outputs
 
-Per curve: `features` list — `{q, sigma, prominence, label, matched_manifest_entry}`.
+Contributes to `qa_report.json`, per curve: `features` list —
+`{q, sigma, prominence, label, matched_manifest_entry}`.
+
+## Links
+
+Part of: [qa](../README.md). Labels feed the peak-position family
+([03a](03a_peak_centroid_window.md)/[03b](03b_peak_shape_fit.md)), the glitch lens
+([04b](04b_quality_pointwise_glitch.md)), control windows
+([05](05_control_windows.md)), and the drift check ([06](06_calib_lab6_drift.md)).

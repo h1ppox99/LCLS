@@ -2,7 +2,8 @@
 
 Rewritten workflow. (The old Docker/manifest compton setup — `compton/`,
 `agent/.claude/`, `agent/Dockerfile` — has been removed; its `qa` skill was ported
-as-is to `skills/qa/` and is not yet wired into the pipeline.)
+to `skills/qa/` — now in the unified v3 skill format, methods numbered by
+execution order — and is not yet wired into the pipeline.)
 
 ```
 XTC (5 streams, raw)

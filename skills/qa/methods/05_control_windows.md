@@ -1,11 +1,21 @@
-# Control windows — signal-free q-regions as absolute per-curve witnesses
+---
+name: xray-qa-control-windows
+description: QA control check — judge signal-free q-regions (manifest-chosen control windows) as absolute per-curve witnesses of normalization, mask, and correction-map health via level, slope, and unexpected features. Gated on the manifest having control windows for the sample; skips loudly otherwise.
+category: qa
+role: control
+gate: apply when sample_features.<sample>.control_q_windows_A_inv is populated; skip loudly otherwise
+status: not-wired
+---
 
-**Kind**: control check (apply when
-`sample_features.<sample>.control_q_windows_A_inv` is populated;
-per-curve and *absolute* — the curve-vs-curve comparison belongs to
-`consistency_cross_curve.md`)
+# QA · 05 — Control windows
 
-## What it checks
+Signal-free q-regions as absolute per-curve witnesses. Per-curve and *absolute* —
+the curve-vs-curve comparison belongs to
+[07_consistency_cross_curve.md](07_consistency_cross_curve.md).
+
+## Principle
+
+What it checks:
 
 Per curve, per control window:
 
@@ -17,7 +27,7 @@ excess = any attributed feature inside the window (by construction there should 
 
 compared against the campaign QA history (and `qa.control_level_tolerance`).
 
-## Rationale
+### Rationale
 
 Control windows are q-regions a human chose *because* sample scattering
 there is flat and featureless. Whatever structure appears in them is
@@ -48,7 +58,9 @@ If the manifest has no control windows for this sample: skip and record
 by eyeballing a flat region; that hands the witness's choice to the
 thing being witnessed.
 
-## Failure modes / escalation
+## Trade-offs
+
+Failure modes / escalation:
 
 - **soft** `control_window_feature` — structure where none belongs;
   attach the attribution label and q.
@@ -67,6 +79,14 @@ thing being witnessed.
   that discards the witness exactly when it testifies. Escalate with
   the evidence; window changes are manifest edits humans adopt.
 
-## Contributes to `qa_report.json`
+## Outputs
 
-Per curve, per window: `{q_window, level, level_vs_baseline, slope, features_in_window}`.
+Contributes to `qa_report.json`, per curve, per window:
+`{q_window, level, level_vs_baseline, slope, features_in_window}`.
+
+## Links
+
+Part of: [qa](../README.md). Feature labels inside windows come from
+[02 attribution](02_attr_feature_width.md). Relative counterpart:
+[07 cross-curve](07_consistency_cross_curve.md). Level shifts point at the
+[normalization](../../normalization/README.md) choice.

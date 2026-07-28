@@ -1,10 +1,20 @@
-# Peak position: centroid vs window — sub-bin centroid of the sample's main peak
+---
+name: xray-qa-peak-centroid-window
+description: QA peak-position check, default implementation — local-baseline sub-bin centroid of the sample's main peak, verdict = centroid inside the manifest window. No functional-form assumption, so it degrades gracefully on asymmetric liquid peaks. Alternative implementation - 03b shape fit; exactly one produces the verdict per curve.
+category: qa
+role: peak-position (default implementation)
+gate: exactly ONE of 03a/03b produces the verdict per curve (qa.peak_method); the other may run as a recorded cross-check
+status: not-wired
+---
 
-**Kind**: peak-position check (default implementation; alternative:
-`peak_shape_fit.md` — exactly ONE implementation produces the verdict
-per curve; the other may run as a recorded cross-check)
+# QA · 03a — Peak position: centroid vs window
 
-## What it checks
+Sub-bin centroid of the sample's main peak. Default implementation;
+alternative: [03b_peak_shape_fit.md](03b_peak_shape_fit.md).
+
+## Principle
+
+What it checks:
 
 Take the sample-peak candidate from feature attribution (the strongest
 *sharp* feature inside `sample_features.<sample>.main_peak_q_window_A_inv`)
@@ -20,7 +30,7 @@ u_centroid ≈ σ_peak / √N_eff,   N_eff = (Σw)² / Σw²
 verdict   = centroid ∈ manifest window (uncertainty noted at the edges)
 ```
 
-## Rationale and lineage
+### Rationale and lineage
 
 `argmax` alone is bin-quantized — at ~0.01 Å⁻¹ bins the quantization
 error is the same order as the LaB6 drift tolerance, so a raw-argmax
@@ -47,12 +57,12 @@ structure factors actually have.
 The window itself is `sample_features.<sample>.main_peak_q_window_A_inv`
 — never widened, never re-centered by this method.
 
-## When to prefer
+## When to use
 
 Default: one dominant, reasonably isolated peak with adequate
 statistics — the normal case for a sample run.
 
-## When NOT to use → `peak_shape_fit.md`
+### When NOT to use → [03b_peak_shape_fit.md](03b_peak_shape_fit.md)
 
 - Attribution found a **second feature overlapping** the window: the
   centroid of a blend is the answer to no question.
@@ -62,7 +72,9 @@ statistics — the normal case for a sample run.
 - The local background is strongly **curved** across the support, so the
   linear edge interpolation is visibly wrong.
 
-## Failure modes / escalation
+## Trade-offs
+
+Failure modes / escalation:
 
 - **hard** `main_peak_outside_window` — with the manifest's geometry,
   the peak is where it is. Do not tune L, beam center, or λ; do not
@@ -75,7 +87,14 @@ statistics — the normal case for a sample run.
   of a window edge. Requires the zoom plot; if `qa.peak_method`
   configures a cross-check, run it before recording the verdict.
 
-## Contributes to `qa_report.json`
+## Outputs
 
-Per curve: `peak_q`, `peak_q_unc`, `peak_sigma`, `peak_method: "centroid_window"`,
-`peak_verdict`, `baseline_slope`.
+Contributes to `qa_report.json`, per curve: `peak_q`, `peak_q_unc`, `peak_sigma`,
+`peak_method: "centroid_window"`, `peak_verdict`, `baseline_slope`.
+
+## Links
+
+Part of: [qa](../README.md). Takes the sample-peak candidate from
+[02 attribution](02_attr_feature_width.md). Alternative implementation:
+[03b](03b_peak_shape_fit.md). Its estimator is also the sub-bin refiner for the
+drift check ([06](06_calib_lab6_drift.md)) — one estimator per run.

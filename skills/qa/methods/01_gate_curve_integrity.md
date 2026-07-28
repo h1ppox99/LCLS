@@ -1,9 +1,19 @@
-# Gate: curve integrity — is this curve a well-formed measurement at all?
+---
+name: xray-qa-gate-curve-integrity
+description: QA integrity gate — is the curve a well-formed measurement at all? Flags malformed q-grids, coverage mismatch vs the qmap (the nm-1/A-1 units slip), starved/empty curves, and structured negative intensity. Always runs FIRST; a failing curve gets verdict invalid and no further checks.
+category: qa
+role: gate
+gate: always — runs FIRST; a failing curve receives no further checks
+status: not-wired
+---
 
-**Kind**: gate (always applied; runs FIRST — a curve failing here gets
-verdict `invalid` and receives no further checks)
+# QA · 01 — Gate: curve integrity
 
-## What it flags
+Is this curve a well-formed measurement at all?
+
+## Principle
+
+What it flags:
 
 1. **Malformed q-grid**: non-finite or non-monotonic `q`, or bin spacing
    that jumps by more than 2× the median Δq mid-range — a concatenation
@@ -22,7 +32,7 @@ verdict `invalid` and receives no further checks)
    bins, or a negative median inside any feature window, mean pedestal
    or correction error upstream.
 
-## Rationale
+### Rationale
 
 Every other QA method assumes the curve is a function I(q) on the
 detector's reachable q-range with mostly-populated bins. Peak checks
@@ -49,7 +59,9 @@ skip the coverage item and record `coverage_check_skipped: true` — do
 not reconstruct the q-range from geometry here (that re-derives the
 qmap behind the mask skill's back).
 
-## Failure modes / escalation
+## Trade-offs
+
+Failure modes / escalation:
 
 - **hard** `curve_q_coverage_mismatch` — bulk disagreement with the
   qmap's reachable range. Suspect units first (nm⁻¹ vs Å⁻¹, unscaled λ
@@ -61,8 +73,14 @@ qmap behind the mask skill's back).
   exclude rings with < ~50 pixels). NaN gaps in the *interior* are not —
   report which q-ranges.
 
-## Contributes to `qa_report.json`
+## Outputs
 
-Per curve: `integrity_verdict`, `nan_bin_fraction`,
+Contributes to `qa_report.json`, per curve: `integrity_verdict`, `nan_bin_fraction`,
 `q_range` vs `qmap_active_range`, `negative_run_max`, plus the reason
 string for any `invalid` verdict.
+
+## Links
+
+Part of: [qa](../README.md). Runs before [02 attribution](02_attr_feature_width.md).
+Consumes the mask stage's `mask_summary.json`; a glitch density > ~5 % of bins in
+[04b](04b_quality_pointwise_glitch.md) reroutes to this gate's `curve_integrity_failed`.

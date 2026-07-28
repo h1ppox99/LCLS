@@ -1,9 +1,12 @@
 ---
-name: qa
-description: Judge whether 1D radial averages from an LCLS/XPP run are physically reasonable. Reads expected peak windows, known instrument backgrounds, and calibration tolerances from the manifest at /data/manifest.yaml. Checks are organized as an integrity gate, feature attribution, and per-evidence check families — variants documented in methods/*.md with selection rules below. Use after azimuthal integration has produced 1D curves.
+name: xray-qa
+description: QA skill category — judge whether 1D radial averages from an LCLS/XPP run are physically reasonable. Reads expected peak windows, known instrument backgrounds, and calibration tolerances from the manifest at /data/manifest.yaml. Checks are organized as an integrity gate, feature attribution, and per-evidence check families — one method per file in methods/, numbered by execution order, with selection rules below. Use after azimuthal integration has produced 1D curves.
+category: qa
+role: category-index
+status: not-wired
 ---
 
-# Quality assurance
+# QA (category index)
 
 ## When to use
 
@@ -71,25 +74,25 @@ qa:
     max_flag_fraction: 0.005   # above this: hard escalation
 ```
 
-## Available methods
+## Methods
 
-Method files live in `methods/`. Each contributes named fields to
-`qa_report.json`; the report is the union of what ran.
+Method files live in `methods/`, numbered by execution order. Each contributes named
+fields to `qa_report.json`; the report is the union of what ran.
 
 | File | Role | What it checks |
 |---|---|---|
-| `methods/gate_curve_integrity.md` | gate (always, FIRST) | well-formed q-grid, coverage vs qmap, starved bins, negative structure |
-| `methods/attr_feature_width.md` | attribution (always, SECOND) | labels every feature: sample / calibration / instrument background / parasitic — by width |
-| `methods/peak_centroid_window.md` | peak-position (default impl.) | sub-bin centroid of the main peak vs the manifest window |
-| `methods/peak_shape_fit.md` | peak-position (alternative impl.) | model fit — for overlapping features and borderline verdicts |
-| `methods/quality_smoothness_curvature.md` | curve-quality · global lens | whole-curve roughness (second-derivative L2, the legacy metric) |
-| `methods/quality_pointwise_glitch.md` | curve-quality · localized lens | single-bin spikes/notches/steps, attributed to upstream causes |
-| `methods/control_windows.md` | control (gated on manifest windows) | signal-free regions as absolute normalization/mask witnesses |
-| `methods/calib_lab6_drift.md` | calibration (gated on run type) | per-ring Δq/q vs LaB6 prediction; residual-pattern diagnosis |
-| `methods/consistency_cross_curve.md` | consistency (gated on ≥ 2 curves, LAST) | curves agree with each other — levels, centroids, quality |
-| `methods/pixel_photon_statistics.md` | detector-statistics (gated on per-shot frames) | per-pixel Poisson goodness-of-fit across shots — deviance (primary), Fano, JS divergence; hot/flicker/noisy/stuck pixels, global over/underdispersion |
+| [methods/01_gate_curve_integrity.md](methods/01_gate_curve_integrity.md) | gate (always, FIRST) | well-formed q-grid, coverage vs qmap, starved bins, negative structure |
+| [methods/02_attr_feature_width.md](methods/02_attr_feature_width.md) | attribution (always, SECOND) | labels every feature: sample / calibration / instrument background / parasitic — by width |
+| [methods/03a_peak_centroid_window.md](methods/03a_peak_centroid_window.md) | peak-position (default impl.) | sub-bin centroid of the main peak vs the manifest window |
+| [methods/03b_peak_shape_fit.md](methods/03b_peak_shape_fit.md) | peak-position (alternative impl.) | model fit — for overlapping features and borderline verdicts |
+| [methods/04a_quality_smoothness_curvature.md](methods/04a_quality_smoothness_curvature.md) | curve-quality · global lens | whole-curve roughness (second-derivative L2, the legacy metric) |
+| [methods/04b_quality_pointwise_glitch.md](methods/04b_quality_pointwise_glitch.md) | curve-quality · localized lens | single-bin spikes/notches/steps, attributed to upstream causes |
+| [methods/05_control_windows.md](methods/05_control_windows.md) | control (gated on manifest windows) | signal-free regions as absolute normalization/mask witnesses |
+| [methods/06_calib_lab6_drift.md](methods/06_calib_lab6_drift.md) | calibration (gated on run type) | per-ring Δq/q vs LaB6 prediction; residual-pattern diagnosis |
+| [methods/07_consistency_cross_curve.md](methods/07_consistency_cross_curve.md) | consistency (gated on ≥ 2 curves, LAST) | curves agree with each other — levels, centroids, quality |
+| [methods/08_pixel_photon_statistics.md](methods/08_pixel_photon_statistics.md) | detector-statistics (gated on per-shot frames) | per-pixel Poisson goodness-of-fit across shots — deviance (primary), Fano, JS divergence; hot/flicker/noisy/stuck pixels, global over/underdispersion |
 
-Selection rules:
+## Choosing
 
 1. **The gate and attribution always run, in that order.** Attribution's
    labels are inputs to everything downstream — the glitch lens without
