@@ -1,6 +1,9 @@
 ---
 name: xray-selection
 description: Selection skill category — deciding which shots/events enter the sum. Wired into XTC_Agent - two AGENT-DECIDED shot-quality cuts on the ipm2 flux monitor (low-flux exclusion 01a, bright-tail exclusion 01b), split on purpose because they have different physics. Selection acts on whole shots - never on pixels (masking), never rescaling (normalization).
+category: selection
+role: category-index
+status: wired
 ---
 
 # Selection (category index)
@@ -9,7 +12,9 @@ description: Selection skill category — deciding which shots/events enter the 
 shots/events*; it never removes pixels (that is [masking](../masking/README.md))
 and never rescales intensities (that is [normalization](../normalization/README.md)).
 
-Methods wired into this pipeline, one file each:
+## Methods
+
+One file each, wired into this pipeline:
 
 | File | Method | Decision character |
 |---|---|---|
@@ -27,7 +32,7 @@ this pipeline (event temporal alignment, good-pixel selection, q-range
 restriction, correlation gate); step 0's deterministic global time-sort already
 covers event ordering here.
 
-**Golden rules**
+## Golden rules
 
 1. **A mask is not a selection** — never fold flux dropouts into the pixel mask
    or vice-versa.
