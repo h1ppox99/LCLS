@@ -59,6 +59,16 @@ qa:
   control_level_tolerance: 0.2
   cross_curve_level_tolerance: 0.01
   cross_curve_centroid_max_sigma: 3
+  # Per-pixel photon statistics (detector-statistics check).
+  photon_stats:
+    photon_kev: 9.6            # single-photon energy; campaign-specific
+    min_shots: 200             # below this: skip loudly (insufficient_shots)
+    monitor_band: [0.25, 0.75] # shot-selection quantiles (flux-jitter control)
+    fence_k: 6                 # deviance fence in stratum-MAD units
+    lambda_strata: 16
+    js_kmax: 12
+    js_epsilon: 0.5
+    max_flag_fraction: 0.005   # above this: hard escalation
 ```
 
 ## Available methods
@@ -77,6 +87,7 @@ Method files live in `methods/`. Each contributes named fields to
 | `methods/control_windows.md` | control (gated on manifest windows) | signal-free regions as absolute normalization/mask witnesses |
 | `methods/calib_lab6_drift.md` | calibration (gated on run type) | per-ring Δq/q vs LaB6 prediction; residual-pattern diagnosis |
 | `methods/consistency_cross_curve.md` | consistency (gated on ≥ 2 curves, LAST) | curves agree with each other — levels, centroids, quality |
+| `methods/pixel_photon_statistics.md` | detector-statistics (gated on per-shot frames) | per-pixel Poisson goodness-of-fit across shots — deviance (primary), Fano, JS divergence; hot/flicker/noisy/stuck pixels, global over/underdispersion |
 
 Selection rules:
 
@@ -101,6 +112,13 @@ Selection rules:
 5. **One estimator per run** for all sub-bin peak positions (verdict
    peak AND LaB6 rings) — mixing estimators mixes their systematics
    into the drift residuals.
+6. **The detector-statistics check is independent of the curve checks.**
+   It reads per-shot calibrated frames (evidence upstream of
+   integration) and is gated on their availability plus
+   `qa.photon_stats.min_shots`. Its sample is one fixed pixel across
+   shots — never a pooled single-image histogram (Poisson-mixture
+   pitfall, see the method file). Its flag list is evidence for the
+   mask/calib stages, not a mask edit.
 
 ## Procedure
 

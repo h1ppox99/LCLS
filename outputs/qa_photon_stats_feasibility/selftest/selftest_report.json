@@ -1,0 +1,56 @@
+{
+  "A_constant_flux": {
+    "detection_rate": {
+      "hot": {
+        "lam_lt_0.1": 0.0,
+        "lam_0.1_1": 0.9550561797752809,
+        "lam_ge_1": 1.0
+      },
+      "flicker": {
+        "lam_lt_0.1": 0.0,
+        "lam_0.1_1": 0.01098901098901099,
+        "lam_ge_1": 0.943089430894309
+      },
+      "noise": {
+        "lam_lt_0.1": 1.0,
+        "lam_0.1_1": 1.0,
+        "lam_ge_1": 0.8290598290598291
+      },
+      "stuck_by_fano_lt_0.5": 1.0
+    },
+    "false_positive_rate": 0.0,
+    "good_dev_dof_median": 0.9353738904153257,
+    "good_fano_median": 0.9899833055091819,
+    "n_flagged": 606
+  },
+  "B_flux_jitter_10pct": {
+    "detection_rate": {
+      "hot": {
+        "lam_lt_0.1": 0.0,
+        "lam_0.1_1": 0.9662921348314607,
+        "lam_ge_1": 1.0
+      },
+      "flicker": {
+        "lam_lt_0.1": 0.0,
+        "lam_0.1_1": 0.01098901098901099,
+        "lam_ge_1": 0.943089430894309
+      },
+      "noise": {
+        "lam_lt_0.1": 1.0,
+        "lam_0.1_1": 1.0,
+        "lam_ge_1": 0.7777777777777778
+      },
+      "stuck_by_fano_lt_0.5": 1.0
+    },
+    "false_positive_rate": 0.0,
+    "good_dev_dof_median": 0.9688594550835519,
+    "good_fano_median": 1.0089385437215412,
+    "n_flagged": 601
+  },
+  "C_pooled_mixture_pitfall": {
+    "pooled_KL_healthy_pixels": 1.538403266838809,
+    "per_pixel_JS_median_healthy": 0.0004473344816286195,
+    "ratio": 3439.044674664725,
+    "note": "pooled histogram vs single Poisson is huge even with zero anomalies"
+  }
+}
