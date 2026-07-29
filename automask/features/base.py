@@ -68,10 +68,9 @@ class FeatureSpec:
     def content_key(self) -> str:
         """Provenance hash of what actually determines the array (name excluded).
 
-        The ``source="events"`` payload is deliberately byte-identical to the
-        pre-``source`` version -- the cache holds hours of XTC reductions, and
-        adding a key that is constant for every existing entry would invalidate
-        all of them for no gain.
+        The ``source="events"`` payload is the reduction plus ``asdict`` of the
+        selection, so any change to ``ShotSelection``'s field names invalidates
+        every cached entry. 
         """
         if self.source == "events":
             payload = {"reduction": self.reduction,

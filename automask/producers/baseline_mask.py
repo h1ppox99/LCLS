@@ -26,13 +26,21 @@ ASM_SHAPE = (1064, 1030)
 DILATION_STRUCTURE = np.ones((5, 5), dtype=bool)
 
 
-def select_events_by_ipm2(run: int = RUN, drop_top_percent: float = 1.0) -> np.ndarray:
-    """Keep events below the top ``drop_top_percent`` of the ipm2 monitor."""
+def select_events_by_i0(run: int = RUN, drop_top_percent: float = 1.0,
+                        monitor: str = "ipm2") -> np.ndarray:
+    """Keep events below the top ``drop_top_percent`` of an intensity monitor.
+
+    Defaults to ``ipm2`` because this producer reproduces the lab notebook, which
+    used it. Note that ipm2 sits *upstream* of the CC/VCC beam split and so does
+    not track the flux reaching the detector -- new work should prefer a
+    downstream monitor such as ``sample_diode`` (see DATA.md).
+    """
     with SmallData(run) as sd:
-        ipm2 = sd.i0("ipm2")
-    threshold = np.percentile(ipm2, 100.0 - drop_top_percent)
-    keep = ipm2 < threshold
-    print(f"[ipm2] {keep.sum()}/{keep.size} events kept (threshold {threshold:.1f})")
+        i0 = sd.i0(monitor)
+    threshold = np.percentile(i0, 100.0 - drop_top_percent)
+    keep = i0 < threshold
+    print(f"[{monitor}] {keep.sum()}/{keep.size} events kept "
+          f"(threshold {threshold:.4g})")
     return keep
 
 
@@ -41,7 +49,7 @@ def xtc_sum(run: int = RUN, n_images: int = 100) -> np.ndarray:
     import psana
     from automask.io.read_xtc import open_local_run
 
-    keep = select_events_by_ipm2(run)
+    keep = select_events_by_i0(run)
     ds, _ = open_local_run(run)
     detector = psana.Detector(DETNAME)
     total = np.zeros(ASM_SHAPE, dtype=np.float64)

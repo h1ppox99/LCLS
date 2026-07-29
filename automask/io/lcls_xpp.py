@@ -27,6 +27,10 @@ import glob
 import numpy as np
 import h5py
 
+# Single source of truth for the CC/VCC threshold; read_xtc imports psana lazily
+# (inside functions only), so this stays a numpy-only import.
+from automask.io.read_xtc import CC_VCC_THRESHOLD
+
 # ---- paths -----------------------------------------------------------------
 # Root of the local data copy (the dir that contains xtc/, hdf5/, calib/ ...).
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # automask/io/ -> LCLS
@@ -51,7 +55,7 @@ class SmallData:
     The file has two logically different parts:
 
       * per-event arrays   (first axis == number of events), e.g.
-            ipm2/sum, ebeam/photon_energy, lightStatus/laser,
+            diodeU/channels, ebeam/photon_energy, lightStatus/xray, ai/ch02,
             jungfrau1M_alcove/azav_azav (the pre-computed azimuthal average)
       * configuration       under  UserDataCfg/...   (geometry, masks, calib
             constants, azimuthal-integration parameters -- written once)
@@ -110,19 +114,35 @@ class SmallData:
     def event_time(self) -> np.ndarray:
         return self.h5["event_time"][()]
 
-    def laser_on(self) -> np.ndarray:
-        """1 where the optical laser (pump) fired, else 0."""
-        return self.h5["lightStatus/laser"][()].astype(bool)
+    def beam_on(self) -> np.ndarray:
+        """1 where the machine delivered x-rays (EVR code 137, 'Beam On').
 
-    def xray_on(self) -> np.ndarray:
+        Says nothing about which of the CC/VCC branches was open -- use
+        ``cc()``/``vcc()`` for that.
+        """
         return self.h5["lightStatus/xray"][()].astype(bool)
+
+    def cc(self) -> np.ndarray:
+        """CC branch shutter open, from the ``ai/ch02`` voltage."""
+        return self.h5["ai/ch02"][()] > CC_VCC_THRESHOLD
+
+    def vcc(self) -> np.ndarray:
+        """VCC branch shutter open, from the ``ai/ch03`` voltage."""
+        return self.h5["ai/ch03"][()] > CC_VCC_THRESHOLD
 
     def photon_energy_keV(self) -> np.ndarray:
         """Per-event FEL photon energy from the electron beam, in keV."""
         return self.h5["ebeam/photon_energy"][()]
 
-    def i0(self, monitor: str = "ipm2") -> np.ndarray:
-        """Incident-intensity monitor sum (default XPP-SB2 BMMON = ipm2)."""
+    def i0(self, monitor: str = "sample_diode") -> np.ndarray:
+        """Per-shot intensity monitor reading.
+
+        ``sample_diode`` (the lab's own normalizer) and ``diodeU``/``lombpm`` are
+        downstream of the CC/VCC split and track what the detector receives;
+        ``ipm2``/``ipm3``/``ipm_hx2`` are upstream and do not. See DATA.md.
+        """
+        if monitor == "sample_diode":
+            return self.h5["diodeU/channels"][:, 0]
         return self.h5[f"{monitor}/sum"][()]
 
     def scan_value(self):

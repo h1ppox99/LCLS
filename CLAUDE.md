@@ -26,7 +26,7 @@ sitting alongside the data mirror. There is no `src/` wrapper. Import project co
 
 | path | role |
 |------|------|
-| **`automask/`** | **Main working area.** The auto-masking project, an installable package. Numpy-only after a one-time extract; scores predicted masks vs references by IoU/precision/recall. Core: `masking.py` (STATS/REGULARIZERS/COMBINERS registries + `Detector`/`Pipeline`, run `python -m automask.masking`), `stats/` `regularization/` `combine/` (one file per method), `evaluation.py` (`Sample`/`evaluate`), `dataset.py` (loaders/score). Sweeps via Hydra: `conf/` + `studies/sweep_hyperparameters.py` + `scripts/*.sh`. `io/` are the reusable readers, `producers/` build the frozen inputs, `studies/` are exploratory (`studies/archive/` = pre-refactor), `data/` is the frozen input, `outputs/` is everything generated. Start here. |
+| **`automask/`** | **Main working area.** The auto-masking project, an installable package. Numpy-only after a one-time extract; scores predicted masks vs references by IoU/precision/recall. Core: `masking.py` (STATS/REGULARIZERS/COMBINERS registries + `Detector`/`Pipeline`, run `python -m automask.masking`), `stats/` `regularization/` `combine/` (one file per method), `evaluation.py` (`Sample`/`evaluate`), `dataset.py` (loaders/score). Sweeps via Hydra: `conf/` + `studies/sweep_hyperparameters.py` + `scripts/*.sh`. `io/` are the reusable readers, `producers/` build the frozen inputs, `studies/` are exploratory, `data/` is the frozen input (`images/` sums, `masks/` references incl. the human ground truth, `geometry/` ix/iy maps, `manifest.json`), `outputs/` is everything generated and is **gitignored**. Start here. |
 | `xpp_sharing/` | **The lab's current production method** (CO2 delay-scan notebooks + `utils.py`). Reference/baseline to improve on — manual mask, diode normalization, delay binning. Read-only. |
 | `automask/io/` | Reusable readers (import as `automask.io.<name>`): `lcls_xpp.py` (small-data + calib, numpy/h5py), `read_xtc.py` (psana XTC → frames), `setup_psdm_layout.py`. |
 | `docs/`, `psana_env.sh` | `DATA_OVERVIEW.md` + `PSANA_XTC.md` (repo-root `docs/`); and the env-activation script (repo root). |
@@ -59,16 +59,15 @@ that runs python: `source psana_env.sh && python -m automask.masking`.
 ## Data on disk
 
 **`hdf5/smalldata/xppl1016922_Run<NNNN>.h5`** (4-digit run) — one row per event, loads fully
-in memory. **This is where most analysis should start.** Present: **Run0389** (40 003 events)
-and **Run0475** (3 201 events). Holds per-event scalars (intensity monitors, laser/xray
-status, ebeam, EPICS, per-event azimuthal average), run-level `Sums/` images, and
-`UserDataCfg/` geometry — but **no full per-event Jungfrau frames** (use XTC for those).
+in memory. Useful information to validate claims about data content, conventions etc... It should 
+not be integrated in the masking pipeline, which directly uses `xtc`files.
 
 **`xtc/xppl1016922-r<RUN>-s<STREAM>-c00.xtc`** — full event stream, needs psana. A run is
 split across parallel DAQ streams `s00…s04` that psana normally merges by timestamp. Present:
-- **Run 475** — all 5 streams (s00–s04) complete (~1.36 GB each).
-- **Run 389** — only stream **s00**, and it is a **partially-downloaded, truncated file**
-  (~19 GB of an expected ~30 GB). See the gotcha below.
+- **Run 475** — all 5 streams (s00–s04) complete (~1.36 GB each). 3 201 events.
+- **Run 389** — **4 streams** present (s00, s01, s03, s04; s02 missing), all of them
+  **partially-downloaded and truncated**. psana merges what it can and yields **6 471
+  events**, versus 40 003 in the merged small-data file. See the gotcha below.
 
 **`calib/`** — psana calib store: `calib/<DetType::CalibV1>/<Source>/<constant>/<START>-end.data`.
 Each `<START>-end.data` applies from run `START` until superseded. Files are numpy-loadable
@@ -95,12 +94,24 @@ small-data files already embed the applied calibration, so you rarely need `cali
   replaced by the private-use char **U+F022**. Typing a literal colon path fails ("No such
   file or directory"). Use glob/tab-completion, `os.listdir`/`os.walk`, `lcls_xpp.resolve()`,
   or a `calib/Epix100a*` wildcard — never a hand-typed colon path.
-- **Truncated run 389 (s00).** It reads fine in psana: ~4606 events decode cleanly (full
-  Jungfrau raw frames included), then it stops at the truncation with just a warning, no
-  crash. But: (a) **open it by explicit file path**, not `exp=xppl1016922:run=389` — the
-  run-resolver rejects the single-stream layout ("XTC file(s) is empty"):
-  `psana.DataSource("/Data/.../xtc/xppl1016922-r0389-s00-c00.xtc")`. (b) Stream s00 carries
-  Jungfrau + beamline monitors (EBeam, gas detector, BMMONs, IPMs, a Zyla camera) but **not**
-  the Epix panels. (c) `.calib()` needs the calib dir wired into psana's search path
-  (`automask/io/setup_psdm_layout.py`); `.raw()` works regardless.
+- **Truncated run 389.** All four present streams are truncated. psana reads them fine —
+  6 471 events decode cleanly (full Jungfrau raw frames included), then each stream stops at
+  its truncation with an `EOF while reading datagram payload` warning, no crash. But:
+  (a) **open it by explicit file path**, not `exp=xppl1016922:run=389` — the run-resolver
+  rejects the incomplete layout ("XTC file(s) is empty"); use
+  `automask.io.read_xtc.open_local_run(389)`, which globs the streams. (b) Those 6 471 events
+  are a **subset** of the 40 003 in small data, so **XTC event indices do not line up with
+  small-data row indices for run 389** — never join the two by index (run 475 is complete and
+  does align). (c) The streams carry Jungfrau + beamline monitors (EBeam, gas detector,
+  BMMONs, IPMs, the XPP-AIN-01 analog input) but **not** the Epix panels. (d) `.calib()`
+  needs the calib dir wired into psana's search path (`automask/io/setup_psdm_layout.py`);
+  `.raw()` works regardless.
+- **There is no laser, and `lightStatus/laser` is a lie.** One x-ray beam is split into two
+  branches, **CC** and **VCC**, selected per shot by the analog voltages `ai/ch02` (CC) and
+  `ai/ch03` (VCC), thresholded at 2 V. EVR codes 90/91 are labelled `'Laser on'`/`'Laser off'`
+  in the stock XPP timing config and mean nothing here — do not use them as a shot filter.
+  `lightStatus/xray` (EVR 137, `'Beam On'`) is genuine but says nothing about the branch.
+  Likewise **ipm2 is upstream of the split** and is blind to it: normalize or rank shots on a
+  downstream monitor (`sample_diode` = `diodeU/channels[:,0]`, `diodeU`, `lombpm`). Full
+  evidence in **`DATA.md`**; the code side is `automask/shot_selection.py`.
 - **`results/` is empty** — never assume analysis code or outputs live there.

@@ -22,7 +22,7 @@ Why RMS for masking:
   sum image.
 
 Outputs:
-    data/features/{mean,rms}_run<NNNN>_{panel,asm}.npy
+    outputs/features/{mean,rms}_run<NNNN>_{panel,asm}.npy
     images/rms_run<NNNN>_{gray,viridis}.png
 Run:  python -m automask.studies.pixel_stats
 """
@@ -37,7 +37,7 @@ import matplotlib.colors as mcolors
 AUTOMASK = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # .../automask
 from automask.dataset import load_image, load_mask, manifest
 
-FEAT = os.path.join(AUTOMASK, "data", "features")
+FEAT = os.path.join(AUTOMASK, "outputs", "features")
 IMG_OUT = os.path.join(AUTOMASK, "outputs", "figures")
 os.makedirs(FEAT, exist_ok=True)
 os.makedirs(IMG_OUT, exist_ok=True)

@@ -43,22 +43,33 @@ The pipeline is decomposed into different parts, that each are critical to obtai
 **Output** : 3D tensor of shape `(n_shots, n_pixels_x, n_pixels_y)` 
 
 ```python
-XRayClass = Literal["on", "off", "any"]
-LaserClass = Literal["on", "off", "any"]
-Normalization = Literal["none", "ipm2"]
+BeamClass = Literal["on", "off", "any"]
+BranchClass = Literal["open", "closed", "any"]
+MONITORS = ("sample_diode", "diodeU", "lombpm", "ipm2", "gasdet")
 
 class ShotSelection:
-	xray: XRayClass = "on"
-	laser: LaserClass = "off" # look at CC and VCC - threshold voltage
+	beam: BeamClass = "on"        # EVR code 137, 'Beam On'
+	cc: BranchClass = "open"      # ai/ch02 > 2 V
+	vcc: BranchClass = "any"      # ai/ch03 > 2 V
 	n_shots: Optional[int] = 800
 	filter_low: float = 0.03 # other ways of choosing
 	filter_high: float = 0.03
-	normalization: Normalization = "none"
-	
+	intensity: str = "sample_diode"   # trim + validity axis
+	normalization: str = "none"       # "none" or a MONITORS name
+
 	# Also accepts the calibration data as selection
 ```
 
-See [[Shot selection]] for exploration of different shot selections.
+**There is no laser.** One x-ray beam is split into the CC and VCC branches,
+each with its own shutter, read as an analog voltage and thresholded at 2 V.
+`beam` is an independent axis (did the machine deliver x-rays at all).
+
+`intensity` names the monitor driving the validity floor and the percentile trim.
+`sample_diode`/`diodeU`/`lombpm` are downstream of the split and track what the
+detector receives; `ipm2`/`gasdet` are upstream and are blind to a branch toggle.
+
+See the repo-root `DATA.md` for the full evidence, and [[Shot selection]] for
+exploration of different shot selections.
 
 ## Reduction
 

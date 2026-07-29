@@ -279,7 +279,7 @@ def production_pipeline(combiner: str = "union",
 
 
 # ==========================================================================
-#  single-image adapter (used by review.py --masker masking:mask_image)
+#  single-image adapter (`module:function` masker convention)
 # ==========================================================================
 def mask_image(
     image: np.ndarray,

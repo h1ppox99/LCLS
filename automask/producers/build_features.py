@@ -7,8 +7,8 @@ served from a warm ``.npy`` cache if present, else computed from raw XTC. The
 evaluation loop materializes exactly the features a pipeline's stats declare, so
 nothing here is required for correctness.
 
-This producer just pre-computes the default catalogue (umean/ustd from x-ray-on
-shots, mean from x-ray-off) for the given runs so the first evaluation is
+This producer just pre-computes the default catalogue (umean/ustd from beam-on
+shots, mean from beam-off) for the given runs so the first evaluation is
 numpy-only instead of paying the one-time XTC pass. umean and ustd share a
 selection and are co-computed in a single pass.
 
@@ -38,8 +38,10 @@ def main() -> None:
         for name in args.feature:
             spec = get_spec(name)
             store.get(run, spec)   # compute+cache on miss; no-op if already warm
+            over = (f"beam={spec.selection.beam!r}" if spec.source == "events"
+                    else f"calib {spec.constant!r}")
             print(f"[prewarm] run {run:04d}: {name} "
-                  f"({spec.reduction} over xray={spec.selection.xray!r}) -> "
+                  f"({spec.reduction} over {over}) -> "
                   f"{store.path(run, spec).name}")
     print(f"[done] cache -> {store.cache_dir}")
 

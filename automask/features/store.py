@@ -9,7 +9,7 @@ numpy-only whenever the cache is warm, and auto-extends to any new selection or
 reduction on demand.
 
 Cache entries are keyed by ``(reduction, selection)`` content hash, not by
-feature name, so ``umean`` and any other "mean over the same x-ray-on shots"
+feature name, so ``umean`` and any other "mean over the same beam-on shots"
 share one file. A mean or std request co-computes and caches BOTH (one XTC pass),
 since they share a selection.
 
@@ -28,7 +28,7 @@ from typing import Optional, Tuple
 import numpy as np
 
 from automask.features.base import FeatureSpec
-from automask.shot_selection import ShotMeta, ShotSelection
+from automask.shot_selection import NO_NORMALIZATION, ShotMeta, ShotSelection
 
 ROOT = Path(__file__).resolve().parents[2]
 PANEL_SHAPE = (2, 512, 1024)
@@ -48,7 +48,8 @@ def _select_line(run: int, selection: ShotSelection, counts: dict) -> str:
         f", {n_used} used"
     return (f"[select] run {run:04d}: {counts['n_events']} shots total, "
             f"{counts['n_accessible']} accessible "
-            f"(xray={selection.xray}, laser={selection.laser}), "
+            f"(beam={selection.beam}, cc={selection.cc}, vcc={selection.vcc}, "
+            f"i0={selection.intensity}), "
             f"{counts['n_selected']} selected{used}")
 
 
@@ -203,8 +204,9 @@ class FeatureStore:
         indices = selection.resolve(meta)
         counts = {**selection.describe(meta), "n_selected": int(indices.size)}
         print(_select_line(run, selection, counts))
-        normalize = selection.normalization == "ipm2"
+        normalize = selection.normalization != NO_NORMALIZATION
         reference = selection.reference_intensity(meta, indices) if normalize else 1.0
+        i0 = meta.monitor(selection.normalization) if normalize else None
 
         with h5py.File(stage_path, "w") as h5:
             frames = h5.create_dataset(
@@ -215,7 +217,7 @@ class FeatureStore:
             for event_index, panel in iter_calibrated(run, indices):
                 frame = panel.astype(np.float32)
                 if normalize:
-                    frame *= np.float32(reference / meta.intensity[event_index])
+                    frame *= np.float32(reference / i0[event_index])
                 frames[staged] = frame
                 staged += 1
                 if staged % 50 == 0:
@@ -262,8 +264,9 @@ class FeatureStore:
         indices = selection.resolve(meta)
         counts = {**selection.describe(meta), "n_selected": int(indices.size)}
         print(_select_line(run, selection, counts))
-        normalize = selection.normalization == "ipm2"
+        normalize = selection.normalization != NO_NORMALIZATION
         reference = selection.reference_intensity(meta, indices) if normalize else 1.0
+        i0 = meta.monitor(selection.normalization) if normalize else None
 
         total = np.zeros(PANEL_SHAPE, dtype=np.float64)
         squared = np.zeros(PANEL_SHAPE, dtype=np.float64)
@@ -271,7 +274,7 @@ class FeatureStore:
         for event_index, panel in iter_calibrated(run, indices):
             frame = panel.astype(np.float64)
             if normalize:  # optional per-shot i0 scaling, on top of calibration
-                frame *= reference / meta.intensity[event_index]
+                frame *= reference / i0[event_index]
             total += frame
             squared += frame * frame
             n_used += 1

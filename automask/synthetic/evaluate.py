@@ -82,7 +82,7 @@ def _load_gt_mask(spec: str) -> np.ndarray:
 
 
 def _resolve_masker(spec: str):
-    """"module:function" -> callable, matching the review.py masker convention."""
+    """"module:function" -> callable (the project's masker convention)."""
     if ":" not in spec:
         raise ValueError(f"masker must be 'module:function', got {spec!r}")
     module_name, func_name = spec.split(":", 1)

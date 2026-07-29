@@ -2,7 +2,7 @@
 stats/mad_variance.py -- robust-dispersion statistic on the lit-beam MAD.
 
 Same construction as `stats/variance.py` -- signed robust-MAD z-score of the
-log10 per-pixel dispersion over the x-ray-on shots -- with two deliberate
+log10 per-pixel dispersion over the beam-on shots -- with two deliberate
 differences:
 
   * the dispersion is the ``umad`` feature (1.4826-scaled median absolute

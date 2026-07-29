@@ -16,7 +16,7 @@ from automask.masking import Detector
 from automask.regularization.area_gate import area_gate
 from automask.regularization.blob_scale import blob_scale
 from automask.regularization.fill_holes import fill_holes
-from automask.shot_selection import ShotSelection
+from automask.shot_selection import ShotMeta, ShotSelection
 from automask.stats.asic_polish import median_polish
 
 
@@ -130,18 +130,135 @@ def test_detector_rejects_field_reg_on_a_pick_stat():
         raise AssertionError(f"expected ValueError for field_reg={field_reg!r}")
 
 
+# -- shot selection --------------------------------------------------------
+def _meta(n=100, beam=None, cc=None, vcc=None, monitor=None, run=475):
+    """Synthetic ShotMeta: beam on, CC open, VCC closed, ramp intensity."""
+    ramp = np.linspace(1.0, 100.0, n) if monitor is None else np.asarray(monitor)
+    return ShotMeta(
+        run=run,
+        beam_on=np.ones(n, bool) if beam is None else np.asarray(beam),
+        cc_open=np.ones(n, bool) if cc is None else np.asarray(cc),
+        vcc_open=np.zeros(n, bool) if vcc is None else np.asarray(vcc),
+        intensity={"sample_diode": ramp, "ipm2": ramp * 1000.0})
+
+
+def test_beam_filter_selects_each_class():
+    beam = np.array([True, True, False, False])
+    meta = _meta(4, beam=beam, monitor=[1.0, 2.0, 3.0, 4.0])
+    kw = dict(n_shots=None, filter_low=0.0, filter_high=0.0)
+    assert list(ShotSelection(beam="on", **kw).resolve(meta)) == [0, 1]
+    assert list(ShotSelection(beam="off", **kw).resolve(meta)) == [2, 3]
+    assert list(ShotSelection(beam="any", **kw).resolve(meta)) == [0, 1, 2, 3]
+
+
+def test_cc_and_vcc_are_independent_and_anded():
+    cc = np.array([True, True, False, False])
+    vcc = np.array([True, False, True, False])
+    meta = _meta(4, cc=cc, vcc=vcc, monitor=[1.0, 2.0, 3.0, 4.0])
+    kw = dict(n_shots=None, filter_low=0.0, filter_high=0.0)
+    assert list(ShotSelection(cc="open", vcc="any", **kw).resolve(meta)) == [0, 1]
+    assert list(ShotSelection(cc="any", vcc="open", **kw).resolve(meta)) == [0, 2]
+    assert list(ShotSelection(cc="open", vcc="open", **kw).resolve(meta)) == [0]
+    assert list(ShotSelection(cc="open", vcc="closed", **kw).resolve(meta)) == [1]
+    assert list(ShotSelection(cc="closed", vcc="closed", **kw).resolve(meta)) == [3]
+    assert list(ShotSelection(cc="any", vcc="any", **kw).resolve(meta)) == [0, 1, 2, 3]
+
+
+def test_validity_floor_drops_zero_and_nan_readings():
+    meta = _meta(4, monitor=[0.0, np.nan, 3.0, 4.0])
+    sel = ShotSelection(n_shots=None, filter_low=0.0, filter_high=0.0)
+    assert list(sel.resolve(meta)) == [2, 3]
+
+
+def test_percentile_trim_drops_both_tails():
+    meta = _meta(100)
+    sel = ShotSelection(n_shots=None, filter_low=0.1, filter_high=0.1)
+    kept = sel.resolve(meta)
+    # ramp 1..100; np.quantile interpolates -> bounds 10.9 and 90.1
+    assert kept.size == 80
+    assert kept[0] == 10 and kept[-1] == 89
+
+
+def test_n_shots_subsamples_evenly_across_survivors():
+    meta = _meta(100)
+    sel = ShotSelection(n_shots=10, filter_low=0.0, filter_high=0.0)
+    kept = sel.resolve(meta)
+    assert kept.size == 10
+    assert kept[0] == 0 and kept[-1] == 99
+    assert np.all(np.diff(kept) > 0)
+
+
+def test_resolve_raises_when_nothing_matches():
+    """Run 475 has zero VCC-open shots -- this must fail loudly, not silently."""
+    meta = _meta(10, vcc=np.zeros(10, bool))
+    try:
+        ShotSelection(vcc="open").resolve(meta)
+    except RuntimeError as e:
+        assert "no shots match" in str(e)
+        return
+    raise AssertionError("expected RuntimeError for an empty selection")
+
+
+def test_selection_rejects_unknown_monitors():
+    for kwargs in ({"intensity": "nope"}, {"normalization": "nope"}):
+        try:
+            ShotSelection(**kwargs)
+        except ValueError:
+            continue
+        raise AssertionError(f"expected ValueError for {kwargs!r}")
+
+
+def test_selection_defaults_keep_both_local_runs_usable():
+    """cc defaults to open (free: CC is open on 100% of shots in 389 and 475);
+    vcc must default to any or run 475 yields nothing."""
+    sel = ShotSelection()
+    assert (sel.beam, sel.cc, sel.vcc) == ("on", "open", "any")
+    assert sel.intensity == "sample_diode"
+
+
+def test_shot_meta_rejects_ragged_and_unknown_monitors():
+    for kwargs in ({"intensity": {"sample_diode": np.ones(5)}},   # wrong length
+                   {"intensity": {"nope": np.ones(10)}},          # unknown monitor
+                   {"intensity": {}}):                            # no monitor at all
+        try:
+            ShotMeta(run=1, beam_on=np.ones(10, bool), cc_open=np.ones(10, bool),
+                     vcc_open=np.ones(10, bool), **kwargs)
+        except ValueError:
+            continue
+        raise AssertionError(f"expected ValueError for {kwargs!r}")
+
+
+def test_describe_breaks_down_each_filter():
+    meta = _meta(10, beam=np.array([True] * 8 + [False] * 2),
+                 vcc=np.array([True] * 3 + [False] * 7))
+    d = ShotSelection(beam="on", cc="open", vcc="any").describe(meta)
+    assert d["n_events"] == 10 and d["n_beam"] == 8
+    assert d["n_cc"] == 10 and d["n_vcc"] == 10 and d["n_accessible"] == 8
+
+
+def test_reference_intensity_uses_the_normalization_monitor():
+    meta = _meta(100)
+    sel = ShotSelection(intensity="sample_diode", normalization="ipm2")
+    idx = sel.resolve(meta)
+    assert np.isclose(sel.reference_intensity(meta, idx),
+                      np.median(meta.intensity["ipm2"][idx]))
+
+
 # -- FeatureSpec sources ---------------------------------------------------
-def test_events_content_key_is_unchanged_by_the_source_field():
-    """The warm XTC cache is keyed by this hash; adding `source` must not
-    invalidate hours of reductions."""
+def test_events_content_key_covers_the_whole_selection():
+    """The warm XTC cache is keyed by this hash. It is deliberately NOT stable
+    across ShotSelection field renames -- the CC/VCC rework invalidated it on
+    purpose (see features/base.py)."""
     import hashlib
     import json
     from dataclasses import asdict
 
-    spec = FeatureSpec("umean", "mean", ShotSelection(xray="on"))
-    legacy = json.dumps({"reduction": "mean", "selection": asdict(spec.selection)},
-                        sort_keys=True)
-    assert spec.content_key == hashlib.sha1(legacy.encode()).hexdigest()[:12]
+    spec = FeatureSpec("umean", "mean", ShotSelection(beam="on"))
+    payload = json.dumps({"reduction": "mean", "selection": asdict(spec.selection)},
+                         sort_keys=True)
+    assert spec.content_key == hashlib.sha1(payload.encode()).hexdigest()[:12]
+    other = FeatureSpec("umean", "mean", ShotSelection(beam="on", vcc="open"))
+    assert spec.content_key != other.content_key
 
 
 def test_calib_and_event_specs_do_not_collide():
@@ -149,7 +266,7 @@ def test_calib_and_event_specs_do_not_collide():
                     form="panel")
     b = FeatureSpec("pixel_rms", source="calib", constant="pixel_rms", gain=0,
                     form="panel")
-    c = FeatureSpec("umean", "mean", ShotSelection(xray="on"))
+    c = FeatureSpec("umean", "mean", ShotSelection(beam="on"))
     keys = {a.content_key, b.content_key, c.content_key}
     assert len(keys) == 3
     assert a.cache_stub(475).startswith("pedestalsg0_")

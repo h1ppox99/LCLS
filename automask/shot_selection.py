@@ -1,20 +1,19 @@
 """
 shot_selection.py -- decide *which* XTC shots to build detector features from.
 
-This is the grounded replacement for the ad-hoc `_selection` helpers that used
-to live inside individual producers and lean on the imported small-data file.
-Every scalar a selection needs (per-shot intensity, x-ray on/off) is available
-directly from the XTC stream via psana, so features can be rebuilt from raw data
-with no small-data dependency (see `automask.io.read_xtc.scan_shots`).
+Every scalar a selection needs (beam state, CC/VCC branch state, per-shot
+intensity monitors) is available directly from the XTC stream via psana, so
+features can be rebuilt from raw data with no small-data dependency (see
+``automask.io.read_xtc.scan_shots``).
 
 Two objects:
 
 * ``ShotMeta``      -- the per-shot scalar table produced by one cheap pass over
-                       the run (intensity + x-ray/laser flags). Pure data, no psana.
-* ``ShotSelection`` -- a declarative spec (x-ray class, shot count, intensity
-                       percentile trim, normalization) plus a pure-numpy
-                       ``resolve(meta) -> event indices``. No psana here either,
-                       so the selection logic is trivially unit-testable.
+                       the run. Pure data, no psana.
+* ``ShotSelection`` -- a declarative spec (beam class, CC/VCC branch classes,
+                       shot count, intensity percentile trim, normalization) plus
+                       a pure-numpy ``resolve(meta) -> event indices``. No psana
+                       here either, so the selection logic is unit-testable.
 
 Provider/consumer split: the only psana-touching code is the scan that fills a
 ``ShotMeta`` (in ``automask.io.read_xtc``). Porting to the SLAC cluster means
@@ -24,14 +23,21 @@ unchanged.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Literal, Optional
+from dataclasses import dataclass, field
+from typing import Dict, Literal, Optional
 
 import numpy as np
 
-XRayClass = Literal["on", "off", "any"]
-LaserClass = Literal["on", "off", "any"]
-Normalization = Literal["none", "ipm2"]
+BeamClass = Literal["on", "off", "any"]
+BranchClass = Literal["open", "closed", "any"]
+
+#: Per-shot intensity monitors, in rough order of usefulness for this experiment.
+#: The first three are downstream of the CC/VCC split and track what the detector
+#: actually receives; ipm2 and gasdet are upstream and do not.
+MONITORS = ("sample_diode", "diodeU", "lombpm", "ipm2", "gasdet")
+
+#: Value of ``ShotSelection.normalization`` meaning "do not rescale frames".
+NO_NORMALIZATION = "none"
 
 
 @dataclass
@@ -39,28 +45,50 @@ class ShotMeta:
     """Per-shot scalar table for one run, one row per event in stream order.
 
     Built by a single cheap pass over the XTC (scalars only, no Jungfrau
-    ``.calib()``); see ``automask.io.read_xtc.scan_shots``. ``intensity`` is the
-    ipm2 BMMON total intensity; ``xray_on``/``laser_on`` come from EVR codes
-    (x-ray requires code 137, laser is dropped on code 91 -- both conventions
-    read from the run's ``UserDataCfg``).
+    ``.calib()``); see ``automask.io.read_xtc.scan_shots``.
+
+    ``beam_on`` is EVR code 137. ``cc_open``/``vcc_open`` are the CC/VCC shutter
+    voltages thresholded at ``read_xtc.CC_VCC_THRESHOLD``. ``intensity`` maps a
+    monitor name in ``MONITORS`` to its per-shot readings; a monitor absent from
+    the run may be reported as all-NaN rather than omitted.
     """
 
     run: int
-    intensity: np.ndarray  # (N,) float, ipm2 TotalIntensity per shot
-    xray_on: np.ndarray    # (N,) bool
-    laser_on: np.ndarray   # (N,) bool
+    beam_on: np.ndarray
+    cc_open: np.ndarray
+    vcc_open: np.ndarray
+    intensity: Dict[str, np.ndarray] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        self.intensity = np.asarray(self.intensity, dtype=np.float64)
-        self.xray_on = np.asarray(self.xray_on, dtype=bool)
-        self.laser_on = np.asarray(self.laser_on, dtype=bool)
-        n = self.intensity.shape[0]
-        if not (self.xray_on.shape[0] == self.laser_on.shape[0] == n):
-            raise ValueError("ShotMeta arrays must share length")
+        self.beam_on = np.asarray(self.beam_on, dtype=bool)
+        self.cc_open = np.asarray(self.cc_open, dtype=bool)
+        self.vcc_open = np.asarray(self.vcc_open, dtype=bool)
+        n = self.beam_on.shape[0]
+        if not (self.cc_open.shape[0] == self.vcc_open.shape[0] == n):
+            raise ValueError("ShotMeta beam/cc/vcc arrays must share length")
+        if not self.intensity:
+            raise ValueError("ShotMeta needs at least one intensity monitor")
+        self.intensity = {k: np.asarray(v, dtype=np.float64)
+                          for k, v in self.intensity.items()}
+        for name, values in self.intensity.items():
+            if name not in MONITORS:
+                raise ValueError(
+                    f"unknown monitor {name!r}; known: {list(MONITORS)}")
+            if values.shape[0] != n:
+                raise ValueError(
+                    f"monitor {name!r} has {values.shape[0]} rows, expected {n}")
 
     @property
     def n_events(self) -> int:
-        return self.intensity.shape[0]
+        return self.beam_on.shape[0]
+
+    def monitor(self, name: str) -> np.ndarray:
+        """Readings for one monitor, with a clear error if the scan lacked it."""
+        if name not in self.intensity:
+            raise KeyError(
+                f"run {self.run}: monitor {name!r} was not scanned; "
+                f"available: {sorted(self.intensity)}")
+        return self.intensity[name]
 
 
 @dataclass(frozen=True)
@@ -68,35 +96,37 @@ class ShotSelection:
     """Declarative recipe for which shots feed a feature build, plus how their
     frames are combined.
 
-    Baseline knobs:
+    Knobs:
 
-    * ``xray``       -- keep x-ray ``"on"`` shots (lit-beam features: umean/ustd),
-                        ``"off"`` shots (beam-off dark: mean), or ``"any"``.
-    * ``laser``      -- keep laser ``"on"`` / ``"off"`` / ``"any"`` shots
-                        (pump-probe pump state). Combined with ``xray`` (AND).
-    * ``n_shots``    -- how many shots to keep (``None`` = every survivor).
-    * ``filter_low`` -- drop the lowest fraction of survivors by intensity (3%).
-    * ``filter_high``-- drop the highest fraction of survivors by intensity (3%).
+    * ``beam``   -- keep shots where the machine delivered x-rays (EVR 137):
+                    ``"on"`` (lit-beam features: umean/ustd), ``"off"`` (beam-off
+                    dark: mean), or ``"any"``.
+    * ``cc``     -- CC branch shutter: ``"open"`` / ``"closed"`` / ``"any"``.
+    * ``vcc``    -- VCC branch shutter, same classes. Independent of ``cc`` and
+                    ANDed with it, so all four branch states are expressible.
+    * ``n_shots``-- how many shots to keep (``None`` = every survivor).
+    * ``filter_low``  -- drop the lowest fraction of survivors by intensity.
+    * ``filter_high`` -- drop the highest fraction of survivors by intensity.
+    * ``intensity``   -- which monitor in ``MONITORS`` defines "intensity" for
+                    the validity floor and the percentile trim.
     * ``normalization`` -- how the *feature builder* combines the selected frames.
-                        ``"none"``: accumulate the psana-calibrated frames as-is.
-                        ``"ipm2"``: additionally scale each frame by
-                        ``median(i0) / i0[shot]`` before accumulating.
-                        NOTE: this is orthogonal to calibration -- frames are
-                        ALWAYS psana-calibrated (pedestal+gain+common-mode);
-                        ``normalization`` only controls the optional per-shot i0
-                        scaling layered on top. Meant for ``xray="on"`` builds.
-
-    ``resolve`` is pure numpy and consumes only a ``ShotMeta`` -- no psana, no
-    small-data. ``normalization`` is carried here (not used by ``resolve``) so a
-    single object fully specifies one feature extraction.
+                    ``"none"``: accumulate the psana-calibrated frames as-is.
+                    A monitor name: additionally scale each frame by
+                    ``median(i0) / i0[shot]`` before accumulating.
+                    NOTE: this is orthogonal to calibration -- frames are
+                    ALWAYS psana-calibrated (pedestal+gain+common-mode);
+                    ``normalization`` only controls the optional per-shot i0
+                    scaling layered on top. Meant for ``beam="on"`` builds.
     """
 
-    xray: XRayClass = "on"
-    laser: LaserClass = "off"
+    beam: BeamClass = "on"
+    cc: BranchClass = "open"
+    vcc: BranchClass = "any"
     n_shots: Optional[int] = 800
     filter_low: float = 0.03
     filter_high: float = 0.03
-    normalization: Normalization = "none"
+    intensity: str = "sample_diode"
+    normalization: str = NO_NORMALIZATION
 
     def __post_init__(self) -> None:
         if not (0.0 <= self.filter_low < 1.0) or not (0.0 <= self.filter_high < 1.0):
@@ -105,58 +135,89 @@ class ShotSelection:
             raise ValueError("filter_low + filter_high must leave some shots")
         if self.n_shots is not None and self.n_shots < 1:
             raise ValueError("n_shots must be positive or None")
+        if self.intensity not in MONITORS:
+            raise ValueError(
+                f"unknown intensity monitor {self.intensity!r}; "
+                f"known: {list(MONITORS)}")
+        if self.normalization != NO_NORMALIZATION and self.normalization not in MONITORS:
+            raise ValueError(
+                f"unknown normalization monitor {self.normalization!r}; "
+                f"use {NO_NORMALIZATION!r} or one of {list(MONITORS)}")
+
+    @staticmethod
+    def _branch_mask(state: np.ndarray, want: BranchClass) -> np.ndarray:
+        if want == "open":
+            return state
+        if want == "closed":
+            return ~state
+        return np.ones_like(state, dtype=bool)
+
+    def _valid(self, meta: ShotMeta) -> np.ndarray:
+        """Shots whose intensity reading is usable: finite and non-zero.
+
+        Mirrors the lab's own gate (``xpp_sharing/utils.py``: reject non-finite
+        or zero sample diode). Unlike the previous ``> 0`` floor this is applied
+        for every beam class -- a zero reading is unusable as a trim axis and as
+        a normalizer whether or not the beam was on.
+        """
+        values = meta.monitor(self.intensity)
+        return np.isfinite(values) & (values != 0)
 
     def _shot_class(self, meta: ShotMeta) -> np.ndarray:
-        """Boolean mask of shots in the requested x-ray AND laser class, with a
-        validity floor. x-ray-on/any require a positive i0 (physical beam, and
-        safe for ipm2 normalization); x-ray-off only requires a finite reading,
-        since beam-off intensity sits at noise around zero. The laser class is an
-        independent AND filter on the pump state."""
-        finite = np.isfinite(meta.intensity)
-        if self.xray == "on":
-            keep = finite & (meta.intensity > 0) & meta.xray_on
-        elif self.xray == "off":
-            keep = finite & ~meta.xray_on
-        else:                                 # "any"
-            keep = finite & (meta.intensity > 0)
-        if self.laser == "on":
-            keep &= meta.laser_on
-        elif self.laser == "off":
-            keep &= ~meta.laser_on
+        """Boolean mask of shots matching the beam AND cc AND vcc classes, with
+        the intensity validity floor applied."""
+        keep = self._valid(meta)
+        if self.beam == "on":
+            keep &= meta.beam_on
+        elif self.beam == "off":
+            keep &= ~meta.beam_on
+        keep &= self._branch_mask(meta.cc_open, self.cc)
+        keep &= self._branch_mask(meta.vcc_open, self.vcc)
         return keep
 
     def resolve(self, meta: ShotMeta) -> np.ndarray:
         """Return the event indices (into ``meta``, stream order) to build from.
 
-        valid x-ray/laser class -> drop intensity below ``q(filter_low)`` / above
+        valid beam/cc/vcc class -> drop intensity below ``q(filter_low)`` / above
         ``q(1 - filter_high)`` -> take ``n_shots`` evenly spaced across the
         survivors.
         """
         in_class = self._shot_class(meta)
-        vals = meta.intensity[in_class]
+        values = meta.monitor(self.intensity)
+        vals = values[in_class]
         if vals.size == 0:
             raise RuntimeError(
-                f"run {meta.run}: no shots match xray={self.xray!r}, "
-                f"laser={self.laser!r} (of {meta.n_events} events)"
-            )
+                f"run {meta.run}: no shots match beam={self.beam!r}, "
+                f"cc={self.cc!r}, vcc={self.vcc!r} on monitor "
+                f"{self.intensity!r} (of {meta.n_events} events); "
+                f"breakdown: {self.describe(meta)}")
         lo = np.quantile(vals, self.filter_low)
         hi = np.quantile(vals, 1.0 - self.filter_high)
-        keep = in_class & (meta.intensity >= lo) & (meta.intensity <= hi)
+        keep = in_class & (values >= lo) & (values <= hi)
         survivors = np.flatnonzero(keep)
         if self.n_shots is None or self.n_shots >= survivors.size:
             return survivors
         # TODO: Refine selection strategy later
-        pick = np.linspace(0, survivors.size - 1, self.n_shots).round().astype(np.int64)  # TODO: Refine selection strategy later
+        pick = np.linspace(0, survivors.size - 1, self.n_shots).round().astype(np.int64)
         return survivors[np.unique(pick)]
 
     def describe(self, meta: ShotMeta) -> dict:
-        """Shot-count breakdown for this selection over ``meta``: total events in
-        the run and how many are *accessible* under the current x-ray/laser config
-        (before the intensity trim / ``n_shots`` cap). Pure, testable, no psana."""
+        """Per-filter shot-count breakdown over ``meta``: how many events survive
+        each filter alone, and how many are *accessible* under all of them
+        (before the intensity trim / ``n_shots`` cap). Pure, testable, no psana.
+        """
+        beam = (meta.beam_on if self.beam == "on" else
+                ~meta.beam_on if self.beam == "off" else
+                np.ones(meta.n_events, dtype=bool))
         return {"n_events": int(meta.n_events),
+                "n_valid": int(self._valid(meta).sum()),
+                "n_beam": int(beam.sum()),
+                "n_cc": int(self._branch_mask(meta.cc_open, self.cc).sum()),
+                "n_vcc": int(self._branch_mask(meta.vcc_open, self.vcc).sum()),
                 "n_accessible": int(self._shot_class(meta).sum())}
 
     def reference_intensity(self, meta: ShotMeta, indices: np.ndarray) -> float:
-        """Reference i0 for ``normalization='ipm2'``: median intensity over the
-        selected shots. Frames are then scaled by ``reference / i0[shot]``."""
-        return float(np.median(meta.intensity[indices]))
+        """Reference i0 for a non-``"none"`` ``normalization``: median reading of
+        the normalization monitor over the selected shots. Frames are then scaled
+        by ``reference / i0[shot]``."""
+        return float(np.median(meta.monitor(self.normalization)[indices]))

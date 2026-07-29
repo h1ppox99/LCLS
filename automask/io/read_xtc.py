@@ -69,15 +69,29 @@ def calib_dir() -> str:
 
 JUNGFRAU_NAME = "jungfrau1M_alcove"       # psana alias; source is XppEndstation.0:Jungfrau.0
 
-# Per-shot scalar sources on the XTC stream. The EVR-code conventions are the
-# ones the small-data producer recorded in UserDataCfg/lightStatus for this
-# experiment: x-ray is "on" when code 137 is present, laser is "dropped" (off)
-# when code 91 is present. On the SLAC cluster these would be read from the
-# run's config rather than hard-coded.
-BMMON_NAME = "XPP-SB2-BMMON"              # ipm2 intensity monitor
+# Per-shot scalar sources on the XTC stream. These conventions are hard-coded
+# here (not read from the run config) and are documented with their evidence in
+# repo-root DATA.md.
+#
+# There is NO laser in this experiment: one x-ray beam is split into the CC and
+# VCC branches, whose shutters are analog voltages on XPP-AIN-01. EVR codes
+# 90/91 are labelled 'Laser on'/'Laser off' in the stock XPP timing config and
+# mean nothing here -- do not resurrect them as a shot filter.
 EVR_NAME = "evr0"                         # NoDetector.0:Evr.0
-XRAY_ON_CODE = 137
-LASER_DROP_CODE = 91
+BEAM_ON_CODE = 137                        # labelled 'Beam On' in EvrData.ConfigV7
+
+AIN_NAME = "XPP-AIN-01"                   # Bld.BldDataAnalogInputV1, 16 channels
+AIN_CC_CHANNEL = 2                        # small data: ai/ch02
+AIN_VCC_CHANNEL = 3                       # small data: ai/ch03
+CC_VCC_THRESHOLD = 2.0                    # volts; lines sit at ~0.045 or ~5.05
+
+# Intensity monitors -> (psana source, accessor). sample_diode/diodeU/lombpm are
+# DOWNSTREAM of the CC/VCC split and track what the detector receives; ipm2 and
+# gasdet are upstream and do not (see DATA.md).
+BMMON_NAME = "XPP-SB2-BMMON"              # ipm2, upstream of the split
+DIODEU_SRC = "BldInfo(XppEnds_Ipm0)"      # small data: diodeU
+LOMBPM_SRC = "BldInfo(XppMon_Pim0)"       # small data: lombpm
+GASDET_SRC = "BldInfo(FEEGasDetEnergy)"   # small data: gas_detector
 
 
 def open_local_run(run: int = 475):
@@ -105,9 +119,16 @@ def open_local_run(run: int = 475):
 def scan_shots(run: int = 475, max_events: int | None = None):
     """Pass 1: read only the cheap per-shot scalars for a run -> ``ShotMeta``.
 
-    Iterates events reading the ipm2 monitor and EVR codes but NOT the Jungfrau
-    ``.calib()`` (the expensive part), so it is fast enough to scan the whole run
-    and get the exact intensity distribution the percentile filter needs.
+    Iterates events reading the EVR codes, the CC/VCC shutter voltages and the
+    intensity monitors, but NOT the Jungfrau ``.calib()`` (the expensive part),
+    so it is fast enough to scan the whole run and get the exact intensity
+    distribution the percentile filter needs.
+
+    ``psana.Detector`` cannot wrap the analog input or the IPM fex types
+    (``Detector('XPP-AIN-01').get()`` returns None; ``IpmFexV1`` raises
+    "object of type 'IpmFexV1' has no len()"), so those are read with the raw
+    ``evt.get(type, source)`` accessors. A monitor whose source is missing from a
+    run yields NaN for that shot rather than aborting the scan.
 
     This is the single psana-touching seam behind ``ShotSelection``. On the SLAC
     cluster, swap ``open_local_run(run)`` for
@@ -119,25 +140,50 @@ def scan_shots(run: int = 475, max_events: int | None = None):
 
     ds, _ = open_local_run(run)
     evr = psana.Detector(EVR_NAME)
+    ain_src = psana.Source(f"BldInfo({AIN_NAME})")
+    diodeu_src = psana.Source(DIODEU_SRC)
+    lombpm_src = psana.Source(LOMBPM_SRC)
+    gasdet_src = psana.Source(GASDET_SRC)
     try:
         bmmon = psana.Detector(BMMON_NAME)
     except Exception as e:                # pragma: no cover - depends on run config
-        raise RuntimeError(f"run {run}: ipm2 monitor {BMMON_NAME} unavailable: {e}")
+        print(f"[warn] run {run}: ipm2 monitor {BMMON_NAME} unavailable: {e}")
+        bmmon = None
 
-    intensity, xray_on, laser_on = [], [], []
+    beam_on, cc_open, vcc_open = [], [], []
+    mon = {name: [] for name in ("sample_diode", "diodeU", "lombpm", "ipm2", "gasdet")}
     for n, evt in enumerate(ds.events()):
-        codes = evr.eventCodes(evt) or ()
-        xray_on.append(XRAY_ON_CODE in codes)
-        laser_on.append(LASER_DROP_CODE not in codes)   # dropped code == laser off
-        d = bmmon.get(evt)
-        intensity.append(float(d.TotalIntensity()) if d is not None else np.nan)
+        beam_on.append(BEAM_ON_CODE in (evr.eventCodes(evt) or ()))
+
+        ain = evt.get(psana.Bld.BldDataAnalogInputV1, ain_src)
+        volts = np.asarray(ain.channelVoltages()) if ain is not None else np.full(16, np.nan)
+        cc_open.append(volts[AIN_CC_CHANNEL] > CC_VCC_THRESHOLD)
+        vcc_open.append(volts[AIN_VCC_CHANNEL] > CC_VCC_THRESHOLD)
+
+        du = evt.get(psana.Lusi.IpmFexV1, diodeu_src)
+        mon["sample_diode"].append(float(du.channel()[0]) if du is not None else np.nan)
+        mon["diodeU"].append(float(du.sum()) if du is not None else np.nan)
+
+        lb = evt.get(psana.Lusi.IpmFexV1, lombpm_src)
+        mon["lombpm"].append(float(lb.sum()) if lb is not None else np.nan)
+
+        d = bmmon.get(evt) if bmmon is not None else None
+        mon["ipm2"].append(float(d.TotalIntensity()) if d is not None else np.nan)
+
+        gd = evt.get(psana.Bld.BldDataFEEGasDetEnergyV1, gasdet_src)
+        mon["gasdet"].append(float(gd.f_11_ENRC()) if gd is not None else np.nan)
+
         if max_events and (n + 1) >= max_events:
             break
-    if not intensity:
+    if not beam_on:
         raise RuntimeError(f"run {run}: no events scanned")
-    print(f"[scan] run {run:04d}: {len(intensity)} shots read")
-    return ShotMeta(run=run, intensity=np.asarray(intensity),
-                    xray_on=np.asarray(xray_on), laser_on=np.asarray(laser_on))
+    intensity = {k: np.asarray(v) for k, v in mon.items()}
+    print(f"[scan] run {run:04d}: {len(beam_on)} shots read "
+          f"(beam {np.mean(beam_on):.1%}, CC open {np.mean(cc_open):.1%}, "
+          f"VCC open {np.mean(vcc_open):.1%})")
+    return ShotMeta(run=run, beam_on=np.asarray(beam_on),
+                    cc_open=np.asarray(cc_open), vcc_open=np.asarray(vcc_open),
+                    intensity=intensity)
 
 
 def iter_calibrated(run: int, indices, detname: str = JUNGFRAU_NAME):
