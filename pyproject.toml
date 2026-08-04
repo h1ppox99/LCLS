@@ -9,15 +9,16 @@ description = "Automatic Jungfrau1M detector masking for LCLS experiment xppl101
 requires-python = ">=3.7"
 # Runtime deps. psana is NOT here: it ships via the ana conda env (see psana_env.sh),
 # so install this package with `pip install -e . --no-deps` inside that env to avoid
-# pip touching numpy/scipy and breaking psana. The list mirrors requirements.txt.
+# pip touching numpy/scipy and breaking psana.
 dependencies = [
     "numpy",
     "h5py",
     "scipy",
-    "scikit-image",   # stats/blackhat.py
+    "scikit-image",   # stats/, regularization/ morphology + ridge filters
+    "matplotlib",     # viz.py, producers/draw_hand_mask.py, studies/
     "tifffile",       # review.py TIFF input
     "hydra-core",     # studies/sweep_hyperparameters.py
-    "pyFAI",          # stats/radial_median.py azimuthal sigma-clip
+    "pyFAI",          # stats/sigma_clipping.py azimuthal sigma-clip
 ]
 
 [tool.setuptools.packages.find]

@@ -30,7 +30,7 @@ sitting alongside the data mirror. There is no `src/` wrapper. Import project co
 | `automask/unsupervised/` | **Label-free mask metrics** — how a mask is scored when no human reference exists (production). Four tiers of increasing assumption: `parsimony.py` (size, floor containment, blob coherence), `stability.py` (reproducibility under shot resampling, input noise and knob jitter), `azimuthal.py` (excess azimuthal scatter vs a size-matched random control), `event_axis.py` (per-pixel cross-fold stationarity χ²). `folds.py` caches per-pixel moments in 10 disjoint shot folds (one XTC pass) so all resampling is numpy-only afterwards. Validated against the human mask by `studies/metric_validation.py`; see `docs/METRICS.md`. |
 | `xpp_sharing/` | **The lab's current production method** (CO2 delay-scan notebooks + `utils.py`). Reference/baseline to improve on — manual mask, diode normalization, delay binning. Read-only. |
 | `automask/io/` | Reusable readers (import as `automask.io.<name>`): `lcls_xpp.py` (small-data + calib, numpy/h5py), `read_xtc.py` (psana XTC → frames), `setup_psdm_layout.py`. |
-| `docs/`, `psana_env.sh` | `DATA_OVERVIEW.md` + `PSANA_XTC.md` (repo-root `docs/`); and the env-activation script (repo root). |
+| `docs/`, `psana_env.sh` | `DATA_OVERVIEW.md` (layout) + `PSANA_XTC.md` (how to open XTC) + `DATA.md` (what a single shot records); and the env-activation script (repo root). |
 | `xtc/` | Raw per-event detector data (psana XTC format). |
 | `hdf5/smalldata/` | Reduced per-event HDF5 summaries. **Start data analysis here** — no psana needed. |
 | `calib/` | psana detector calibration constants. |
