@@ -38,3 +38,6 @@ __pycache__/
 build/
 dist/
 .venv/
+
+# machine-specific psana paths (see psana_env.sh header)
+psana_env.local
