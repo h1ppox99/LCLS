@@ -6,13 +6,45 @@ which parts of that story survive being measured.
 Code: `automask/identification/`. Driver: `automask/studies/loss_identification.py`.
 Tests: `automask/tests/test_identification.py`.
 
+## Running it at SLAC
+
+Three stages, in this order, because each one can make the next pointless. One
+SLURM script drives all of them:
+
+```bash
+sbatch automask/scripts/identification.sbatch survey 475   # seconds, no frames
+sbatch automask/scripts/identification.sbatch gate   475   # 1 XTC pass per axis
+sbatch automask/scripts/identification.sbatch frames 475   # A1, A3, M5, P3
+```
+
+| stage | cost | what it answers | stop if |
+|---|---|---|---|
+| `survey` | seconds | which condition axes this run has, and how many groups each resolves into | `delay` is absent — later stages then work off a weaker axis, and you want to know before paying for an XTC pass |
+| `gate` | ~800 frames per axis | **M2R: does any axis move the sample signal at all?** | **REFUTED.** Then `tau` cannot be separated from `S` on this run and `frames` cannot tell you anything about it |
+| `frames` | frozen inputs + fold cache | A1, A3, M5, P3 | — |
+
+`gate` is its own job on purpose: it is the cheapest decisive measurement here,
+and a negative result makes the rest of the study inapplicable to this
+experiment no matter how well the estimators behave. Everything writes to
+`automask/outputs/` and every XTC pass is cached, so only the first run of each
+stage pays for it. Edit `ENVP`/`PSDM` in `psana_env.sh` for the cluster.
+
+Locally, without psana (see *What is reachable from the local XTC*):
+
 ```bash
 python -m automask.studies.loss_identification                       # bench claims
-python -m automask.studies.loss_identification --runs 378 389 396    # + real data
-python -m automask.studies.loss_identification --claims M3 P1 --plots
+python -m automask.studies.loss_identification --claims A2 --runs 378 389 396
 python -m automask.io.xtc_raw                                        # decode + validate
-python -m automask.identification.conditions 378 389 396             # condition axes
+python -m automask.tests.test_identification
 ```
+
+### Which files matter
+
+Most of this branch is library and prose. To *run* experiments you touch three
+things: `scripts/identification.sbatch` (the entry point),
+`studies/loss_identification.py` (the claim register — every experiment lives
+here, one function each), and `identification/` (the estimators they call).
+`io/xtc_raw.py` is only used off-cluster, where psana is unavailable.
 
 ## The model
 
@@ -58,9 +90,9 @@ about building it:
   so these are settled now. **13 of them, all run below.**
 - **`run` claims are about THIS EXPERIMENT.** Whether conditions move the
   signal, whether the sample is anisotropic, whether real artifacts are
-  multiplicative or additive. No simulation answers these. **5 of them: one
-  answered from the local XTC (A2, supported), four still needing calibrated
-  frames.**
+  multiplicative or additive. No simulation answers these. **6 of them: one
+  answered from the local XTC (A2, supported), five needing the cluster — and
+  M2R among those is the gate the others depend on.**
 
 ## Results
 
@@ -77,6 +109,7 @@ reachable from the local XTC* below).
 | A4 | a median ring reduction beats a pooled mean here | **supported** |
 | M1 | only *within-ring* structure is identifiable | **supported** |
 | M2 | identifying power is `Var_c(γ_{q,c})` and it caps the method | **supported** |
+| M2R | some condition axis in THIS experiment supplies that power | **the gate — run first** |
 | M7 | given the contrast, stage-1 error is counting noise | **refuted** |
 | M3 | the contrast cancels `J` exactly | **supported** |
 | M4 | the stage order is forced, not chosen | **supported** |

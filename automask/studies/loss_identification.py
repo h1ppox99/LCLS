@@ -553,6 +553,86 @@ def exp_m4_stage_order(**kw) -> Result:
                    "streak_in_J_first": leak_streak})
 
 
+def _condition_frame(run: int, scheme: str, n_groups: int):
+    """`(zbar, sem2, A, frame, floor, sample)` for one run under one condition axis.
+
+    The shared setup of every run-side experiment that needs per-condition
+    images: the production floor, the azimuthal ring frame, the known `A`, and
+    the flux-normalised group means projected into assembled space. One XTC pass
+    the first time a `(run, scheme)` is asked for, cached thereafter.
+    """
+    from automask.evaluation import load_sample
+    from automask.geometry import panel_to_asm
+    from automask.identification.conditions import load as load_conditions
+    from automask.masking import production_pipeline
+    from automask.unsupervised.azimuthal import build_frame
+
+    pipe = production_pipeline()
+    sample = load_sample(run, features=pipe.features_needed())
+    floor = pipe.floor(sample)
+    fr = build_frame(sample, floor)
+    gm = load_conditions(run, scheme, n_groups)
+    zbar = np.stack([panel_to_asm(m, run) for m in gm.mean()])
+    sem2 = np.stack([panel_to_asm(s, run) for s in gm.sem2()])
+    return zbar, sem2, _known_A(sample, fr), fr, floor, sample, gm
+
+
+@claim("M2R", "Some condition axis in this experiment actually moves the sample "
+              "signal, so stage 1 has identifying power to work with.",
+       "No available axis -- delay, branch, time or flux -- shows per-ring "
+       "Var_c(gamma) above its own sampling floor. Then tau cannot be separated "
+       "from S on this data at all, and the entire two-stage construction is "
+       "inapplicable to this experiment regardless of how well it estimates.",
+       needs="run")
+def exp_m2r_identifying_power(run: int, n_groups: int = 4,
+                              schemes=("delay", "branch", "time", "flux"),
+                              **kw) -> Result:
+    """The GATE. Run this before anything else that needs frames.
+
+    `Var_c(gamma_{q,c})` is what separates a shadow from the sample signal, and
+    M2 shows on the bench that the recovery error scales as its inverse square
+    root. That makes this measurement, not any estimator property, the thing
+    that decides whether the approach is viable HERE. `flux` is the negative
+    control: the model divides `F_t` out, so it should score near zero unless
+    the sample response is nonlinear.
+    """
+    rows, best = [], None
+    for scheme in schemes:
+        try:
+            zbar, sem2, A, fr, floor, _sample, gm = _condition_frame(
+                run, scheme, n_groups)
+        except Exception as e:                      # noqa: BLE001 -- reported
+            rows.append((scheme, None, f"{type(e).__name__}: {e}"))
+            continue
+        if gm.n_groups < 2:
+            rows.append((scheme, None, f"only {gm.n_groups} group"))
+            continue
+        ip = TW.identifying_power(zbar, A, fr.ring_idx, fr.usable & ~floor,
+                                  fr.n_rings, sem2=sem2, q=fr.q)
+        s = ip.summary()
+        rows.append((scheme, s, f"{gm.n_groups} groups"))
+        if best is None or s["median_snr"] > best[1]["median_snr"]:
+            best = (scheme, s)
+
+    if best is None:
+        return Result(BLOCKED, "no condition axis could be built:\n" +
+                      "\n".join(f"    {n:<8} {note}" for n, _s, note in rows), {})
+    verdict = SUPPORTED if best[1]["median_snr"] > 1.0 else REFUTED
+    detail = ("  axis       groups   median SNR   median Var_c(gamma)   "
+              "rings with SNR>1\n" +
+              "\n".join(
+                  f"    {n:<8}   {note:<9}" +
+                  (f"{s['median_snr']:10.2f}   {s['median_excess']:19.3e}   "
+                   f"{100*s['frac_rings_snr_gt1']:14.0f}%" if s else "  --")
+                  for n, s, note in rows) +
+              f"\n    best axis: {best[0]!r} at median SNR {best[1]['median_snr']:.2f} "
+              f"(SNR is a VARIANCE ratio; below 1 there is no usable contrast)")
+    return Result(verdict, detail,
+                  {"best_axis_snr": best[1]["median_snr"],
+                   **{f"snr_{n}": (s["median_snr"] if s else np.nan)
+                      for n, s, _note in rows}})
+
+
 @claim("M5", "Real artifacts split into a multiplicative class and an additive "
              "class, which is what makes a two-stage estimator the right shape.",
        "Reference-masked pixels do not separate into a slope-deviation "
@@ -561,24 +641,10 @@ def exp_m4_stage_order(**kw) -> Result:
        needs="run")
 def exp_m5_artifact_classes(run: int, scheme: str = "time", n_groups: int = 4,
                             **kw) -> Result:
-    from automask.evaluation import load_sample
-    from automask.identification.conditions import load as load_conditions
-    from automask.masking import production_pipeline
-    from automask.unsupervised.azimuthal import build_frame
-    from automask.geometry import panel_to_asm
-
-    pipe = production_pipeline()
-    sample = load_sample(run, features=pipe.features_needed())
-    floor = pipe.floor(sample)
-    fr = build_frame(sample, floor)
-    gm = load_conditions(run, scheme, n_groups)
+    zbar, sem2, A, fr, floor, sample, gm = _condition_frame(run, scheme, n_groups)
     if gm.n_groups < 3:
         return Result(BLOCKED, f"scheme {scheme!r} gives {gm.n_groups} groups; "
                                "the slope/intercept split needs at least 3", {})
-
-    zbar = np.stack([panel_to_asm(m, run) for m in gm.mean()])
-    sem2 = np.stack([panel_to_asm(s, run) for s in gm.sem2()])
-    A = _known_A(sample, fr)
     keep = fr.usable & ~floor
 
     # Detrended inside each ring for the reason `twoway.ring_trend` documents:
