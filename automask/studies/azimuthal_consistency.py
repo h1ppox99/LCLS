@@ -34,8 +34,8 @@ from automask.evaluation import EVAL_RUNS, load_sample
 from automask.masking import production_pipeline
 from automask.unsupervised.azimuthal import (
     CLIP_Q, MIN_SECTORS, N_MIN, TARGET_CELL, cell_moments, excess_scatter,
-    gradient_leakage, pixel_frame, ring_edges, sector_edges_per_ring,
-    winsorize_per_ring,
+    gradient_leakage, pixel_frame, ring_edges, ring_reference,
+    sector_edges_per_ring, winsorize_per_ring,
 )
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -96,6 +96,12 @@ def run_study(run: int, n_sectors: int = 12, sector_sweep=(4, 8, 16, 32), rng=No
     print(f"{'':<22} {'':>7} | {'--- excess scatter % ---':^23} | "
           f"{'------ vs random control ------':^24} | {'':>8}")
 
+    # Per-ring (sigma^2, mu) from the floor-only pixels: one reference per
+    # intensity field, shared by every mask below and by the leakage floor.
+    ref = {label: ring_reference(*cell_moments(ring_idx, sec_idx, field,
+                                               usable & ~floor, n_rings, n_sectors))
+           for label, field in (("raw", inten), ("win", clipped))}
+
     rows = {}
     for tag, m in masks.items():
         keep = usable & ~m
@@ -104,13 +110,15 @@ def run_study(run: int, n_sectors: int = 12, sector_sweep=(4, 8, 16, 32), rng=No
         res = {}
         for label, field in (("raw", inten), ("win", clipped)):
             e, mu, F = excess_scatter(*cell_moments(ring_idx, sec_idx, field, keep,
-                                                    n_rings, n_sectors))
+                                                    n_rings, n_sectors),
+                                      ref=ref[label])
             ec, _, _ = excess_scatter(*cell_moments(ring_idx, sec_idx, field, keep_c,
-                                                    n_rings, n_sectors))
+                                                    n_rings, n_sectors),
+                                      ref=ref[label])
             res[label] = (np.nanmedian(e), np.nanmedian(ec), e, mu, np.nanmedian(F),
                           np.nanmean(e), np.nanpercentile(e, 90), ec)
         leak, qmid = gradient_leakage(ring_idx, sec_idx, q, keep,
-                                      n_rings, n_sectors, res["raw"][3])
+                                      n_rings, n_sectors, ref["raw"][1])
         r1 = res["win"]
         # paired per-ring comparison against the equally-sized random mask
         both = np.isfinite(r1[2]) & np.isfinite(r1[7])
@@ -149,13 +157,16 @@ def run_study(run: int, n_sectors: int = 12, sector_sweep=(4, 8, 16, 32), rng=No
     sweep = {}
     for S in sector_sweep:
         si = sector_edges_per_ring(ring_idx, chi, usable & ~floor, n_rings, S)
+        ref_S = ring_reference(*cell_moments(ring_idx, si, clipped,
+                                             usable & ~floor, n_rings, S))
         vals = []
         for tag in ("floor only", prod_tag):
             e, _, _ = excess_scatter(*cell_moments(ring_idx, si, clipped,
-                                                   usable & ~masks[tag], n_rings, S))
+                                                   usable & ~masks[tag], n_rings, S),
+                                     ref=ref_S)
             vals.append(np.nanmedian(e))
         lk, _ = gradient_leakage(ring_idx, si, q, usable & ~floor,
-                                 n_rings, S, rows["floor only"]["res"]["raw"][3])
+                                 n_rings, S, ref_S[1])
         sweep[S] = vals + [np.nanmedian(lk)]
         print(f"    S={S:<3d} {usable.sum()/(n_rings*S):6.0f} px/cell   "
               f"{100*vals[0]:7.3f}%   {100*vals[1]:7.3f}%   "

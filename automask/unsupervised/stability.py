@@ -18,14 +18,19 @@ Three perturbations, in increasing order of honesty and cost:
                  and per-ASIC gain drift make false. Treat it as the cheap
                  surrogate, and see `metric_validation` for how far it agrees
                  with the real thing.
-  `stab_alt`     real resampling, alternating folds: even vs odd blocks of the
-                 run. Interleaved in time, so slow drift is shared and what is
-                 left is close to pure shot sampling.
+  `stab_alt`     real resampling, even vs odd SHOTS. Shots are dealt to folds
+                 one at a time (`folds.py`), so both sides carry the same mix of
+                 experimental conditions and what is left is close to pure shot
+                 sampling. This used to interleave 80-shot BLOCKS instead, which
+                 balanced nothing: the CC/VCC branch clusters in runs of a
+                 thousand-odd shots, so block parity left the two sides with
+                 branch compositions differing by up to 0.15.
   `stab_time`    real resampling, contiguous halves: first half of the run vs
                  second. Everything `stab_alt` sees, PLUS any drift in the
-                 detector state during the run. `stab_alt - stab_time` therefore
-                 isolates non-stationarity, and a mask can only be a run-level
-                 constant if that gap is small.
+                 detector state AND any change in condition mix between the two
+                 halves. `stab_alt - stab_time` therefore isolates
+                 non-stationarity in the broad sense, and a mask can only be a
+                 run-level constant if that gap is small.
 
   `stab_hyper`   the knobs, not the data: every float hyperparameter in the
                  recipe is multiplied by lognormal(eps) and the mask recomputed.
@@ -185,13 +190,21 @@ def stab_noise(cand, ctx, reps: int = N_NOISE) -> float:
 def _split(cand, ctx, which: str) -> float:
     _require_procedure(cand)
     fm = ctx.folds()
-    a, b = fm.alternating() if which == "alt" else fm.halves()
-    return iou(cand.make(fold_sample(ctx.sample, fm, a)),
-               cand.make(fold_sample(ctx.sample, fm, b)))
+    # `alt` reads the DEALT axis and `time` the chronological one; the two carry
+    # the same shots partitioned oppositely, and reading the wrong axis returns a
+    # perfectly plausible number for the other question.
+    dealt = which == "alt"
+    a, b = fm.alternating() if dealt else fm.halves()
+    return iou(cand.make(fold_sample(ctx.sample, fm, a, dealt=dealt)),
+               cand.make(fold_sample(ctx.sample, fm, b, dealt=dealt)))
 
 
 def stab_alt(cand, ctx) -> float:
-    """IoU between masks built from even-numbered vs odd-numbered shot blocks."""
+    """IoU between masks built from even- vs odd-numbered SHOTS.
+
+    Shots are dealt to folds one at a time, so the two sides see the same mix of
+    experimental conditions -- see `folds.py` for the measurement that forced
+    this to be a deal over shots rather than an interleave over blocks."""
     return _split(cand, ctx, "alt")
 
 

@@ -30,6 +30,20 @@ THE STATISTIC is an effect size in units of the ring's own intensity. Per ring:
 
 Scale-free, insensitive to n, and it does not inflate as the data get cleaner.
 
+`sigma_hat^2` AND `mu` ARE FROZEN, not read off the candidate's own survivors.
+Estimating them per candidate leaves a milder form of the same defect that sinks
+Welch's F: a mask that removes noisy pixels shrinks `sigma_hat^2`, shrinking the
+term SUBTRACTED from its own numerator, so improving the mask inflates the
+statistic; and a mask that removes hot pixels lowers `mu`, inflating it again
+through the divisor. Neither term is a property of the mask -- both describe the
+ring -- so `ring_reference` computes them once from the geometry+calib floor
+pixel set, which every candidate shares by construction. What remains
+mask-dependent is `V_b` and the cell counts, which is the only part that should
+carry a ranking. Freezing the pixel SET is not enough on its own -- the floor
+still contains the intensity defects, so `sigma_hat^2` has to be reduced over it
+robustly or it inherits them and the subtracted floor swallows the signal; see
+`ring_reference`.
+
 ITS NULL IS NOT ZERO. `V_b` is itself estimated from only S sector means, so it
 scatters around its expectation and the clip at zero makes the residual
 one-sided. Measured on synthetic isotropic rings (12 sectors, 200 px/cell, in
@@ -174,28 +188,85 @@ def cell_moments(ring_idx, sec_idx, inten, keep, n_rings, n_sectors):
     return n, s1, s2
 
 
-def excess_scatter(n, s1, s2):
+def _cell_stats(n, s1, s2):
+    """Per-(ring, sector) usability, mean and unbiased variance."""
+    ok = n >= N_MIN
+    m = np.where(ok, s1 / np.maximum(n, 1), np.nan)
+    v = np.where(ok, (s2 - n * np.nan_to_num(m) ** 2) / np.maximum(n - 1, 1), np.nan)
+    v = np.where(ok & (v > 0), v, np.nan)
+    return ok & np.isfinite(v) & np.isfinite(m), m, v
+
+
+def _ring_mean(ok, m, S):
+    return np.where(S > 0, np.nansum(np.where(ok, m, 0), axis=1) / np.maximum(S, 1),
+                    np.nan)
+
+
+def ring_reference(n, s1, s2):
+    """Per-ring `(sigma^2, mu)` from a pixel set that no candidate can move.
+
+    Everything in `excess` except the sector scatter itself is a property of the
+    RING -- the per-pixel noise scale that sets the subtracted floor, and the
+    intensity that makes the result a fraction. Estimating either from the
+    candidate's own surviving pixels couples them to the mask in the wrong
+    direction (see `excess_scatter`), so both are frozen once on the floor-only
+    pixels, which are identical for every candidate by construction.
+
+    `sigma^2` is the MEDIAN of the per-cell variances across the ring's sectors,
+    not the dof-weighted pool the candidate-local form used. The floor removes
+    geometry and calib defects but not the intensity defects the mask exists to
+    find, so those pixels are still in this set, and pooling lets a defect
+    confined to one or two sectors set the noise scale for the whole ring.
+    Measured on a synthetic ring stack with one sector at 8x the per-pixel
+    variance, the pooled reduction returns 644 against a true 100 and the
+    subtracted floor then swallows a real 4% anisotropy whole -- every candidate
+    reads exactly 0.000% and the metric stops discriminating (67% of rings clip).
+    The median returns 100.2 on the same field. Sectors are the natural axis for
+    this: a defect that spans all of them uniformly is not something the
+    azimuthal test can see anyway. On a ring with no variance-inflating defect
+    the two agree to three decimals, so this does not move the clean case.
+    """
+    ok, m, v = _cell_stats(n, s1, s2)
+    S = ok.sum(axis=1)
+    sig2 = np.nanmedian(np.where(ok, v, np.nan), axis=1)
+    return np.where(S > 0, sig2, np.nan), _ring_mean(ok, m, S)
+
+
+def excess_scatter(n, s1, s2, ref=None):
     """Effect size: azimuthal scatter of sector means beyond the noise floor.
 
     Returns (excess, mu, welch_F) with `excess` a FRACTION of the ring mean.
     Welch's F is carried only to document why a significance test misleads here
     (see the module docstring).
+
+    `ref` is the frozen `(sigma^2, mu)` from `ring_reference`. With it, the only
+    mask-dependent quantities left in `excess` are the sector scatter `Vb` and
+    the cell counts that set its expectation -- so a difference between two
+    candidates is a difference in azimuthal consistency, not in what they left
+    behind to estimate the noise with. Passing `ref=None` reproduces the
+    self-referential form and is kept for the sector-count study, which needs a
+    reference per partition.
+
+    `Vb` stays centred on the candidate's OWN ring mean even when `ref` is given:
+    it is a variance about a mean, and centring it on a foreign one would fold
+    `(mu_cand - mu_ref)^2` -- a radial offset, not azimuthal scatter -- into the
+    numerator. The frozen `mu` is the unit, not the centre.
     """
-    ok = n >= N_MIN
+    ok, m, v = _cell_stats(n, s1, s2)
     nn = np.where(ok, n, 0).astype(np.float64)
-    m = np.where(ok, s1 / np.maximum(n, 1), np.nan)
-    v = np.where(ok, (s2 - n * np.nan_to_num(m) ** 2) / np.maximum(n - 1, 1), np.nan)
-    v = np.where(ok & (v > 0), v, np.nan)
-    ok = ok & np.isfinite(v) & np.isfinite(m)
     S = ok.sum(axis=1)
 
-    mu = np.where(S > 0, np.nansum(np.where(ok, m, 0), axis=1) / np.maximum(S, 1), np.nan)
+    mu = _ring_mean(ok, m, S)
     Vb = np.where(S > 1, np.nansum(np.where(ok, (m - mu[:, None]) ** 2, 0), axis=1)
                   / np.maximum(S - 1, 1), np.nan)
-    dof = np.where(ok, nn - 1, 0)
-    sig2 = np.nansum(np.where(ok, v * dof, 0), axis=1) / np.maximum(dof.sum(axis=1), 1)
     inv_n = np.nansum(np.where(ok, 1.0 / np.maximum(nn, 1), 0), axis=1) / np.maximum(S, 1)
-    excess = np.sqrt(np.maximum(Vb - sig2 * inv_n, 0.0)) / np.abs(mu)
+    if ref is None:
+        dof = np.where(ok, nn - 1, 0)
+        sig2 = np.nansum(np.where(ok, v * dof, 0), axis=1) / np.maximum(dof.sum(axis=1), 1)
+        unit = mu
+    else:
+        sig2, unit = ref
+    excess = np.sqrt(np.maximum(Vb - sig2 * inv_n, 0.0)) / np.abs(unit)
 
     w = np.where(ok, nn / np.where(np.isfinite(v), v, 1.0), 0.0)
     W = w.sum(axis=1)
@@ -235,9 +306,10 @@ def gradient_leakage(ring_idx, sec_idx, q, keep, n_rings, n_sectors, mu):
 class AzimuthalFrame:
     """Ring/sector geometry + intensities, fixed once per run.
 
-    Built from the FLOOR-only pixel set so that rings, sectors and the
-    winsorization thresholds are identical for every candidate -- otherwise a
-    mask would be scored on a partition it had itself chosen.
+    Built from the FLOOR-only pixel set so that rings, sectors, the
+    winsorization thresholds and the per-ring `(sigma^2, mu)` reference are
+    identical for every candidate -- otherwise a mask would be scored on a
+    partition, and against a noise floor, it had itself chosen.
     """
     q: np.ndarray
     inten: np.ndarray
@@ -248,13 +320,15 @@ class AzimuthalFrame:
     sec_idx: np.ndarray
     n_rings: int
     n_sectors: int
+    ref: tuple                      # frozen per-ring (sigma^2, mu)
 
     def excess(self, mask) -> np.ndarray:
         """Per-ring excess azimuthal scatter with `mask` removed."""
         keep = self.usable & ~np.asarray(mask, bool)
         e, _, _ = excess_scatter(*cell_moments(self.ring_idx, self.sec_idx,
                                                self.clipped, keep,
-                                               self.n_rings, self.n_sectors))
+                                               self.n_rings, self.n_sectors),
+                                 ref=self.ref)
         return e
 
     def random_control(self, mask, rng) -> np.ndarray:
@@ -286,11 +360,15 @@ def build_frame(sample, floor, n_sectors: int = N_SECTORS) -> AzimuthalFrame:
     edges = ring_edges(q, usable, n_rings)
     n_rings = len(edges) - 1
     ring_idx = np.clip(np.digitize(q, edges) - 1, 0, n_rings - 1)
+    floor = np.asarray(floor, bool)
     sec_idx = sector_edges_per_ring(ring_idx, chi, usable & ~floor, n_rings, n_sectors)
     clipped = winsorize_per_ring(inten, ring_idx, usable, n_rings)
+    ref = ring_reference(*cell_moments(ring_idx, sec_idx, clipped, usable & ~floor,
+                                       n_rings, n_sectors))
     return AzimuthalFrame(q=q, inten=inten, clipped=clipped, usable=usable,
-                          floor=np.asarray(floor, bool), ring_idx=ring_idx,
-                          sec_idx=sec_idx, n_rings=n_rings, n_sectors=n_sectors)
+                          floor=floor, ring_idx=ring_idx,
+                          sec_idx=sec_idx, n_rings=n_rings, n_sectors=n_sectors,
+                          ref=ref)
 
 
 # ==========================================================================

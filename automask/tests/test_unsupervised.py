@@ -14,7 +14,9 @@ from __future__ import annotations
 
 import numpy as np
 
-from automask.unsupervised.azimuthal import cell_moments, excess_scatter
+from automask.unsupervised.azimuthal import (
+    cell_moments, excess_scatter, ring_reference,
+)
 from automask.unsupervised.base import Candidate, iou
 from automask.unsupervised.event_axis import P_ANOM
 from automask.unsupervised.stability import jitter_params
@@ -130,6 +132,131 @@ def test_excess_scatter_does_not_grow_with_sample_size():
     assert max(vals) / min(vals) < 1.5, f"excess drifted with n: {vals}"
 
 
+def _noisy_and_biased(rng, noisy_var=8.0, bias=1.04, n_rings=12, n_sectors=12,
+                      per_cell=200, mu=100.0, sigma=10.0):
+    """A ring stack carrying two DIFFERENT things a mask might remove.
+
+    Sector 3 is azimuthally innocent -- same mean as the rest -- but 8x noisier
+    per pixel. Sector 7 carries a real 4% anisotropy. A mask that removes sector
+    3 has removed noise, not anisotropy, and the statistic must not reward it by
+    inflating.
+    """
+    ring = np.repeat(np.arange(n_rings), n_sectors * per_cell)
+    sec = np.tile(np.repeat(np.arange(n_sectors), per_cell), n_rings)
+    val = rng.normal(mu, sigma, ring.size)
+    noisy = sec == 3
+    val[noisy] = rng.normal(mu, sigma * noisy_var, noisy.sum())
+    val[sec == 7] *= bias
+    return ring, sec, val, noisy, n_rings, n_sectors
+
+
+def test_frozen_reference_removes_the_perverse_coupling():
+    """Masking noisy-but-isotropic pixels must not INCREASE the excess.
+
+    The candidate-local noise estimate has the defect that sinks Welch's F, in
+    milder form: `sigma_hat^2` is pooled over the pixels the candidate left
+    behind, so removing a noisy region shrinks the term subtracted from the
+    numerator and the statistic rises. Measured here it rises by +1.28 points --
+    the mask is penalised for working. With the reference frozen on the
+    floor-only pixels the same mask moves the statistic DOWN.
+    """
+    perverse = 0
+    for seed in range(6):
+        rng = np.random.default_rng(seed)
+        ring, sec, val, noisy, nr, ns = _noisy_and_biased(rng)
+        allpx = np.ones(ring.size, bool)
+        ref = ring_reference(*cell_moments(ring, sec, val, allpx, nr, ns))
+
+        def med(keep, **kw):
+            mom = cell_moments(ring, sec, val, keep, nr, ns)
+            return np.nanmedian(excess_scatter(*mom, **kw)[0])
+
+        perverse += med(~noisy) > med(allpx)
+        assert med(~noisy, ref=ref) < med(allpx, ref=ref), \
+            f"frozen reference still rewards masking noise (seed {seed})"
+    assert perverse >= 4, \
+        f"the coupling this test targets showed up in only {perverse}/6 draws"
+
+
+def test_frozen_reference_stays_sensitive_to_a_real_anisotropy():
+    """The freeze must not be bought by clipping everything to zero.
+
+    The floor removes geometry and calib defects but NOT the intensity defects,
+    so a frozen `sigma_hat^2` pooled over it inherits them: on this field the
+    pooled reduction returns ~644 against a true 100 and every candidate reads
+    exactly 0.000%. `ring_reference` reduces robustly instead, which is what
+    keeps the injected 4% anisotropy visible.
+    """
+    rng = np.random.default_rng(3)
+    ring, sec, val, noisy, nr, ns = _noisy_and_biased(rng)
+    allpx = np.ones(ring.size, bool)
+    sig2, _ = ring_reference(*cell_moments(ring, sec, val, allpx, nr, ns))
+    assert abs(np.nanmedian(sig2) - 100.0) < 15.0, \
+        f"reference noise scale {np.nanmedian(sig2):.0f} is contaminated by the defect"
+
+    e = excess_scatter(*cell_moments(ring, sec, val, allpx, nr, ns),
+                       ref=(sig2, np.full(nr, 100.0)))[0]
+    assert np.nanmedian(e) > 0.005, "the frozen form clipped the real anisotropy away"
+    assert np.mean(e[np.isfinite(e)] == 0) < 0.1, "too many rings clip to zero"
+
+
+def test_frozen_reference_is_a_no_op_without_a_noise_defect():
+    """On a ring with no variance-inflating defect the freeze must change
+    nothing -- otherwise it would silently move every number already measured
+    against the human masks."""
+    rng = np.random.default_rng(4)
+    ring, sec, val, _, nr, ns = _noisy_and_biased(rng, noisy_var=1.0)
+    allpx = np.ones(ring.size, bool)
+    mom = cell_moments(ring, sec, val, allpx, nr, ns)
+    ref = ring_reference(*mom)
+    a = np.nanmedian(excess_scatter(*mom)[0])
+    b = np.nanmedian(excess_scatter(*mom, ref=ref)[0])
+    assert abs(a - b) < 1e-4, f"freeze moved the clean case: {a:.6f} vs {b:.6f}"
+
+
+# -- the two fold axes ------------------------------------------------------
+def test_dealt_folds_balance_a_clustered_condition():
+    """The reason `folds.py` deals shots instead of interleaving blocks.
+
+    A condition that clusters -- as the CC/VCC branch does, in runs of a
+    thousand-odd shots -- leaves contiguous blocks with wildly different mixes
+    and dealt folds with the same one. Built here as a two-state condition in
+    long runs, so the answer is known by construction.
+    """
+    from automask.unsupervised.folds import assign_folds
+
+    n, k, block = 800, 10, 200
+    cond = (np.arange(n) // block) % 2          # long runs, period 2*block
+    blocks, dealt = assign_folds(n, k)
+    by_block = np.array([cond[blocks == i].mean() for i in range(k)])
+    by_deal = np.array([cond[dealt == i].mean() for i in range(k)])
+    assert np.ptp(by_block) > 0.9, "the test condition must actually cluster"
+    assert np.ptp(by_deal) < 0.05, (
+        f"dealt folds must see the same mix, spread was {np.ptp(by_deal):.3f}")
+
+
+def test_alternating_is_shot_parity_and_halves_stay_chronological():
+    from automask.unsupervised.folds import FoldMoments, assign_folds
+
+    n, k = 800, 10
+    blocks, dealt = assign_folds(n, k)
+    even, odd = FoldMoments.alternating(type("F", (), {"k": k, "n": np.zeros(k)})())
+    assert set(dealt[np.isin(dealt, even)] % 2) == {0}, (
+        "even dealt folds must be exactly the even-numbered shots")
+    # halves() indexes the chronological axis, so it must split the run in time
+    first, second = FoldMoments.halves(type("F", (), {"k": k, "n": np.zeros(k)})())
+    shots_first = np.flatnonzero(np.isin(blocks, first))
+    assert shots_first.max() < np.flatnonzero(np.isin(blocks, second)).min()
+
+
+def test_moments_axes_partition_the_same_shots():
+    rng = np.random.default_rng(0)
+    fm = _fold_moments(rng, k=4, n_pix=800, per_fold=20)
+    total_block = fm.moments(range(fm.k))[0]
+    total_deal = fm.moments(range(fm.k), dealt=True)[0]
+    assert total_block == total_deal, "both axes must cover every shot once"
+
+
 # -- tier 3: is the stationarity chi2 calibrated? --------------------------
 def _fold_moments(rng, k=10, n_pix=20000, per_fold=80, mu=5.0, gains=None):
     """Synthetic FoldMoments-shaped arrays: Poisson-ish pixels, k folds."""
@@ -143,9 +270,13 @@ def _fold_moments(rng, k=10, n_pix=20000, per_fold=80, mu=5.0, gains=None):
         x = rng.poisson(mu * gains[i], size=(per_fold, *shape)).astype(float)
         s1[i] = x.sum(axis=0)
         s2[i] = (x ** 2).sum(axis=0)
+    # Tier 3 reads the chronological axis only; the dealt arrays are carried so
+    # the object is well formed, and a per-fold gain does not survive a deal.
     return FoldMoments(run=0, n=n, s1=s1, s2=s2,
                        indices=np.arange(k * per_fold),
-                       fold_of_shot=np.repeat(np.arange(k), per_fold))
+                       block_of_shot=np.repeat(np.arange(k), per_fold),
+                       dn=n.copy(), ds1=s1.copy(), ds2=s2.copy(),
+                       fold_of_shot=np.tile(np.arange(k), per_fold))
 
 
 def _chi2_flags(fm, run_geometry):
