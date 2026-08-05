@@ -14,6 +14,7 @@ dependencies = [
     "numpy",
     "h5py",
     "scipy",
+    "ipykernel",      # for jupyter notebooks
     "scikit-image",   # stats/, regularization/ morphology + ridge filters
     "matplotlib",     # viz.py, producers/draw_hand_mask.py, studies/
     "tifffile",       # review.py TIFF input
