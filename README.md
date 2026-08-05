@@ -21,12 +21,40 @@ xpp_sharing/       the lab's current production method (read-only baseline)
 
 ## Setup
 
+### First time setup
+
+The XTC readers need psana, which is intentionally not installed by this
+project's `pip` dependencies. Choose an environment path and set the same path
+as `ENVP` in `psana_env.sh`.
+
 ```bash
-pip install -e .                     # installs declared dependencies from pyproject.toml
-# In the psana environment, protect its pinned numerical stack instead:
-source psana_env.sh
-pip install -e . --no-deps
+ENVP=/Data/$USER/envs/ana-4.0.62
+
+conda create -p "$ENVP" \
+  -c lcls-i -c conda-forge \
+  psana=4.0.62 python=3.9 numpy h5py
 ```
+
+Edit `psana_env.sh` so its `ENVP` value matches the path above, then install
+this project from inside that environment. `--no-deps` preserves psana's pinned
+scientific packages.
+
+```bash
+source psana_env.sh
+python -m pip install -e . --no-deps
+```
+
+If an import reports a missing non-psana dependency, install it into this Conda
+environment (for example, `conda install -p "$ENVP" -c conda-forge hydra-core`).
+
+### Everyday setup
+
+```bash
+source psana_env.sh
+```
+
+For workflows that do not read XTC data or import psana, a normal Python
+environment can instead use `python -m pip install -e .`.
 
 ## Run the production pipeline 
 
