@@ -201,6 +201,20 @@ class ShotSelection:
         pick = np.linspace(0, survivors.size - 1, self.n_shots).round().astype(np.int64)
         return survivors[np.unique(pick)]
 
+    @staticmethod
+    def create_k_folds(indices: np.ndarray, k: int = 1) -> list:
+        """Split resolved event indices into ``k`` interchangeable folds.
+
+        Shots are dealt round-robin, so consecutive *selected* shots land in
+        different folds. 
+
+        ``k=1`` returns ``[indices]`` unchanged.
+        """
+        indices = np.asarray(indices)
+        if k < 1 or k > indices.size:
+            raise ValueError(f"k must be in [1, {indices.size}], got {k}")
+        return [indices[f::k] for f in range(k)]
+
     def describe(self, meta: ShotMeta) -> dict:
         """Per-filter shot-count breakdown over ``meta``: how many events survive
         each filter alone, and how many are *accessible* under all of them

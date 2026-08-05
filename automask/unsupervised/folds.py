@@ -170,11 +170,16 @@ def cache_path(run: int, k: int = N_FOLDS, selection: ShotSelection = LIT) -> st
 def assign_folds(n_shots: int, k: int):
     """`(time block, dealt fold)` id for each shot, in stream order.
 
-    Time blocks are contiguous; dealt folds hand out shots one at a time and
-    cycle. See the module docstring for why both are kept.
+    Time blocks are contiguous and stay local to this module -- they answer a
+    stationarity question, not a resampling one. The dealt axis defers to
+    `ShotSelection.create_k_folds` so there is one definition of the deal.
+    See the module docstring for why both are kept.
     """
     i = np.arange(n_shots)
-    return (i * k // n_shots).astype(np.int32), (i % k).astype(np.int32)
+    fold = np.empty(n_shots, dtype=np.int32)
+    for f, pos in enumerate(ShotSelection.create_k_folds(i, k)):
+        fold[pos] = f
+    return (i * k // n_shots).astype(np.int32), fold
 
 
 def build(run: int, k: int = N_FOLDS, selection: ShotSelection = LIT) -> FoldMoments:
