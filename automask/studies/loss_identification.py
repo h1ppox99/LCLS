@@ -147,9 +147,9 @@ def exp_a1_drift(run: int, **kw) -> Result:
        needs="run")
 def exp_a2_interchangeable(run: int, n_folds: int = 10, **kw) -> Result:
     from automask.identification.conditions import LIT
-    from automask.io import scan_shots
+    from automask.utils import profile_run_values
 
-    meta = scan_shots(run)
+    meta = profile_run_values(run, show=False).shot_meta()
     idx = LIT.resolve(meta)
     x = meta.monitor(LIT.intensity)[idx]
     x = (x - x.mean()) / (x.std() or 1.0)

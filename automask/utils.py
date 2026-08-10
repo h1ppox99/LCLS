@@ -11,6 +11,7 @@ import numpy as np
 from automask.io.lcls_xpp import COLON, ROOT, SmallData, smalldata_path
 from automask.io.read_xtc import JUNGFRAU_NAME, XTC_DIR, calib_dir, local_run_source
 from automask.io.smalldata import Lcls1SmallDataDetectors
+from automask.run_profile import RunProfile
 
 
 _PAYLOAD_ACCESSOR_VETO = {
@@ -311,7 +312,7 @@ def _column_summary(values):
 
 def profile_run_values(
     run, source=None, detector_set=None, max_events=None, show=True
-):
+) -> RunProfile:
     """Profile one run through smalldata_tools and psana payload discovery."""
     source = source or local_run_source(run)
     data_source = source.open()
@@ -474,14 +475,15 @@ def profile_run_values(
         _show_table(f"Raw XTC payloads ({n_events:,} decoded events)", payload_rows)
         _show_table("Profiled per-shot values", value_rows)
         _show_table("EPICS process variables", epics_rows)
-    return {
-        "run": int(run),
-        "events": n_events,
-        "payloads": payload_rows,
-        "values": value_arrays,
-        "summary": {"xtc": value_rows, "epics": epics_rows},
-        "epics": epics_rows,
-    }
+    return RunProfile(
+        run=int(run),
+        events=n_events,
+        payloads=payload_rows,
+        values=value_arrays,
+        summary={"xtc": value_rows, "epics": epics_rows},
+        epics=epics_rows,
+        source=source,
+    )
 
 
 def print_detector_geometry(run, detector_name=JUNGFRAU_NAME, source=None):

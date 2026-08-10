@@ -17,6 +17,7 @@ from automask.masking import Detector
 from automask.regularization.area_gate import area_gate
 from automask.regularization.blob_scale import blob_scale
 from automask.regularization.fill_holes import fill_holes
+from automask.run_profile import RunProfile
 from automask.shot_selection import ShotMeta, ShotSelection
 from automask.stats.asic_polish import median_polish
 
@@ -144,10 +145,11 @@ def _meta(n=100, beam=None, cc=None, vcc=None, monitor=None, run=475):
 
 
 def test_shot_meta_is_built_from_canonical_profile_columns():
-    profile = {
-        "run": 12,
-        "events": 3,
-        "values": {
+    profile = RunProfile(
+        run=12,
+        events=3,
+        payloads=[],
+        values={
             "DetInfo(NoDetector.0:Evr.0)/EvrData.DataV4/eventCode[137]":
                 np.array([1.0, 0.0, np.nan]),
             "ai/ch02": np.array([5.0, 0.0, np.nan]),
@@ -156,9 +158,11 @@ def test_shot_meta_is_built_from_canonical_profile_columns():
             "diodeU/sum": np.array([4.0, 5.0, 6.0]),
             "gas_detector/f_11_ENRC": np.array([7.0, 8.0, 9.0]),
         },
-    }
+        summary={},
+        epics=[],
+    )
 
-    meta = ShotMeta.from_profile(profile)
+    meta = profile.shot_meta()
 
     assert meta.run == 12
     np.testing.assert_array_equal(meta.beam_on, [True, False, False])
@@ -168,17 +172,42 @@ def test_shot_meta_is_built_from_canonical_profile_columns():
     assert set(meta.intensity) == {"sample_diode", "diodeU", "gasdet"}
 
 
-def test_feature_store_reuses_injected_shot_metadata(tmp_path):
-    meta = _meta(run=12)
-    store = FeatureStore(cache_dir=tmp_path, shot_meta=meta)
+def test_feature_store_reuses_injected_run_profile(tmp_path):
+    profile = RunProfile(
+        run=12,
+        events=3,
+        payloads=[],
+        values={
+            "DetInfo(NoDetector.0:Evr.0)/EvrData.DataV4/eventCode[137]":
+                np.ones(3),
+            "ai/ch02": np.full(3, 5.0),
+            "ai/ch03": np.zeros(3),
+            "diodeU/channels[0]": np.arange(1.0, 4.0),
+        },
+        summary={},
+        epics=[],
+    )
+    store = FeatureStore(cache_dir=tmp_path, run_profile=profile)
 
-    assert store._meta(12) is meta
-    try:
-        store._meta(13)
-    except ValueError as error:
-        assert "run 12" in str(error) and "run 13" in str(error)
-    else:
-        raise AssertionError("expected a run mismatch to fail")
+    assert store.profile(12) is profile
+    assert store.profile(12).shot_meta() is profile.shot_meta()
+
+
+def test_feature_store_profiles_each_run_once(tmp_path, monkeypatch):
+    import automask.utils as utils
+
+    calls = []
+
+    def profile_run(run, show):
+        calls.append((run, show))
+        return RunProfile(run, 0, [], {}, {}, [])
+
+    monkeypatch.setattr(utils, "profile_run_values", profile_run)
+    store = FeatureStore(cache_dir=tmp_path)
+
+    assert store.profile(12) is store.profile(12)
+    assert store.profile(13) is store.profile(13)
+    assert calls == [(12, False), (13, False)]
 
 
 def test_beam_filter_selects_each_class():

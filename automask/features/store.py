@@ -4,7 +4,8 @@ features/store.py -- resolve a FeatureSpec to a per-pixel array, compute-or-cach
 This is the only psana-touching part of the feature layer. ``get(run, spec)``
 returns the cached ``.npy`` if present (numpy-only, instant); otherwise it
 computes the feature from raw XTC -- ``ShotMeta`` -> ``selection.resolve`` ->
-``iter_calibrated`` -> reduce -> cache -> return. Evaluation therefore stays
+``iter_calibrated`` -> reduce -> cache -> return. The canonical ``RunProfile``
+and its ``ShotMeta`` view are retained once per run. Evaluation therefore stays
 numpy-only whenever the cache is warm, and auto-extends to any new selection or
 reduction on demand.
 
@@ -28,7 +29,8 @@ from typing import Optional, Tuple
 import numpy as np
 
 from automask.features.base import FeatureSpec
-from automask.shot_selection import NO_NORMALIZATION, ShotMeta, ShotSelection
+from automask.run_profile import RunProfile
+from automask.shot_selection import NO_NORMALIZATION, ShotSelection
 
 ROOT = Path(__file__).resolve().parents[2]
 PANEL_SHAPE = (2, 512, 1024)
@@ -61,23 +63,21 @@ class FeatureStore:
     def __init__(
         self,
         cache_dir: Path | None = None,
-        shot_meta: ShotMeta | None = None,
+        run_profile: RunProfile | None = None,
     ):
         self.cache_dir = Path(cache_dir) if cache_dir else (
             ROOT / "automask" / "outputs" / "cache" / "features")
-        self.shot_meta = shot_meta
+        self._profiles = {}
+        if run_profile is not None:
+            self._profiles[run_profile.run] = run_profile
 
-    def _meta(self, run: int) -> ShotMeta:
-        if self.shot_meta is None:
-            from automask.io.read_xtc import scan_shots
+    def profile(self, run: int) -> RunProfile:
+        """Return one canonical profile, scanning the run only on first use."""
+        if run not in self._profiles:
+            from automask.utils import profile_run_values
 
-            return scan_shots(run)
-        if self.shot_meta.run != run:
-            raise ValueError(
-                f"FeatureStore has shot metadata for run {self.shot_meta.run}, "
-                f"not run {run}"
-            )
-        return self.shot_meta
+            self._profiles[run] = profile_run_values(run, show=False)
+        return self._profiles[run]
 
     # -- public ------------------------------------------------------------
     def path(self, run: int, spec: FeatureSpec, form: str = "asm") -> Path:
@@ -137,7 +137,12 @@ class FeatureStore:
         from automask.geometry import index_maps
         from automask.io.read_xtc import detector_calibration
 
-        arr = detector_calibration(run, spec.constant)
+        profile = self._profiles.get(run)
+        arr = detector_calibration(
+            run,
+            spec.constant,
+            source=profile.source if profile is not None else None,
+        )
         expected = (N_GAIN,) + PANEL_SHAPE
         if arr.shape != expected:
             raise ValueError(
@@ -173,7 +178,7 @@ class FeatureStore:
         from automask.io.read_xtc import panel_geometry
 
         mean_panel, std_panel, counts = self._accumulate(run, selection)
-        ix, iy = panel_geometry(run)
+        ix, iy = panel_geometry(run, source=self.profile(run).source)
         self._save_pair(run, selection,
                         (("mean", mean_panel), ("std", std_panel)), ix, iy, counts)
 
@@ -194,7 +199,7 @@ class FeatureStore:
             median_panel, mad_panel = self._robust_reduce(stage_path)
         finally:
             stage_path.unlink(missing_ok=True)
-        ix, iy = panel_geometry(run)
+        ix, iy = panel_geometry(run, source=self.profile(run).source)
         self._save_pair(run, selection,
                         (("median", median_panel), ("mad", mad_panel)), ix, iy, counts)
 
@@ -207,7 +212,8 @@ class FeatureStore:
 
         from automask.io.read_xtc import iter_calibrated
 
-        meta = self._meta(run)
+        profile = self.profile(run)
+        meta = profile.shot_meta()
         indices = selection.resolve(meta)
         counts = {**selection.describe(meta), "n_selected": int(indices.size)}
         print(_select_line(run, selection, counts))
@@ -221,7 +227,9 @@ class FeatureStore:
                 maxshape=(None, *PANEL_SHAPE), chunks=(1, 2, 64, 1024),
                 compression="gzip", compression_opts=1)
             staged = 0
-            for event_index, panel in iter_calibrated(run, indices):
+            for event_index, panel in iter_calibrated(
+                run, indices, source=profile.source
+            ):
                 frame = panel.astype(np.float32)
                 if normalize:
                     frame *= np.float32(reference / i0[event_index])
@@ -267,7 +275,8 @@ class FeatureStore:
         frames actually reduced (``.calib()`` misses excluded)."""
         from automask.io.read_xtc import iter_calibrated
 
-        meta = self._meta(run)
+        profile = self.profile(run)
+        meta = profile.shot_meta()
         indices = selection.resolve(meta)
         counts = {**selection.describe(meta), "n_selected": int(indices.size)}
         print(_select_line(run, selection, counts))
@@ -278,7 +287,9 @@ class FeatureStore:
         total = np.zeros(PANEL_SHAPE, dtype=np.float64)
         squared = np.zeros(PANEL_SHAPE, dtype=np.float64)
         n_used = 0
-        for event_index, panel in iter_calibrated(run, indices):
+        for event_index, panel in iter_calibrated(
+            run, indices, source=profile.source
+        ):
             frame = panel.astype(np.float64)
             if normalize:  # optional per-shot i0 scaling, on top of calibration
                 frame *= reference / i0[event_index]

@@ -43,9 +43,11 @@ SELECTION = ShotSelection(beam="on", cc="any", vcc="any",
 
 def compute_mip(run: int, selection: ShotSelection = SELECTION):
     """Per-pixel max over the selected calibrated frames. Returns (panel, stats)."""
-    from automask.io.read_xtc import iter_calibrated, scan_shots
+    from automask.io.read_xtc import iter_calibrated
+    from automask.utils import profile_run_values
 
-    meta = scan_shots(run)
+    profile = profile_run_values(run, show=False)
+    meta = profile.shot_meta()
     indices = selection.resolve(meta)
     print(f"[select] run {run:04d}: {meta.n_events} shots total, "
           f"{selection.describe(meta)['n_accessible']} accessible, "
@@ -53,7 +55,7 @@ def compute_mip(run: int, selection: ShotSelection = SELECTION):
 
     mip = None
     n_used = 0
-    for _, panel in iter_calibrated(run, indices):
+    for _, panel in iter_calibrated(run, indices, source=profile.source):
         mip = panel.copy() if mip is None else np.maximum(mip, panel)
         n_used += 1
         if n_used % 500 == 0:

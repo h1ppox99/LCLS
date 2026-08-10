@@ -20,9 +20,12 @@ Provider/consumer split: the profiler reads psana and official
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, Literal, Optional
+from typing import TYPE_CHECKING, Dict, Literal, Optional
 
 import numpy as np
+
+if TYPE_CHECKING:
+    from automask.run_profile import RunProfile
 
 BeamClass = Literal["on", "off", "any"]
 BranchClass = Literal["open", "closed", "any"]
@@ -56,7 +59,7 @@ _INTENSITY_COLUMNS = {
 class ShotMeta:
     """Per-shot scalar table for one run, one row per event in stream order.
 
-    Built from ``profile_run_values(...)["values"]``; no detector frames are
+    Built from ``profile_run_values(...).values``; no detector frames are
     decoded by that profiler pass.
 
     ``beam_on`` is EVR code 137. ``cc_open``/``vcc_open`` are the CC/VCC shutter
@@ -72,9 +75,9 @@ class ShotMeta:
     intensity: Dict[str, np.ndarray] = field(default_factory=dict)
 
     @classmethod
-    def from_profile(cls, profile: dict) -> "ShotMeta":
+    def from_profile(cls, profile: "RunProfile") -> "ShotMeta":
         """Interpret the selection fields in a canonical run profile."""
-        columns = profile.get("values", {})
+        columns = profile.values
         missing = [
             field for field in _SHOT_META_COLUMNS.values() if field not in columns
         ]
@@ -98,7 +101,7 @@ class ShotMeta:
         cc = np.asarray(columns[_SHOT_META_COLUMNS["cc_voltage"]], dtype=float)
         vcc = np.asarray(columns[_SHOT_META_COLUMNS["vcc_voltage"]], dtype=float)
         return cls(
-            run=int(profile["run"]),
+            run=int(profile.run),
             beam_on=np.isfinite(beam) & (beam > 0.5),
             cc_open=np.isfinite(cc) & (cc > CC_VCC_THRESHOLD),
             vcc_open=np.isfinite(vcc) & (vcc > CC_VCC_THRESHOLD),

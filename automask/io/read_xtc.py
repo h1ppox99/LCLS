@@ -98,30 +98,6 @@ def _run_source(run: int, source: Psana1RunSource | None) -> Psana1RunSource:
     return resolved
 
 
-def scan_shots(
-    run: int = 475,
-    max_events: int | None = None,
-    source: Psana1RunSource | None = None,
-):
-    """Build selection metadata from the canonical run-profiler columns."""
-    from automask.utils import profile_run_values
-    from automask.shot_selection import ShotMeta
-
-    profile = profile_run_values(
-        run,
-        source=_run_source(run, source),
-        max_events=max_events,
-        show=False,
-    )
-    meta = ShotMeta.from_profile(profile)
-    print(
-        f"[scan] run {run:04d}: {meta.n_events} shots read "
-        f"(beam {meta.beam_on.mean():.1%}, CC open {meta.cc_open.mean():.1%}, "
-        f"VCC open {meta.vcc_open.mean():.1%})"
-    )
-    return meta
-
-
 def iter_calibrated(
     run: int,
     indices,

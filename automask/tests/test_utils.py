@@ -190,23 +190,23 @@ def test_profile_run_values_discovers_and_profiles_payloads(monkeypatch):
         12, source=source, detector_set=FakeDetectorSet(data_source)
     )
 
-    assert profile["events"] == 2
-    analog = profile["values"]["ai/ch01"]
-    beam = profile["values"][
+    assert profile.events == 2
+    analog = profile.values["ai/ch01"]
+    beam = profile.values[
         "DetInfo(NoDetector.0:Evr.0)/EvrData.DataV4/eventCode[137]"
     ]
-    code_90 = profile["values"][
+    code_90 = profile.values[
         "DetInfo(NoDetector.0:Evr.0)/EvrData.DataV4/eventCode[90]"
     ]
-    delay = profile["values"]["EPICS/delay"]
-    state = profile["values"]["EPICS/state"]
+    delay = profile.values["EPICS/delay"]
+    state = profile.values["EPICS/state"]
 
     np.testing.assert_array_equal(analog, [5.0, 0.0])
     np.testing.assert_array_equal(beam, [1.0, 1.0])
     np.testing.assert_array_equal(code_90, [1.0, 0.0])
     np.testing.assert_array_equal(delay, [3.1, 4.2])
     np.testing.assert_array_equal(state, ["MOVING", "READY"])
-    assert profile["epics"][0]["PV"] == "XPP:TEST:DELAY.RBV"
+    assert profile.epics[0]["PV"] == "XPP:TEST:DELAY.RBV"
 
 
 def test_profile_run_values_can_stop_without_rendering(monkeypatch):
@@ -224,8 +224,8 @@ def test_profile_run_values_can_stop_without_rendering(monkeypatch):
         show=False,
     )
 
-    assert profile["events"] == 2
-    assert all(values.shape == (2,) for values in profile["values"].values())
+    assert profile.events == 2
+    assert all(values.shape == (2,) for values in profile.values.values())
     assert rendered == []
 
 

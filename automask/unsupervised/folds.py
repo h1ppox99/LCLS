@@ -184,9 +184,11 @@ def assign_folds(n_shots: int, k: int):
 
 def build(run: int, k: int = N_FOLDS, selection: ShotSelection = LIT) -> FoldMoments:
     """One XTC pass -> fold moments on both axes, cached to `cache_path`."""
-    from automask.io.read_xtc import iter_calibrated, scan_shots
+    from automask.io.read_xtc import iter_calibrated
+    from automask.utils import profile_run_values
 
-    meta = scan_shots(run)
+    profile = profile_run_values(run, show=False)
+    meta = profile.shot_meta()
     indices = selection.resolve(meta)
     if indices.size < 2 * k:
         raise RuntimeError(f"run {run}: {indices.size} shots is too few for {k} folds")
@@ -201,7 +203,7 @@ def build(run: int, k: int = N_FOLDS, selection: ShotSelection = LIT) -> FoldMom
     ds1 = np.zeros((k, *PANEL_SHAPE), dtype=np.float64)
     ds2 = np.zeros((k, *PANEL_SHAPE), dtype=np.float64)
     used = 0
-    for event_index, panel in iter_calibrated(run, indices):
+    for event_index, panel in iter_calibrated(run, indices, source=profile.source):
         b, f = by_event[event_index]
         frame = panel.astype(np.float64)
         sq = frame * frame
