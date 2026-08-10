@@ -1,6 +1,32 @@
+import os
+import sys
+
 import numpy as np
 
 import automask.utils as utils
+
+
+def test_configure_psana_environment_adds_smalldata_to_running_kernel(
+    monkeypatch, tmp_path
+):
+    checkout = tmp_path / "smalldata_tools_checkout"
+    (checkout / "smalldata_tools").mkdir(parents=True)
+    monkeypatch.setenv("SIT_PSDM_DATA", str(tmp_path / "psdm"))
+    monkeypatch.setenv("SMALLDATA_TOOLS", str(checkout))
+    monkeypatch.setenv("PYTHONPATH", "/existing/path")
+
+    try:
+        environment = utils.configure_psana_environment()
+
+        assert environment["SMALLDATA_TOOLS"] == str(checkout)
+        assert sys.path[0] == str(checkout)
+        assert os.environ["PYTHONPATH"].split(os.pathsep) == [
+            str(checkout),
+            "/existing/path",
+        ]
+    finally:
+        if str(checkout) in sys.path:
+            sys.path.remove(str(checkout))
 
 
 class FakeSource:
@@ -120,6 +146,33 @@ class FakeDataSource:
         return FakeEnvironment(self.store)
 
 
+class FakeRunSource:
+    def __init__(self, data_source):
+        self.data_source = data_source
+
+    def open(self):
+        return self.data_source
+
+
+class FakeDetectorSet:
+    covered_sources = {"TEST-AIN"}
+    epics_metadata = {
+        "delay": "XPP:TEST:DELAY.RBV",
+        "state": "XPP:TEST:STATE",
+    }
+
+    def __init__(self, data_source):
+        self.data_source = data_source
+
+    def read(self, event):
+        analog = event.payloads[AnalogType].values
+        epics = self.data_source.store.states[self.data_source.store.index]
+        return {
+            "ai": {f"ch{index:02d}": value for index, value in enumerate(analog)},
+            "epics": epics,
+        }
+
+
 def test_profile_run_values_discovers_and_profiles_payloads(monkeypatch):
     events = [
         FakeEvent([0.0, 5.0], [90, 137]),
@@ -129,19 +182,16 @@ def test_profile_run_values_discovers_and_profiles_payloads(monkeypatch):
         {"delay": 3.1, "state": "MOVING"},
         {"delay": 4.2, "state": "READY"},
     ]
-    monkeypatch.setattr(
-        utils,
-        "open_local_run",
-        lambda _run: (FakeDataSource(events, epics_states), []),
-    )
     monkeypatch.setattr(utils, "_show_table", lambda *_args: None)
 
-    profile = utils.profile_run_values(12)
+    data_source = FakeDataSource(events, epics_states)
+    source = FakeRunSource(data_source)
+    profile = utils.profile_run_values(
+        12, source=source, detector_set=FakeDetectorSet(data_source)
+    )
 
     assert profile["events"] == 2
-    analog = profile["values"][
-        "BldInfo(TEST-AIN)/Bld.BldDataAnalogInputV1/channelVoltages[1]"
-    ]
+    analog = profile["values"]["ai/ch01"]
     beam = profile["values"][
         "DetInfo(NoDetector.0:Evr.0)/EvrData.DataV4/eventCode[137]"
     ]
@@ -157,6 +207,26 @@ def test_profile_run_values_discovers_and_profiles_payloads(monkeypatch):
     np.testing.assert_array_equal(delay, [3.1, 4.2])
     np.testing.assert_array_equal(state, ["MOVING", "READY"])
     assert profile["epics"][0]["PV"] == "XPP:TEST:DELAY.RBV"
+
+
+def test_profile_run_values_can_stop_without_rendering(monkeypatch):
+    events = [FakeEvent([0.0, 5.0], [137]) for _ in range(3)]
+    states = [{"delay": 1.0, "state": "READY"} for _ in events]
+    data_source = FakeDataSource(events, states)
+    rendered = []
+    monkeypatch.setattr(utils, "_show_table", lambda *args: rendered.append(args))
+
+    profile = utils.profile_run_values(
+        12,
+        source=FakeRunSource(data_source),
+        detector_set=FakeDetectorSet(data_source),
+        max_events=2,
+        show=False,
+    )
+
+    assert profile["events"] == 2
+    assert all(values.shape == (2,) for values in profile["values"].values())
+    assert rendered == []
 
 
 def test_profile_summary_reports_discrete_changes():

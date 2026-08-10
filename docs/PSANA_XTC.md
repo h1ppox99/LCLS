@@ -34,6 +34,11 @@ mamba create -y -p "$SW/envs/ana-4.0.62" -c lcls-i -c conda-forge \
 conda activate "$SW/envs/ana-4.0.62"
 cd /home/users/hippowal/LCLS
 pip install -e . --no-deps
+
+# 4. official SLAC detector adapters used by run profiling
+mkdir -p "$SW/src"
+git clone https://github.com/slac-lcls/smalldata_tools.git "$SW/src/smalldata_tools"
+git -C "$SW/src/smalldata_tools" checkout 5cf5c0ab7830f93bbc6213f7480b7a59322008bf
 ```
 
 `mamba` and `conda` are interchangeable for `create`/`install` — same channels,
@@ -53,6 +58,7 @@ cat > psana_env.local <<'EOF'
 PSANA_ENV=/home/groups/darve/hippowal/sw/envs/ana-4.0.62
 PSANA_PSDM=/home/groups/darve/hippowal/psdm
 PSANA_CONDA_SH=/home/groups/darve/hippowal/sw/miniforge/etc/profile.d/conda.sh
+SMALLDATA_TOOLS=/home/groups/darve/hippowal/sw/src/smalldata_tools
 EOF
 ```
 
@@ -85,8 +91,8 @@ python -m automask.producers.build_features --run 389 475
 ```
 
 `psana_env.sh` sets the `SIT_*` variables and activates the expected psana
-environment. `automask.io.read_xtc.open_local_run()` opens explicit stream files
-and configures calibration lookup.
+environment. `automask.io.read_xtc.local_run_source()` describes the explicit
+stream files and configures calibration lookup when opened.
 
 Run 389 is incomplete locally: only truncated stream `s00` is available. It
 cannot produce a complete bright-only sum or a verified run-specific reference

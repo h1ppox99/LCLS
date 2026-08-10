@@ -2,8 +2,7 @@
 """
 io/xtc_raw.py -- read the per-shot SCALARS out of an XTC stream without psana.
 
-`io/read_xtc.py` is the real reader and stays the one to use wherever psana is
-available. This module exists because the identification study
+This standalone diagnostic exists because the identification study
 (`studies/loss_identification.py`) has five claims that need real data, and on a
 checkout where psana cannot be installed -- it ships as a linux-64/osx-64 conda
 package and this is osx-arm64 -- every one of them was blocked on the
@@ -210,7 +209,7 @@ def decode_ipmfex(payload: bytes) -> Tuple[np.ndarray, float, float, float]:
 
 
 def decode_gasdet(payload: bytes) -> float:
-    """`f_11_ENRC`, the channel `read_xtc.scan_shots` uses."""
+    """Decode the canonical ``gas_detector/f_11_ENRC`` channel."""
     return float(struct.unpack_from("<d", payload, 0)[0])
 
 
@@ -363,33 +362,6 @@ def identify_monitors(scan: RawScan, verbose: bool = True) -> Dict[str, int]:
                 print(f"    confirm: {name}/channels[{ci}] median {got:.4f} "
                       f"(DATA.md run 389: {med:.4f})")
     return assigned
-
-
-def to_shot_meta(scan: RawScan, assigned: Optional[Dict[str, int]] = None):
-    """A `ShotMeta` from a raw scan -- the same object `read_xtc.scan_shots`
-    returns, so `ShotSelection` and everything downstream is unchanged."""
-    from automask.shot_selection import ShotMeta
-
-    assigned = identify_monitors(scan, verbose=False) if assigned is None else assigned
-    intensity: Dict[str, np.ndarray] = {}
-    if "diodeU" in assigned:
-        sp = assigned["diodeU"]
-        intensity["diodeU"] = scan.ipm_sum[sp]
-        intensity["sample_diode"] = scan.ipm_channels[sp][:, 0]
-    if "lombpm" in assigned:
-        intensity["lombpm"] = scan.ipm_sum[assigned["lombpm"]]
-    if scan.gasdet is not None:
-        intensity["gasdet"] = scan.gasdet
-    if not intensity:
-        raise RuntimeError("no monitor could be identified; refusing to build a "
-                           "ShotMeta with unnamed sources")
-    return ShotMeta(run=scan.run, beam_on=scan.beam_on, cc_open=scan.cc_open,
-                    vcc_open=scan.vcc_open, intensity=intensity)
-
-
-def scan_shots(run: int, max_events: Optional[int] = None):
-    """psana-free drop-in for `read_xtc.scan_shots`."""
-    return to_shot_meta(scan(run, max_events))
 
 
 # ==========================================================================

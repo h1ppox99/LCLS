@@ -11,6 +11,7 @@
 #   PSANA_ENV=/home/groups/darve/hippowal/sw/envs/ana-4.0.62
 #   PSANA_PSDM=/home/groups/darve/hippowal/psdm
 #   PSANA_CONDA_SH=/home/groups/darve/hippowal/sw/miniforge/etc/profile.d/conda.sh
+#   SMALLDATA_TOOLS=/home/groups/darve/hippowal/sw/src/smalldata_tools
 #
 # PSANA_CONDA_SH is only needed where `conda` is not already on PATH, which is
 # the normal case inside a batch job. See docs/PSANA_XTC.md for the one-time
@@ -64,6 +65,18 @@ _psana_setup() {
     conda activate "$envp" || {
         echo "psana_env.sh: conda activate '$envp' failed" >&2; return 1; }
 
+    if [ -n "${SMALLDATA_TOOLS:-}" ]; then
+        [ -d "$SMALLDATA_TOOLS/smalldata_tools" ] || {
+            echo "psana_env.sh: invalid SMALLDATA_TOOLS checkout: $SMALLDATA_TOOLS" >&2
+            return 1
+        }
+        export PYTHONPATH="$SMALLDATA_TOOLS${PYTHONPATH:+:$PYTHONPATH}"
+        python -c "import smalldata_tools" 2>/dev/null || {
+            echo "psana_env.sh: cannot import smalldata_tools from $SMALLDATA_TOOLS" >&2
+            return 1
+        }
+    fi
+
     # Prove it took, rather than trusting it.
     case "$(command -v python)" in
         "$envp"/*) ;;
@@ -73,11 +86,15 @@ _psana_setup() {
     python -c "import psana" 2>/dev/null || {
         echo "psana_env.sh: '$envp' has no psana -- see docs/PSANA_XTC.md" >&2
         return 1; }
-
     echo "psana env ready:"
     echo "  SIT_PSDM_DATA=$SIT_PSDM_DATA"
     echo "  SIT_ROOT=$SIT_ROOT"
     echo "  SIT_DATA=$SIT_DATA"
+    if python -c "import smalldata_tools" 2>/dev/null; then
+        echo "  smalldata_tools: $(python -c 'import smalldata_tools; print(smalldata_tools.__path__[0])')"
+    else
+        echo "  smalldata_tools: unavailable (run profiling disabled)"
+    fi
     echo "  python: $(command -v python)"
 }
 

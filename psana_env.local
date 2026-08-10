@@ -1,2 +1,3 @@
 PSANA_ENV=/Data/hippolyte.wallaert/envs/ana-4.0.62
 PSANA_PSDM=/Data/hippolyte.wallaert/psdm
+SMALLDATA_TOOLS=/Data/hippolyte.wallaert/LCLS/sw/src/smalldata_tools

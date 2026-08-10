@@ -129,7 +129,7 @@ def check(run: int = 475) -> bool:
     actual frame, not the presence of a directory.
     """
     import numpy as np
-    from automask.io.read_xtc import JUNGFRAU_NAME, calib_dir, open_local_run
+    from automask.io.read_xtc import JUNGFRAU_NAME, calib_dir, local_run_source
 
     ok = True
     cdir = calib_dir()
@@ -146,7 +146,9 @@ def check(run: int = 475) -> bool:
         ok &= os.path.exists(target)
 
     import psana
-    ds, files = open_local_run(run)
+    source = local_run_source(run)
+    ds = source.open()
+    files = source.files
     print(f"  run {run}: {len(files)} stream(s)")
     det = psana.Detector(JUNGFRAU_NAME)
     for evt in ds.events():

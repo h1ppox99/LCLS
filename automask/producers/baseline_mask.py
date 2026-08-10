@@ -47,10 +47,10 @@ def select_events_by_i0(run: int = RUN, drop_top_percent: float = 1.0,
 def xtc_sum(run: int = RUN, n_images: int = 100) -> np.ndarray:
     """Recreate the notebook's selected, negative-clipped XTC accumulation."""
     import psana
-    from automask.io.read_xtc import open_local_run
+    from automask.io.read_xtc import local_run_source
 
     keep = select_events_by_i0(run)
-    ds, _ = open_local_run(run)
+    ds = local_run_source(run).open()
     detector = psana.Detector(DETNAME)
     total = np.zeros(ASM_SHAPE, dtype=np.float64)
     used = 0

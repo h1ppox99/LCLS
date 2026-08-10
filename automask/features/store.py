@@ -3,7 +3,7 @@ features/store.py -- resolve a FeatureSpec to a per-pixel array, compute-or-cach
 
 This is the only psana-touching part of the feature layer. ``get(run, spec)``
 returns the cached ``.npy`` if present (numpy-only, instant); otherwise it
-computes the feature from raw XTC -- ``scan_shots`` -> ``selection.resolve`` ->
+computes the feature from raw XTC -- ``ShotMeta`` -> ``selection.resolve`` ->
 ``iter_calibrated`` -> reduce -> cache -> return. Evaluation therefore stays
 numpy-only whenever the cache is warm, and auto-extends to any new selection or
 reduction on demand.
@@ -62,9 +62,26 @@ def _assemble(panel: np.ndarray, ix: np.ndarray, iy: np.ndarray) -> np.ndarray:
 class FeatureStore:
     """Compute-or-load feature arrays, caching provenance-keyed ``.npy`` files."""
 
-    def __init__(self, cache_dir: Path | None = None):
+    def __init__(
+        self,
+        cache_dir: Path | None = None,
+        shot_meta: ShotMeta | None = None,
+    ):
         self.cache_dir = Path(cache_dir) if cache_dir else (
             ROOT / "automask" / "outputs" / "cache" / "features")
+        self.shot_meta = shot_meta
+
+    def _meta(self, run: int) -> ShotMeta:
+        if self.shot_meta is None:
+            from automask.io.read_xtc import scan_shots
+
+            return scan_shots(run)
+        if self.shot_meta.run != run:
+            raise ValueError(
+                f"FeatureStore has shot metadata for run {self.shot_meta.run}, "
+                f"not run {run}"
+            )
+        return self.shot_meta
 
     # -- public ------------------------------------------------------------
     def path(self, run: int, spec: FeatureSpec, form: str = "asm") -> Path:
@@ -198,9 +215,9 @@ class FeatureStore:
         Returns the shot-count dict (with the final ``n_used`` = frames staged)."""
         import h5py
 
-        from automask.io.read_xtc import iter_calibrated, scan_shots
+        from automask.io.read_xtc import iter_calibrated
 
-        meta: ShotMeta = scan_shots(run)
+        meta = self._meta(run)
         indices = selection.resolve(meta)
         counts = {**selection.describe(meta), "n_selected": int(indices.size)}
         print(_select_line(run, selection, counts))
@@ -258,9 +275,9 @@ class FeatureStore:
 
         Returns ``(mean, std, counts)`` where ``counts['n_used']`` is the number of
         frames actually reduced (``.calib()`` misses excluded)."""
-        from automask.io.read_xtc import iter_calibrated, scan_shots
+        from automask.io.read_xtc import iter_calibrated
 
-        meta: ShotMeta = scan_shots(run)
+        meta = self._meta(run)
         indices = selection.resolve(meta)
         counts = {**selection.describe(meta), "n_selected": int(indices.size)}
         print(_select_line(run, selection, counts))

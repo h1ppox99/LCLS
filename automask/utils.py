@@ -3,36 +3,18 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 from pathlib import Path
 
 import numpy as np
 
 from automask.io.lcls_xpp import COLON, ROOT, SmallData, smalldata_path
-from automask.io.read_xtc import JUNGFRAU_NAME, XTC_DIR, calib_dir, open_local_run
+from automask.io.read_xtc import JUNGFRAU_NAME, XTC_DIR, calib_dir, local_run_source
+from automask.io.smalldata import Lcls1SmallDataDetectors
 
 
-_PAYLOAD_FIELDS = {
-    "Jungfrau.ElementV2": ("frameNumber", "fiducials", "ticks"),
-    "Bld.BldDataEBeamV7": (
-        "ebeamCharge", "ebeamDumpCharge", "ebeamEnergyBC1",
-        "ebeamEnergyBC2", "ebeamL3Energy", "ebeamLTU250", "ebeamLTU450",
-        "ebeamLTUAngX", "ebeamLTUAngY", "ebeamLTUPosX", "ebeamLTUPosY",
-        "ebeamPhotonEnergy", "ebeamPkCurrBC1", "ebeamPkCurrBC2",
-        "ebeamUndAngX", "ebeamUndAngY", "ebeamUndPosX", "ebeamUndPosY",
-        "ebeamXTCAVAmpl", "ebeamXTCAVPhase", "damageMask",
-    ),
-    "Bld.BldDataPhaseCavityV1": (
-        "charge1", "charge2", "fitTime1", "fitTime2",
-    ),
-    "Bld.BldDataFEEGasDetEnergyV1": (
-        "f_11_ENRC", "f_12_ENRC", "f_21_ENRC",
-        "f_22_ENRC", "f_63_ENRC", "f_64_ENRC",
-    ),
-    "Lusi.IpmFexV1": ("channel", "sum", "xpos", "ypos"),
-    "Bld.BldDataAnalogInputV1": ("channelVoltages",),
-    "Bld.BldDataBeamMonitorV1": (
-        "TotalIntensity", "X_Position", "Y_Position",
-    ),
+_PAYLOAD_ACCESSOR_VETO = {
+    "TypeId", "Version", "calib", "data", "frame", "image", "raw", "waveform"
 }
 
 
@@ -45,7 +27,7 @@ def _payload_type_name(payload_type):
 
 
 def configure_psana_environment():
-    """Set psana's required paths before psana is first imported."""
+    """Configure psana and optional SLAC tools in the current interpreter."""
     repo_root = Path(__file__).resolve().parent.parent
     local_config = repo_root / "psana_env.local"
     config = {}
@@ -68,10 +50,30 @@ def configure_psana_environment():
     os.environ["SIT_PSDM_DATA"] = psdm
     os.environ.setdefault("SIT_ROOT", str(Path(psdm) / "sit_root"))
     os.environ.setdefault("SIT_DATA", str(Path(psdm) / "data"))
-    return {
+    environment = {
         name: os.environ[name]
         for name in ("SIT_PSDM_DATA", "SIT_ROOT", "SIT_DATA")
     }
+
+    checkout = os.environ.get("SMALLDATA_TOOLS") or config.get("SMALLDATA_TOOLS")
+    if checkout:
+        checkout = str(Path(checkout).expanduser().resolve())
+        if not (Path(checkout) / "smalldata_tools").is_dir():
+            raise RuntimeError(
+                f"Invalid SMALLDATA_TOOLS checkout: {checkout}/smalldata_tools "
+                "does not exist."
+            )
+        os.environ["SMALLDATA_TOOLS"] = checkout
+        pythonpath = os.environ.get("PYTHONPATH", "").split(os.pathsep)
+        if checkout not in pythonpath:
+            os.environ["PYTHONPATH"] = os.pathsep.join(
+                [checkout, *filter(None, pythonpath)]
+            )
+        if checkout not in sys.path:
+            sys.path.insert(0, checkout)
+        environment["SMALLDATA_TOOLS"] = checkout
+
+    return environment
 
 
 def _show_table(title, rows, columns=None):
@@ -193,17 +195,67 @@ def list_experiment_content(
     }
 
 
-def _payload_value(payload, accessor):
-    value = getattr(payload, accessor)()
+def _short_values(field, value):
     array = np.asarray(value)
     if array.ndim == 0:
-        return {accessor: float(array)}
-    if array.ndim != 1 or array.size > 64 or array.dtype.kind not in "biuf":
+        return {field: array.item()}
+    if array.ndim != 1 or array.size > 64 or array.dtype.kind not in "biufcUS":
         raise ValueError("field is not a short numeric vector")
     return {
-        f"{accessor}[{index}]": float(item)
+        f"{field}[{index}]": item.item() if hasattr(item, "item") else item
         for index, item in enumerate(array)
     }
+
+
+def _discover_payload_values(payload):
+    values = {}
+    errors = 0
+    for accessor in dir(payload):
+        if accessor.startswith("_") or accessor in _PAYLOAD_ACCESSOR_VETO:
+            continue
+        method = getattr(payload, accessor)
+        if not callable(method):
+            continue
+        try:
+            values.update(_short_values(accessor, method()))
+        except (AttributeError, IndexError, TypeError, ValueError):
+            errors += 1
+    return values, errors
+
+
+def _source_detector_name(source_name):
+    match = re.fullmatch(r"(?:BldInfo|DetInfo)\((.*)\)", source_name)
+    return match.group(1) if match else source_name
+
+
+def _record_values(columns, metadata, group, values, n_events, **field_info):
+    for field, value in values.items():
+        try:
+            extracted = _short_values(field, value)
+        except (TypeError, ValueError):
+            continue
+        for expanded_field, item in extracted.items():
+            field_id = f"{group}/{expanded_field}"
+            if field_id not in columns:
+                columns[field_id] = [None] * n_events
+                metadata[field_id] = {
+                    **field_info,
+                    "source": group,
+                    "field": expanded_field,
+                }
+            columns[field_id][-1] = item
+
+
+def _profile_array(values):
+    present = [value for value in values if value is not None]
+    numeric = present and all(
+        isinstance(value, (bool, int, float, complex, np.number))
+        for value in present
+    )
+    return np.asarray(
+        [np.nan if value is None and numeric else value for value in values],
+        dtype=float if numeric else object,
+    )
 
 
 def _column_summary(values):
@@ -212,14 +264,19 @@ def _column_summary(values):
         available = int(available_mask.sum())
         if not available:
             return "0.0%", "unavailable", "no values"
-        observed = values[available_mask].astype(str)
+        text_values = np.asarray([
+            value.decode("utf-8", errors="replace")
+            if isinstance(value, bytes) else str(value)
+            for value in values
+        ], dtype=object)
+        observed = text_values[available_mask]
         unique, counts = np.unique(observed, return_counts=True)
         coverage = f"{available / values.size:.1%}"
         if unique.size == 1:
             return coverage, "constant", unique[0]
         changes = int(np.count_nonzero(
             available_mask[1:] & available_mask[:-1]
-            & (values[1:] != values[:-1])
+            & (text_values[1:] != text_values[:-1])
         ))
         counts_text = ", ".join(
             f"{value}: {count}" for value, count in zip(unique, counts)
@@ -252,26 +309,25 @@ def _column_summary(values):
     )
 
 
-def profile_run_values(run):
-    """Profile shot payloads and EPICS state over a full XTC run."""
-    data_source, _ = open_local_run(run)
-    epics_store = data_source.env().epicsStore()
+def profile_run_values(
+    run, source=None, detector_set=None, max_events=None, show=True
+):
+    """Profile one run through smalldata_tools and psana payload discovery."""
+    source = source or local_run_source(run)
+    data_source = source.open()
+    detector_set = detector_set or Lcls1SmallDataDetectors(data_source)
     payloads = {}
     columns = {}
     field_metadata = {}
     evr_history = {}
-    epics_columns = {}
-    epics_metadata = {}
     n_events = 0
 
     for event in data_source.events():
         n_events += 1
         for values in columns.values():
-            values.append(np.nan)
+            values.append(None)
         for history in evr_history.values():
             history.append(None)
-        for values in epics_columns.values():
-            values.append(None)
 
         for event_key in event.keys():
             payload_type = event_key.type()
@@ -286,17 +342,10 @@ def profile_run_values(run):
                 "type": type_name,
                 "key": key_name or "—",
                 "events": 0,
-                "fields": set(),
                 "errors": 0,
             })
             info["events"] += 1
-            if (
-                payload_type is None
-                or (
-                    type_name != "EvrData.DataV4"
-                    and type_name not in _PAYLOAD_FIELDS
-                )
-            ):
+            if payload_type is None:
                 continue
 
             args = (payload_type, event_key.src())
@@ -317,42 +366,36 @@ def profile_run_values(run):
                     info["errors"] += 1
                 continue
 
-            for accessor in _PAYLOAD_FIELDS.get(type_name, ()):
-                try:
-                    extracted = _payload_value(payload, accessor)
-                except (AttributeError, IndexError, TypeError, ValueError):
-                    info["errors"] += 1
-                    continue
-                for field, value in extracted.items():
-                    field_id = f"{source_name}/{type_name}/{field}"
-                    if field_id not in columns:
-                        columns[field_id] = [np.nan] * n_events
-                        field_metadata[field_id] = {
-                            "source": source_name,
-                            "type": type_name,
-                            "field": field,
-                        }
-                    columns[field_id][-1] = value
-                    info["fields"].add(field)
+            if _source_detector_name(source_name) in detector_set.covered_sources:
+                continue
+            discovered, errors = _discover_payload_values(payload)
+            info["errors"] += errors
+            _record_values(
+                columns,
+                field_metadata,
+                f"{source_name}/{type_name}",
+                discovered,
+                n_events,
+                type=type_name,
+                origin="psana payload",
+            )
 
-        for pv_name in epics_store.pvNames():
-            alias = epics_store.alias(pv_name) or pv_name
-            field_id = f"EPICS/{alias}"
-            if field_id not in epics_columns:
-                epics_columns[field_id] = [None] * n_events
-                epics_metadata[field_id] = {
-                    "alias": alias,
-                    "pv": pv_name,
-                    "errors": 0,
-                }
-            try:
-                value = epics_store.value(alias)
-                array = np.asarray(value)
-                if array.ndim != 0 or array.dtype.kind not in "biufUOS":
-                    raise ValueError("EPICS value is not scalar")
-                epics_columns[field_id][-1] = array.item()
-            except (AttributeError, KeyError, TypeError, ValueError):
-                epics_metadata[field_id]["errors"] += 1
+        for detector_name, detector_values in detector_set.read(event).items():
+            if not isinstance(detector_values, dict):
+                continue
+            group = "EPICS" if detector_name == "epics" else detector_name
+            _record_values(
+                columns,
+                field_metadata,
+                group,
+                detector_values,
+                n_events,
+                type="EPICS" if group == "EPICS" else "smalldata_tools",
+                origin="smalldata_tools",
+            )
+
+        if max_events is not None and n_events >= max_events:
+            break
 
     if not n_events:
         raise RuntimeError(f"Run {run:04d} contains no decodable events")
@@ -360,61 +403,55 @@ def profile_run_values(run):
     for identity, history in evr_history.items():
         codes = sorted(set().union(*(codes or set() for codes in history)))
         source_name, type_name, _key_name = identity
-        info = payloads[identity]
         for code in codes:
             field = f"eventCode[{code}]"
             field_id = f"{source_name}/{type_name}/{field}"
             columns[field_id] = [
-                np.nan if event_codes is None else float(code in event_codes)
+                None if event_codes is None else float(code in event_codes)
                 for event_codes in history
             ]
             field_metadata[field_id] = {
                 "source": source_name,
                 "type": type_name,
                 "field": field,
+                "origin": "psana EVR",
             }
-            info["fields"].add(field)
 
     value_arrays = {
-        field_id: np.asarray(values, dtype=float)
+        field_id: _profile_array(values)
         for field_id, values in columns.items()
     }
-    epics_arrays = {}
-    for field_id, values in epics_columns.items():
-        present = [value for value in values if value is not None]
-        numeric = present and all(
-            isinstance(value, (bool, int, float, np.number)) for value in present
-        )
-        epics_arrays[field_id] = np.asarray(
-            [np.nan if value is None else value for value in values],
-            dtype=float if numeric else object,
-        )
-    value_arrays.update(epics_arrays)
-    payload_rows = []
-    for info in sorted(
-        payloads.values(), key=lambda row: (row["source"], row["type"], row["key"])
-    ):
-        payload_rows.append({
+    epics_arrays = {
+        field_id: values
+        for field_id, values in value_arrays.items()
+        if field_id.startswith("EPICS/")
+    }
+    payload_rows = [
+        {
             "source": info["source"],
             "alias": info["alias"],
             "type": info["type"],
             "key": info["key"],
             "coverage": f'{info["events"] / n_events:.1%}',
-            "profiled fields": len(info["fields"]),
             "read errors": info["errors"],
-        })
+        }
+        for info in sorted(
+            payloads.values(),
+            key=lambda row: (row["source"], row["type"], row["key"]),
+        )
+    ]
 
     value_rows = []
-    for field_id, values in sorted(
-        ((field_id, values) for field_id, values in value_arrays.items()
-         if not field_id.startswith("EPICS/"))
-    ):
+    for field_id, values in sorted(value_arrays.items()):
+        if field_id.startswith("EPICS/"):
+            continue
         coverage, variation, observed = _column_summary(values)
         metadata = field_metadata[field_id]
         value_rows.append({
             "source": metadata["source"],
             "field": metadata["field"],
             "type": metadata["type"],
+            "origin": metadata["origin"],
             "coverage": coverage,
             "variation": variation,
             "observed": observed,
@@ -423,20 +460,20 @@ def profile_run_values(run):
     epics_rows = []
     for field_id, values in sorted(epics_arrays.items()):
         coverage, variation, observed = _column_summary(values)
-        metadata = epics_metadata[field_id]
+        alias = field_id.removeprefix("EPICS/")
         epics_rows.append({
-            "alias": metadata["alias"],
-            "PV": metadata["pv"],
+            "alias": alias,
+            "PV": detector_set.epics_metadata.get(alias, alias),
             "dtype": str(values.dtype),
             "coverage": coverage,
             "variation": variation,
             "observed": observed,
-            "read errors": metadata["errors"],
         })
 
-    _show_table(f"Raw XTC payloads ({n_events:,} decoded events)", payload_rows)
-    _show_table("Automatically profiled per-shot values", value_rows)
-    _show_table("EPICS process variables", epics_rows)
+    if show:
+        _show_table(f"Raw XTC payloads ({n_events:,} decoded events)", payload_rows)
+        _show_table("Profiled per-shot values", value_rows)
+        _show_table("EPICS process variables", epics_rows)
     return {
         "run": int(run),
         "events": n_events,
@@ -447,10 +484,11 @@ def profile_run_values(run):
     }
 
 
-def print_detector_geometry(run, detector_name=JUNGFRAU_NAME):
+def print_detector_geometry(run, detector_name=JUNGFRAU_NAME, source=None):
     import psana
 
-    data_source, _ = open_local_run(run)
+    source = source or local_run_source(run)
+    data_source = source.open()
     event = next(data_source.events(), None)
     if event is None:
         raise RuntimeError(f"Run {run:04d} contains no decodable events")

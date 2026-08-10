@@ -29,7 +29,7 @@ streams.  This local copy has neither the registry entry nor the .smd streams
     otherwise look in  $SIT_PSDM_DATA/calib  (empty) and return uncalibrated
     data (gain factors = None).
 
-Both of those are done for you in open_local_run() below.
+Both of those are represented by ``local_run_source()`` below.
 
 --------------------------------------------------------------------------
 Prerequisites (see PSANA_XTC.md):
@@ -49,15 +49,18 @@ Prerequisites (see PSANA_XTC.md):
 """
 from __future__ import annotations
 import os
-import glob
 import argparse
+from pathlib import Path
 
 import numpy as np
 import h5py
 
+from automask.io.psana1 import Psana1RunSource
+
 # --- local data locations --------------------------------------------------
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))   # .../LCLS (automask/io/ -> LCLS)
 XTC_DIR = os.path.join(ROOT, "xtc")
+EXPERIMENT = "xppl1016922"
 
 
 def calib_dir() -> str:
@@ -69,124 +72,57 @@ def calib_dir() -> str:
 
 JUNGFRAU_NAME = "jungfrau1M_alcove"       # psana alias; source is XppEndstation.0:Jungfrau.0
 
-# Per-shot scalar sources on the XTC stream. These conventions are hard-coded
-# here (not read from the run config) and are documented with their evidence in
-# repo-root DATA.md.
-#
-# There is NO laser in this experiment: one x-ray beam is split into the CC and
-# VCC branches, whose shutters are analog voltages on XPP-AIN-01. EVR codes
-# 90/91 are labelled 'Laser on'/'Laser off' in the stock XPP timing config and
-# mean nothing here -- do not resurrect them as a shot filter.
-EVR_NAME = "evr0"                         # NoDetector.0:Evr.0
-BEAM_ON_CODE = 137                        # labelled 'Beam On' in EvrData.ConfigV7
 
-AIN_NAME = "XPP-AIN-01"                   # Bld.BldDataAnalogInputV1, 16 channels
-AIN_CC_CHANNEL = 2                        # small data: ai/ch02
-AIN_VCC_CHANNEL = 3                       # small data: ai/ch03
-CC_VCC_THRESHOLD = 2.0                    # volts; lines sit at ~0.045 or ~5.05
-
-# Intensity monitors -> (psana source, accessor). sample_diode/diodeU/lombpm are
-# DOWNSTREAM of the CC/VCC split and track what the detector receives; ipm2 and
-# gasdet are upstream and do not (see DATA.md).
-BMMON_NAME = "XPP-SB2-BMMON"              # ipm2, upstream of the split
-DIODEU_SRC = "BldInfo(XppEnds_Ipm0)"      # small data: diodeU
-LOMBPM_SRC = "BldInfo(XppMon_Pim0)"       # small data: lombpm
-GASDET_SRC = "BldInfo(FEEGasDetEnergy)"   # small data: gas_detector
-
-
-def open_local_run(run: int = 475):
-    """Open all streams of a run from the local XTC, with calibration wired up.
-
-    Returns (DataSource, list_of_files).
-    """
-    import psana
-    # Point psana at the (real-colon) calib tree built by setup_psdm_layout.py.
-    cdir = calib_dir()
-    if os.path.isdir(cdir):
-        psana.setOption("psana.calib-dir", cdir)
-    else:
-        print(f"[warn] calib dir not found: {cdir}\n"
-              f"       run setup_psdm_layout.py first, or frames will be uncalibrated.")
-    files = sorted(glob.glob(
-        os.path.join(XTC_DIR, f"xppl1016922-r{run:04d}-s0*-c00.xtc")))
+def local_run_source(run: int = 475) -> Psana1RunSource:
+    """Resolve one run from the explicit XTC files in this repository."""
+    files = sorted(Path(XTC_DIR).glob(f"{EXPERIMENT}-r{run:04d}-s*-c*.xtc"))
     if not files:
         raise FileNotFoundError(f"no XTC streams for run {run} in {XTC_DIR}")
-    print(f"[psana] opening {len(files)} streams for run {run}")
-    ds = psana.DataSource(*files)
-    return ds, files
+    return Psana1RunSource.from_files(EXPERIMENT, run, files, calib_dir())
 
 
-def scan_shots(run: int = 475, max_events: int | None = None):
-    """Pass 1: read only the cheap per-shot scalars for a run -> ``ShotMeta``.
+def slac_run_source(run: int, *, mpi: bool = False) -> Psana1RunSource:
+    """Resolve one run through the standard SLAC psana1 experiment layout."""
+    return Psana1RunSource.from_experiment(EXPERIMENT, run, smd=True, mpi=mpi)
 
-    Iterates events reading the EVR codes, the CC/VCC shutter voltages and the
-    intensity monitors, but NOT the Jungfrau ``.calib()`` (the expensive part),
-    so it is fast enough to scan the whole run and get the exact intensity
-    distribution the percentile filter needs.
 
-    ``psana.Detector`` cannot wrap the analog input or the IPM fex types
-    (``Detector('XPP-AIN-01').get()`` returns None; ``IpmFexV1`` raises
-    "object of type 'IpmFexV1' has no len()"), so those are read with the raw
-    ``evt.get(type, source)`` accessors. A monitor whose source is missing from a
-    run yields NaN for that shot rather than aborting the scan.
+def _run_source(run: int, source: Psana1RunSource | None) -> Psana1RunSource:
+    resolved = source or local_run_source(run)
+    if resolved.run != run:
+        raise ValueError(f"requested run {run}, but source describes run {resolved.run}")
+    return resolved
 
-    This is the single psana-touching seam behind ``ShotSelection``. On the SLAC
-    cluster, swap ``open_local_run(run)`` for
-    ``psana.DataSource(f'exp=xppl1016922:run={run}:smd')`` (the small-data stream
-    makes this pass nearly free) -- nothing else changes.
-    """
-    import psana
+
+def scan_shots(
+    run: int = 475,
+    max_events: int | None = None,
+    source: Psana1RunSource | None = None,
+):
+    """Build selection metadata from the canonical run-profiler columns."""
+    from automask.utils import profile_run_values
     from automask.shot_selection import ShotMeta
 
-    ds, _ = open_local_run(run)
-    evr = psana.Detector(EVR_NAME)
-    ain_src = psana.Source(f"BldInfo({AIN_NAME})")
-    diodeu_src = psana.Source(DIODEU_SRC)
-    lombpm_src = psana.Source(LOMBPM_SRC)
-    gasdet_src = psana.Source(GASDET_SRC)
-    try:
-        bmmon = psana.Detector(BMMON_NAME)
-    except Exception as e:                # pragma: no cover - depends on run config
-        print(f"[warn] run {run}: ipm2 monitor {BMMON_NAME} unavailable: {e}")
-        bmmon = None
-
-    beam_on, cc_open, vcc_open = [], [], []
-    mon = {name: [] for name in ("sample_diode", "diodeU", "lombpm", "ipm2", "gasdet")}
-    for n, evt in enumerate(ds.events()):
-        beam_on.append(BEAM_ON_CODE in (evr.eventCodes(evt) or ()))
-
-        ain = evt.get(psana.Bld.BldDataAnalogInputV1, ain_src)
-        volts = np.asarray(ain.channelVoltages()) if ain is not None else np.full(16, np.nan)
-        cc_open.append(volts[AIN_CC_CHANNEL] > CC_VCC_THRESHOLD)
-        vcc_open.append(volts[AIN_VCC_CHANNEL] > CC_VCC_THRESHOLD)
-
-        du = evt.get(psana.Lusi.IpmFexV1, diodeu_src)
-        mon["sample_diode"].append(float(du.channel()[0]) if du is not None else np.nan)
-        mon["diodeU"].append(float(du.sum()) if du is not None else np.nan)
-
-        lb = evt.get(psana.Lusi.IpmFexV1, lombpm_src)
-        mon["lombpm"].append(float(lb.sum()) if lb is not None else np.nan)
-
-        d = bmmon.get(evt) if bmmon is not None else None
-        mon["ipm2"].append(float(d.TotalIntensity()) if d is not None else np.nan)
-
-        gd = evt.get(psana.Bld.BldDataFEEGasDetEnergyV1, gasdet_src)
-        mon["gasdet"].append(float(gd.f_11_ENRC()) if gd is not None else np.nan)
-
-        if max_events and (n + 1) >= max_events:
-            break
-    if not beam_on:
-        raise RuntimeError(f"run {run}: no events scanned")
-    intensity = {k: np.asarray(v) for k, v in mon.items()}
-    print(f"[scan] run {run:04d}: {len(beam_on)} shots read "
-          f"(beam {np.mean(beam_on):.1%}, CC open {np.mean(cc_open):.1%}, "
-          f"VCC open {np.mean(vcc_open):.1%})")
-    return ShotMeta(run=run, beam_on=np.asarray(beam_on),
-                    cc_open=np.asarray(cc_open), vcc_open=np.asarray(vcc_open),
-                    intensity=intensity)
+    profile = profile_run_values(
+        run,
+        source=_run_source(run, source),
+        max_events=max_events,
+        show=False,
+    )
+    meta = ShotMeta.from_profile(profile)
+    print(
+        f"[scan] run {run:04d}: {meta.n_events} shots read "
+        f"(beam {meta.beam_on.mean():.1%}, CC open {meta.cc_open.mean():.1%}, "
+        f"VCC open {meta.vcc_open.mean():.1%})"
+    )
+    return meta
 
 
-def iter_calibrated(run: int, indices, detname: str = JUNGFRAU_NAME):
+def iter_calibrated(
+    run: int,
+    indices,
+    detname: str = JUNGFRAU_NAME,
+    source: Psana1RunSource | None = None,
+):
     """Pass 2: yield ``(event_index, calibrated_panel)`` for the selected events.
 
     ``indices`` is any iterable of event indices (as returned by
@@ -201,7 +137,7 @@ def iter_calibrated(run: int, indices, detname: str = JUNGFRAU_NAME):
     if not wanted:
         return
     last = max(wanted)
-    ds, _ = open_local_run(run)
+    ds = _run_source(run, source).open()
     det = psana.Detector(detname)
     for event_index, evt in enumerate(ds.events()):
         if event_index in wanted:
@@ -212,11 +148,15 @@ def iter_calibrated(run: int, indices, detname: str = JUNGFRAU_NAME):
             break
 
 
-def panel_geometry(run: int, detname: str = JUNGFRAU_NAME):
+def panel_geometry(
+    run: int,
+    detname: str = JUNGFRAU_NAME,
+    source: Psana1RunSource | None = None,
+):
     """psana panel->assembled index maps ``(ix, iy)`` for one run (no small-data)."""
     import psana
 
-    ds, _ = open_local_run(run)
+    ds = _run_source(run, source).open()
     det = psana.Detector(detname)
     next(ds.events())                     # psana needs one event before geometry
     ix = np.asarray(det.indexes_x(run), dtype=np.int64)
@@ -224,10 +164,15 @@ def panel_geometry(run: int, detname: str = JUNGFRAU_NAME):
     return ix, iy
 
 
-def extract(run: int = 475, max_events: int = 200, out: str | None = None) -> str:
+def extract(
+    run: int = 475,
+    max_events: int = 200,
+    out: str | None = None,
+    source: Psana1RunSource | None = None,
+) -> str:
     """Read up to `max_events` calibrated frames + scalars -> HDF5. Returns path."""
     import psana
-    ds, _ = open_local_run(run)
+    ds = _run_source(run, source).open()
     det = psana.Detector(JUNGFRAU_NAME)
     ebeam = psana.Detector("EBeam")
     try:

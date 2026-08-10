@@ -2,24 +2,20 @@
 shot_selection.py -- decide *which* XTC shots to build detector features from.
 
 Every scalar a selection needs (beam state, CC/VCC branch state, per-shot
-intensity monitors) is available directly from the XTC stream via psana, so
-features can be rebuilt from raw data with no small-data dependency (see
-``automask.io.read_xtc.scan_shots``).
+intensity monitors) is taken from the canonical columns produced by
+``automask.utils.profile_run_values``.
 
 Two objects:
 
-* ``ShotMeta``      -- the per-shot scalar table produced by one cheap pass over
-                       the run. Pure data, no psana.
+* ``ShotMeta``      -- the selection-specific view of a canonical run profile.
+                       Pure data, no psana.
 * ``ShotSelection`` -- a declarative spec (beam class, CC/VCC branch classes,
                        shot count, intensity percentile trim, normalization) plus
                        a pure-numpy ``resolve(meta) -> event indices``. No psana
                        here either, so the selection logic is unit-testable.
 
-Provider/consumer split: the only psana-touching code is the scan that fills a
-``ShotMeta`` (in ``automask.io.read_xtc``). Porting to the SLAC cluster means
-swapping that one scan from explicit local stream files to
-``psana.DataSource('exp=xppl1016922:run=N:smd')`` -- everything in this module is
-unchanged.
+Provider/consumer split: the profiler reads psana and official
+``smalldata_tools`` adapters; this module only interprets its numpy columns.
 """
 from __future__ import annotations
 
@@ -39,16 +35,32 @@ MONITORS = ("sample_diode", "diodeU", "lombpm", "ipm2", "gasdet")
 #: Value of ``ShotSelection.normalization`` meaning "do not rescale frames".
 NO_NORMALIZATION = "none"
 
+CC_VCC_THRESHOLD = 2.0
+
+_SHOT_META_COLUMNS = {
+    "beam_on": "DetInfo(NoDetector.0:Evr.0)/EvrData.DataV4/eventCode[137]",
+    "cc_voltage": "ai/ch02",
+    "vcc_voltage": "ai/ch03",
+}
+
+_INTENSITY_COLUMNS = {
+    "sample_diode": "diodeU/channels[0]",
+    "diodeU": "diodeU/sum",
+    "lombpm": "lombpm/sum",
+    "ipm2": "ipm2/sum",
+    "gasdet": "gas_detector/f_11_ENRC",
+}
+
 
 @dataclass
 class ShotMeta:
     """Per-shot scalar table for one run, one row per event in stream order.
 
-    Built by a single cheap pass over the XTC (scalars only, no Jungfrau
-    ``.calib()``); see ``automask.io.read_xtc.scan_shots``.
+    Built from ``profile_run_values(...)["values"]``; no detector frames are
+    decoded by that profiler pass.
 
     ``beam_on`` is EVR code 137. ``cc_open``/``vcc_open`` are the CC/VCC shutter
-    voltages thresholded at ``read_xtc.CC_VCC_THRESHOLD``. ``intensity`` maps a
+    voltages thresholded at ``CC_VCC_THRESHOLD``. ``intensity`` maps a
     monitor name in ``MONITORS`` to its per-shot readings; a monitor absent from
     the run may be reported as all-NaN rather than omitted.
     """
@@ -58,6 +70,40 @@ class ShotMeta:
     cc_open: np.ndarray
     vcc_open: np.ndarray
     intensity: Dict[str, np.ndarray] = field(default_factory=dict)
+
+    @classmethod
+    def from_profile(cls, profile: dict) -> "ShotMeta":
+        """Interpret the selection fields in a canonical run profile."""
+        columns = profile.get("values", {})
+        missing = [
+            field for field in _SHOT_META_COLUMNS.values() if field not in columns
+        ]
+        if missing:
+            raise KeyError(
+                f"run profile is missing required shot-selection columns: {missing}"
+            )
+
+        intensity = {
+            monitor: np.asarray(columns[field], dtype=np.float64)
+            for monitor, field in _INTENSITY_COLUMNS.items()
+            if field in columns
+        }
+        if not intensity:
+            raise KeyError(
+                "run profile has none of the supported intensity columns: "
+                f"{list(_INTENSITY_COLUMNS.values())}"
+            )
+
+        beam = np.asarray(columns[_SHOT_META_COLUMNS["beam_on"]], dtype=float)
+        cc = np.asarray(columns[_SHOT_META_COLUMNS["cc_voltage"]], dtype=float)
+        vcc = np.asarray(columns[_SHOT_META_COLUMNS["vcc_voltage"]], dtype=float)
+        return cls(
+            run=int(profile["run"]),
+            beam_on=np.isfinite(beam) & (beam > 0.5),
+            cc_open=np.isfinite(cc) & (cc > CC_VCC_THRESHOLD),
+            vcc_open=np.isfinite(vcc) & (vcc > CC_VCC_THRESHOLD),
+            intensity=intensity,
+        )
 
     def __post_init__(self) -> None:
         self.beam_on = np.asarray(self.beam_on, dtype=bool)

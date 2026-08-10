@@ -12,6 +12,7 @@ from __future__ import annotations
 import numpy as np
 
 from automask.features.base import FeatureSpec
+from automask.features.store import FeatureStore
 from automask.masking import Detector
 from automask.regularization.area_gate import area_gate
 from automask.regularization.blob_scale import blob_scale
@@ -140,6 +141,44 @@ def _meta(n=100, beam=None, cc=None, vcc=None, monitor=None, run=475):
         cc_open=np.ones(n, bool) if cc is None else np.asarray(cc),
         vcc_open=np.zeros(n, bool) if vcc is None else np.asarray(vcc),
         intensity={"sample_diode": ramp, "ipm2": ramp * 1000.0})
+
+
+def test_shot_meta_is_built_from_canonical_profile_columns():
+    profile = {
+        "run": 12,
+        "events": 3,
+        "values": {
+            "DetInfo(NoDetector.0:Evr.0)/EvrData.DataV4/eventCode[137]":
+                np.array([1.0, 0.0, np.nan]),
+            "ai/ch02": np.array([5.0, 0.0, np.nan]),
+            "ai/ch03": np.array([0.0, 5.0, np.nan]),
+            "diodeU/channels[0]": np.array([1.0, 2.0, 3.0]),
+            "diodeU/sum": np.array([4.0, 5.0, 6.0]),
+            "gas_detector/f_11_ENRC": np.array([7.0, 8.0, 9.0]),
+        },
+    }
+
+    meta = ShotMeta.from_profile(profile)
+
+    assert meta.run == 12
+    np.testing.assert_array_equal(meta.beam_on, [True, False, False])
+    np.testing.assert_array_equal(meta.cc_open, [True, False, False])
+    np.testing.assert_array_equal(meta.vcc_open, [False, True, False])
+    np.testing.assert_array_equal(meta.monitor("sample_diode"), [1.0, 2.0, 3.0])
+    assert set(meta.intensity) == {"sample_diode", "diodeU", "gasdet"}
+
+
+def test_feature_store_reuses_injected_shot_metadata(tmp_path):
+    meta = _meta(run=12)
+    store = FeatureStore(cache_dir=tmp_path, shot_meta=meta)
+
+    assert store._meta(12) is meta
+    try:
+        store._meta(13)
+    except ValueError as error:
+        assert "run 12" in str(error) and "run 13" in str(error)
+    else:
+        raise AssertionError("expected a run mismatch to fail")
 
 
 def test_beam_filter_selects_each_class():

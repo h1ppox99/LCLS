@@ -27,9 +27,8 @@ import glob
 import numpy as np
 import h5py
 
-# Single source of truth for the CC/VCC threshold; read_xtc imports psana lazily
-# (inside functions only), so this stays a numpy-only import.
-from automask.io.read_xtc import CC_VCC_THRESHOLD
+# Single source of truth for the CC/VCC threshold in shot-selection semantics.
+from automask.shot_selection import CC_VCC_THRESHOLD
 
 # ---- paths -----------------------------------------------------------------
 # Root of the local data copy (the dir that contains xtc/, hdf5/, calib/ ...).
