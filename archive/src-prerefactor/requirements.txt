@@ -1,3 +1,0 @@
-scikit-image
-# review.py: TIFF input support (the normalized corpus itself uses .npy).
-tifffile

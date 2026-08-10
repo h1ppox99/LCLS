@@ -10,10 +10,12 @@ for run 475; run 389 raw XTC is incomplete.
 automask/          the project — an installable Python package (import automask)
   io/              reusable readers (small-data + calib + XTC); no project logic
   stats/ regularization/ combine/   the masking method registries
+  features/        per-run feature specs + cached FeatureStore
   producers/       build the frozen inputs (need psana, run once)
   studies/         exploratory scripts + the Hydra sweep driver
+  synthetic/       synthetic-artifact benchmark (no real data needed)
   conf/ scripts/   Hydra configs + sweep launchers
-docs/              experiment + psana background
+docs/              experiment + psana background (DATA_OVERVIEW, PSANA_XTC, DATA)
 psana_env.sh       activate the ana-4.0.62 conda env (for XTC / psana)
 calib/ xtc/ hdf5/  the data mirror (gitignored — large)
 xpp_sharing/       the lab's current production method (read-only baseline)

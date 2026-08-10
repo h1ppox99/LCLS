@@ -39,18 +39,38 @@ widening `ShotSelection` with a fold index would rekey the content hash and
 invalidate the whole warm feature cache.
 
 `unsupervised/folds.py` instead makes one XTC pass and accumulates the additive
-per-pixel moments `(n, Σx, Σx²)` in **K = 10 contiguous shot blocks** (800 lit
-shots per run, 80 per fold). Any subset of folds then sums to exact mean/std
-for that subset, in numpy. From this one cache:
+per-pixel moments `(n, Σx, Σx²)` on **two** K = 10 fold axes (800 lit shots per
+run, 80 per fold). Any subset of either axis then sums to exact mean/std for
+that subset, in numpy. Two axes, because the splits below need opposite things
+from a fold:
 
-- **split-half by alternating folds** (0,2,4,… vs 1,3,5,…) — pure sampling noise,
-  drift-balanced;
-- **split-half by contiguous halves** (folds 0-4 vs 5-9) — sampling noise *plus*
-  within-run drift;
-- **cross-fold χ²** over all 10 folds — the tier-3 stationarity test.
+- **time blocks** — contiguous runs of shots in stream order;
+- **dealt folds** — shots handed out round-robin, one to each fold in turn.
+
+From the one cache:
+
+- **split-half by shot parity** (dealt folds 0,2,4,… vs 1,3,5,…) — pure sampling
+  noise, condition-balanced;
+- **split-half by contiguous halves** (time blocks 0-4 vs 5-9) — sampling noise
+  *plus* within-run drift and any change in condition mix;
+- **cross-fold χ²** over all 10 **time blocks** — the tier-3 stationarity test,
+  which needs chronology: dealt folds each span the whole run, so the same χ²
+  over them would test overdispersion rather than stationarity.
 
 `stab_alt − stab_time` is therefore a direct read of how much of the
-irreproducibility is drift rather than counting statistics.
+irreproducibility is non-stationarity rather than counting statistics.
+
+> ⚠ **The dealt axis is new and the tier-1 numbers below predate it.**
+> Previously this module built contiguous blocks only, and `stab_alt`
+> interleaved whole 80-shot *blocks*. That balanced nothing: the CC/VCC branch
+> clusters in runs of a thousand-odd shots
+> (`studies/loss_identification.py::exp_a2_interchangeable`, runs 378/389/396),
+> so over ten folds the VCC-open fraction spanned 0.425 / 0.597 / 0.175, and on
+> two of the three runs the block-alternating split came out *worse* balanced
+> than the contiguous-halves split it existed to improve on. Dealt shot by shot,
+> the spread falls to 0.025 / 0.016 / 0.050. **Every `stab_alt` figure in this
+> document was measured under the old layout and needs re-running at SLAC**; the
+> cache filename carries a layout tag so stale files rebuild rather than load.
 
 One subtlety: resampled samples replace only `sumimg`/`umean`/`ustd`, never the
 geometry floor or the calibration masks, and `sumimg` keeps its exact zero
@@ -80,7 +100,8 @@ the third decimal of a hyperparameter.
 - `stab_noise` — perturb `(mean, std)` by their analytic sampling laws
   (`mean ~ N(μ, σ²/n)`, `std ~ σ(1 + N(0,1)/√(2(n−1)))`), rebuild, IoU. Cheap,
   but assumes per-pixel independence, which common mode violates — hence:
-- `stab_alt` — rebuild on alternating folds, IoU between the two masks.
+- `stab_alt` — rebuild on even vs odd SHOTS (dealt folds), IoU between the two
+  masks. Both sides carry the same mix of experimental conditions.
 - `stab_time` — rebuild on the first vs second half of the run.
 - `stab_hyper` — jitter every float knob by lognormal(0, 0.10), rebuild, IoU.
   Integers stay integers ≥ 1; strings and hardware constants
@@ -121,6 +142,33 @@ not detectable, which is why the raw value is always reported next to its contro
 Ring edges, sector edges and winsorisation thresholds are all fixed from the
 **floor-only** pixel set, so no candidate is scored on a partition it chose.
 
+### The frozen noise reference
+
+`σ̂²` and `μ_ring` are also fixed from the floor-only set (`ring_reference`), not
+read off the candidate's own survivors. Estimating them per candidate leaves a
+milder form of the defect that sinks Welch's F: a mask that removes noisy pixels
+shrinks `σ̂²`, shrinking the term subtracted from its own numerator, so the
+statistic **rises when the mask works**. On a synthetic ring stack with one
+sector at 8× the per-pixel variance and a real 4% anisotropy elsewhere, masking
+the noisy sector moves the candidate-local excess *up* by +1.28 points, in 5 of 6
+draws. With the reference frozen it moves down, in 6 of 6.
+
+Freezing the pixel *set* is not sufficient on its own, and this is the part worth
+knowing. The floor removes geometry and calib defects but **not** the intensity
+defects the mask exists to find, so those pixels are still in the reference set.
+A dof-weighted pool over it returns σ̂² = 644 against a true 100 on the field
+above, and the inflated floor then swallows the real 4% anisotropy whole — every
+candidate reads exactly `0.000%` and 67% of rings clip to zero. `ring_reference`
+therefore takes the **median of the per-cell variances across the ring's
+sectors**, which returns 100.2 on the same field. On a ring with no
+variance-inflating defect the two reductions agree to three decimals, so the
+change is a no-op on clean rings. All four properties are asserted in
+`tests/test_unsupervised.py`.
+
+`Var_between` stays centred on the candidate's own ring mean; the frozen `μ` is
+the unit, not the centre. Centring on a foreign mean would fold a radial offset
+`(μ_cand − μ_ref)²` into an azimuthal statistic.
+
 ## Tier 3 — event-axis stationarity
 
 Strongest assumption: a healthy pixel's response is stationary over the run.
@@ -156,6 +204,15 @@ a surrogate is that it order masks correctly. Pooling is done on within-run
 ranks, since absolute levels differ between runs.
 
 ### Rank correlations (21 candidates × 2 runs)
+
+> ⚠ **The tier-2 rows below predate the frozen noise reference** and have not been
+> re-measured against it. Re-running `studies/metric_validation.py` needs the
+> frozen inputs (`automask/data/`) and `hdf5/smalldata/`, neither of which is
+> present in this checkout, so the change is verified only on synthetic fields
+> where the truth is known by construction. The synthetic evidence says the clean
+> case is unchanged to three decimals and only rings with a variance-inflating
+> defect move — but `azim_excess`, `azim_gain` and `azim_winrate` should be
+> treated as **unvalidated on real data** until the panel is re-run at SLAC.
 
 | metric | tier | ρ(IoU) | p | ρ(residual IoU) | ρ within top half | per-run |
 |---|---|---|---|---|---|---|
@@ -285,8 +342,12 @@ stab_alt           0.9928  ok                                  event_leak   0.00
                                                                event_gain   0.0003  ok
 ```
 
-Note `stab_time` 0.963 against `stab_alt` 0.993: the drift-balanced split is
-tighter than the chronological one, so roughly 3% of the mask is not reproducible
-across the run rather than across shots. That difference is the intended read of
-having both — pure sampling noise costs 0.7%, within-run drift costs the other
-3%.
+Note `stab_time` 0.963 against `stab_alt` 0.993: the balanced split is tighter
+than the chronological one, so roughly 3% of the mask is not reproducible across
+the run rather than across shots. That difference is the intended read of having
+both — pure sampling noise costs 0.7%, non-stationarity costs the other 3%.
+
+⚠ Both figures are from the old block-interleaved layout. Under it `stab_alt`
+was not condition-balanced, so part of what is attributed to sampling noise here
+is branch composition; the 3% gap is an upper bound on drift, not a measurement
+of it. Re-run before quoting.

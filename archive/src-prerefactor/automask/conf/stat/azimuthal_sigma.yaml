@@ -1,7 +1,0 @@
-name: azimuthal_sigma
-params:
-  npt: 1024
-  clip_k: 5.0
-  k: 5.0
-  mode: both
-  max_iter: 5

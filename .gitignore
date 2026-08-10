@@ -6,13 +6,11 @@
 /results/
 
 # --- automask frozen inputs & generated outputs (regenerable) ---
-src/automask/data/
-src/automask/outputs/
 automask/data/
 automask/outputs/
 /outputs/
 
-# --- external corpus downloads (regenerable via corpus.py --download) ---
+# --- bulk archives / external datasets ---
 /data/.downloads/
 *.tar
 *.tar.gz
@@ -40,3 +38,6 @@ __pycache__/
 build/
 dist/
 .venv/
+
+# machine-specific psana paths (see psana_env.sh header)
+psana_env.local
