@@ -68,7 +68,7 @@ environment can instead use `python -m pip install -e .`.
 
 | module | what it does |
 |--------|--------------|
-| `automask.io.lcls_xpp` | small-data HDF5 + calib files as plain numpy (`SmallData`, `load_calib`, `resolve`). No psana. |
+| `automask.io.lcls_xpp` | small-data HDF5 as plain numpy (`SmallData`, `resolve`). No psana. |
 | `automask.io.read_xtc` | pull calibrated per-event Jungfrau frames from raw XTC (needs psana). |
 | `automask.io.setup_psdm_layout` | build the psana-readable `SIT_PSDM_DATA` tree (real-colon calib names). |
 

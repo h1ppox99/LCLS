@@ -34,10 +34,6 @@ ROOT = Path(__file__).resolve().parents[2]
 PANEL_SHAPE = (2, 512, 1024)
 ASM_SHAPE = (1064, 1030)
 
-# psana calib-store coordinates for the Jungfrau1M, and its gain-stage count.
-# Constants are stored as (gain, panel, row, col) flattened to (3*2*512, 1024).
-JUNGFRAU_CALIB_TYPE = "Jungfrau::CalibV1"
-JUNGFRAU_CALIB_SOURCE = "XppEndstation.0:Jungfrau.0"
 N_GAIN = 3
 
 
@@ -134,26 +130,20 @@ class FeatureStore:
     def _materialize_calib(self, run: int, spec: FeatureSpec) -> None:
         """Cache one gain stage of a psana calibration constant, both forms.
 
-        ``lcls_xpp.load_calib`` already resolves the ``<START>-end.data`` run
-        range and the U+F022 colon encoding. It cannot infer the shape, though:
-        the Jungfrau constants carry no ``NDARRAY_DIMS`` header, so it returns a
-        flat ``(3*2*512, 1024)`` and the (gain, panel, row, col) split has to be
-        made here.
-
-        No psana: the panel->assembled maps come from the frozen index maps, so a
-        calib feature resolves in a numpy-only environment.
+        psana resolves the calibration store and applicable run range. The
+        panel->assembled maps remain the frozen project geometry used by every
+        cached feature.
         """
         from automask.geometry import index_maps
-        from automask.io.lcls_xpp import load_calib
+        from automask.io.read_xtc import detector_calibration
 
-        arr = load_calib(JUNGFRAU_CALIB_TYPE, JUNGFRAU_CALIB_SOURCE,
-                         spec.constant, run)
+        arr = detector_calibration(run, spec.constant)
         expected = (N_GAIN,) + PANEL_SHAPE
-        if arr.size != int(np.prod(expected)):
+        if arr.shape != expected:
             raise ValueError(
-                f"calib constant {spec.constant!r} for run {run} has {arr.size} "
-                f"values, expected {int(np.prod(expected))} for {expected}")
-        panel = arr.reshape(expected)[spec.gain].astype(np.float32)
+                f"calib constant {spec.constant!r} for run {run} has shape "
+                f"{arr.shape}, expected {expected}")
+        panel = arr[spec.gain].astype(np.float32)
         ix, iy = index_maps(run)
         stub = spec.cache_stub(run)
         self.cache_dir.mkdir(parents=True, exist_ok=True)

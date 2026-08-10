@@ -1,12 +1,11 @@
 """
 lcls_xpp.py -- Read the local xppl1016922 (LCLS / XPP) data without psana.
 
-Everything you need from this experiment is reachable from two kinds of files:
+Everything in this module is read from the reduced small-data files:
 
   * hdf5/smalldata/xppl1016922_Run<NNNN>.h5   -- per-event reduced "small data"
-  * calib/.../<START>-end.data                -- psana detector calibration constants
 
-This module gives you plain numpy / dict access to both, plus helpers to
+This module gives you plain numpy / dict access, plus helpers to
 assemble a raw panel-stack into a 2D image. No psana, no LCLS cluster needed.
 
 Only dependency: numpy + h5py  (pip install h5py).
@@ -23,7 +22,6 @@ natural psana names in your code.
 
 from __future__ import annotations
 import os
-import glob
 import numpy as np
 import h5py
 
@@ -261,59 +259,3 @@ class SmallData:
         q = self.h5[f"UserDataCfg/{det}/azav__azav_q"][()]
         I = self.h5[f"{det}/azav_azav"][()]
         return q, I
-
-
-# ===========================================================================
-#  psana calib "<START>-end.data" files
-# ===========================================================================
-def calib_data_dir(dettype: str, source: str, ctype: str) -> str:
-    """Path to a calibration-type dir, e.g.
-       calib_data_dir('Epix100a::CalibV1', 'XppGon.0:Epix100a.1', 'pedestals')
-    """
-    return resolve(os.path.join(ROOT, "calib", dettype, source, ctype))
-
-
-def list_calib(dettype: str, source: str, ctype: str):
-    """List available run-range files for a constant type, newest first.
-
-    Returns list of (start_run, path).  A file '<START>-end.data' applies
-    from START onward until superseded by a higher START.
-    """
-    d = calib_data_dir(dettype, source, ctype)
-    out = []
-    for p in glob.glob(os.path.join(d, "*-end.data")):
-        start = int(os.path.basename(p).split("-")[0])
-        out.append((start, p))
-    return sorted(out, reverse=True)
-
-
-def load_calib(dettype: str, source: str, ctype: str, run: int) -> np.ndarray:
-    """Load the calibration constant valid for `run`.
-
-    The psana .data files are ASCII arrays (numpy-loadable) with a '#'-comment
-    header.  This picks the correct run-range file, loads it, and reshapes it
-    to the detector's natural shape based on the header NDARRAY dims when
-    present (otherwise returns the 2D array numpy sees).
-    """
-    files = list_calib(dettype, source, ctype)
-    chosen = None
-    for start, p in files:               # files are newest-first
-        if start <= run:
-            chosen = p
-            break
-    if chosen is None:                    # fall back to lowest available
-        chosen = files[-1][1]
-    arr = np.loadtxt(chosen)
-    dims = _ndarray_dims(chosen)
-    if dims is not None and int(np.prod(dims)) == arr.size:
-        arr = arr.reshape(dims)
-    return arr
-
-
-def _ndarray_dims(path: str):
-    """Parse 'NDARRAY_DIMS' / 'DIMENSION' style header lines if any."""
-    dims = None
-    with open(path) as f:
-        for line in f:
-            if not line.startswith("#"):
-                break

@@ -72,6 +72,11 @@ def calib_dir() -> str:
 
 JUNGFRAU_NAME = "jungfrau1M_alcove"       # psana alias; source is XppEndstation.0:Jungfrau.0
 
+CALIBRATION_ACCESSORS = {
+    "pedestals": "pedestals",
+    "pixel_rms": "rms",
+}
+
 
 def local_run_source(run: int = 475) -> Psana1RunSource:
     """Resolve one run from the explicit XTC files in this repository."""
@@ -146,6 +151,33 @@ def iter_calibrated(
                 yield event_index, np.asarray(panel, dtype=np.float32)
         if event_index >= last:
             break
+
+
+def detector_calibration(
+    run: int,
+    constant: str,
+    detname: str = JUNGFRAU_NAME,
+    source: Psana1RunSource | None = None,
+) -> np.ndarray:
+    """Return a detector calibration constant through psana's official API."""
+    try:
+        accessor = CALIBRATION_ACCESSORS[constant]
+    except KeyError as error:
+        supported = ", ".join(sorted(CALIBRATION_ACCESSORS))
+        raise ValueError(
+            f"unsupported calibration constant {constant!r}; expected {supported}"
+        ) from error
+
+    import psana
+
+    _data_source = _run_source(run, source).open()
+    detector = psana.Detector(detname)
+    values = getattr(detector, accessor)(run)
+    if values is None:
+        raise RuntimeError(
+            f"psana returned no {constant!r} calibration for {detname!r}, run {run}"
+        )
+    return np.asarray(values)
 
 
 def panel_geometry(
