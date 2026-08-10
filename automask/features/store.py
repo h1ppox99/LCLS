@@ -131,17 +131,16 @@ class FeatureStore:
         """Cache one gain stage of a psana calibration constant, both forms.
 
         psana resolves the calibration store and applicable run range. The
-        panel->assembled maps remain the frozen project geometry used by every
-        cached feature.
+        panel->assembled maps come from the same psana run source.
         """
-        from automask.geometry import index_maps
-        from automask.io.read_xtc import detector_calibration
+        from automask.io.read_xtc import detector_calibration, panel_geometry
 
         profile = self._profiles.get(run)
+        source = profile.source if profile is not None else None
         arr = detector_calibration(
             run,
             spec.constant,
-            source=profile.source if profile is not None else None,
+            source=source,
         )
         expected = (N_GAIN,) + PANEL_SHAPE
         if arr.shape != expected:
@@ -149,7 +148,7 @@ class FeatureStore:
                 f"calib constant {spec.constant!r} for run {run} has shape "
                 f"{arr.shape}, expected {expected}")
         panel = arr[spec.gain].astype(np.float32)
-        ix, iy = index_maps(run)
+        ix, iy = panel_geometry(run, source=source)
         stub = spec.cache_stub(run)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         np.save(self.cache_dir / f"{stub}_panel.npy", panel)

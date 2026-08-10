@@ -80,7 +80,7 @@ python -c "import psana, automask; print('psana + automask import OK')"
 
 case "${STAGE}" in
   setup)
-    python -m automask.io.setup_psdm_layout --check --run "${RUNS[0]}"
+    python -m automask.dev.setup_psdm_layout --check --run "${RUNS[0]}"
     ;;
   survey)
     python -m automask.identification.conditions "${RUNS[@]}"

@@ -62,8 +62,7 @@ def sigma_clipping_stat(sumimg, real, center, bin_width=3.0, thres=5.0, max_iter
     and std(r); the returned z-score is then thresholded downstream at `k`.
     """
     from pyFAI.integrator.azimuthal import AzimuthalIntegrator
-    # deferred with pyFAI: automask.azimuthal reaches h5py through geometry, and
-    # the numpy-only stats must not pay for that at import time.
+    # Deferred so numpy-only stats do not import pyFAI until needed.
     from automask.azimuthal import POLARIZATION
 
     sumimg = sumimg.astype(np.float64, copy=False)

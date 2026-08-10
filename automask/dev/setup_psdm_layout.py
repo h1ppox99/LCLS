@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-setup_psdm_layout.py -- make the local xppl1016922 data readable by psana.
+dev/setup_psdm_layout.py -- make the local data mirror readable by psana.
 
 psana finds data through the environment variable SIT_PSDM_DATA and a *fixed*
 directory layout:
@@ -23,12 +23,12 @@ pointing back at the real files.  Nothing is copied; it costs ~no disk.
 
 Run once:
 
-    python setup_psdm_layout.py
+    python -m automask.dev.setup_psdm_layout
 
 then (in the psana env):
 
     export SIT_PSDM_DATA=/Data/hippolyte.wallaert/psdm
-    python read_xtc.py
+    python -m automask.producers.build_features --run 475
 
 Re-running is safe (idempotent): it rebuilds the links.
 """
@@ -37,7 +37,7 @@ import os
 import shutil
 
 COLON = chr(0xF022)                       # the on-disk stand-in for ':'
-ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # .../LCLS (automask/io/ -> LCLS)
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 INSTRUMENT = "xpp"
 EXPERIMENT = "xppl1016922"
 # Where to build the psana-style tree.  On /Data (lots of free space), NOT home.

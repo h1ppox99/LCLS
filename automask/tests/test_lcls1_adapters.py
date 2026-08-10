@@ -1,7 +1,7 @@
 import sys
 from types import ModuleType, SimpleNamespace
 
-from automask.io.smalldata import Lcls1SmallDataDetectors
+from automask.io.lcls1_adapters import Lcls1DetectorAdapters
 
 
 class Adapter:
@@ -18,7 +18,7 @@ class EpicsStore:
         return "one" if pv.endswith("ONE") else ""
 
 
-def test_lcls1_detector_set_reuses_smalldata_adapters(monkeypatch):
+def test_lcls1_detector_set_reuses_official_adapters(monkeypatch):
     package = ModuleType("smalldata_tools")
     lcls1 = ModuleType("smalldata_tools.lcls1")
     defaults = ModuleType("smalldata_tools.lcls1.default_detectors")
@@ -50,7 +50,7 @@ def test_lcls1_detector_set_reuses_smalldata_adapters(monkeypatch):
 
     environment = SimpleNamespace(epicsStore=lambda: EpicsStore())
     data_source = SimpleNamespace(env=lambda: environment)
-    detectors = Lcls1SmallDataDetectors(data_source)
+    detectors = Lcls1DetectorAdapters(data_source)
 
     assert [detector.name for detector in detectors.detectors] == [
         "ai",

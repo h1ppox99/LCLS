@@ -1,9 +1,9 @@
 # Per-shot data in the xppl1016922 XTC
 
 What is actually recorded for a single shot, where it comes from, and what the
-values mean. Everything below was verified by reading the local run 475 XTC
-(all 5 streams) and the run 389 / 475 small-data files — no values are quoted
-from documentation or assumed from convention.
+values mean. The conclusions were verified from the recovered experiment data;
+production discovery now reads the XTC streams directly. References to reduced
+files below record the provenance of older measurements, not a runtime input.
 
 Companion docs: `docs/DATA_OVERVIEW.md` (data layout), `docs/PSANA_XTC.md` (how to
 open the files).

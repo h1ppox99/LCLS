@@ -8,16 +8,17 @@ for run 475; run 389 raw XTC is incomplete.
 
 ```
 automask/          the project — an installable Python package (import automask)
-  io/              reusable readers (small-data + calib + XTC); no project logic
+  io/              production psana/XTC readers and official detector adapters
+  dev/             local-mirror setup and raw-format validation tools
   stats/ regularization/ combine/   the masking method registries
   features/        per-run feature specs + cached FeatureStore
-  producers/       build the frozen inputs (need psana, run once)
+  producers/       optionally prewarm feature caches from psana/XTC
   studies/         exploratory scripts + the Hydra sweep driver
   synthetic/       synthetic-artifact benchmark (no real data needed)
   conf/ scripts/   Hydra configs + sweep launchers
 docs/              experiment + psana background (DATA_OVERVIEW, PSANA_XTC, DATA)
 psana_env.sh       activate the ana-4.0.62 conda env (for XTC / psana)
-calib/ xtc/ hdf5/  the data mirror (gitignored — large)
+calib/ xtc/        the production data mirror (gitignored — large)
 xpp_sharing/       the lab's current production method (read-only baseline)
 ```
 
@@ -64,28 +65,25 @@ environment can instead use `python -m pip install -e .`.
  python -m automask.masking
 ```
 
-## Read the experiment (`automask.io`)
+## Experiment access
 
 | module | what it does |
 |--------|--------------|
-| `automask.io.lcls_xpp` | small-data HDF5 as plain numpy (`SmallData`, `resolve`). No psana. |
-| `automask.io.read_xtc` | pull calibrated per-event Jungfrau frames from raw XTC (needs psana). |
-| `automask.io.setup_psdm_layout` | build the psana-readable `SIT_PSDM_DATA` tree (real-colon calib names). |
+| `automask.io.read_xtc` | production calibrated Jungfrau access through psana. |
+| `automask.io.lcls1_adapters` | official SLAC scalar adapters used on psana events during run profiling. |
+| `automask.dev` | local mirror setup and raw-format diagnostics; never deployed at SLAC. |
 
 ```python
-from automask.io.lcls_xpp import SmallData
+from automask.utils import profile_run_values
 
-sd  = SmallData(475)
-img = sd.sum_image()             # (1030,1064) calibrated run-sum image
-geo = sd.jungfrau_geometry()     # distance, wavelength, beam center, masks, ...
+profile = profile_run_values(475)
+shots = profile.shot_meta()
 ```
 
 ## Build and run
 
 ```bash
-# Verified run-475 notebook reference; needs complete run-475 XTC.
-python -m automask.producers.baseline_mask --run 475
-python -m automask.producers.extract_dataset
+# Optional: prewarm production features from XTC.
 python -m automask.producers.build_features
 
 python -m automask.masking

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-io/xtc_raw.py -- read the per-shot SCALARS out of an XTC stream without psana.
+dev/xtc_raw.py -- historical scalar-only XTC format validator.
 
 This standalone diagnostic exists because the identification study
 (`studies/loss_identification.py`) has five claims that need real data, and on a
@@ -46,8 +46,8 @@ matches. That makes the naming a measurement with a residual, not an assumption
 -- and it doubles as an end-to-end check that the branch decode and the diode
 decode are mutually consistent.
 
-Run:  python -m automask.io.xtc_raw 389            # decode + validate + report
-      python -m automask.io.xtc_raw 389 --events 2000
+Run:  python -m automask.dev.xtc_raw 389
+      python -m automask.dev.xtc_raw 389 --events 2000
 """
 from __future__ import annotations
 

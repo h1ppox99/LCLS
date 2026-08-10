@@ -17,21 +17,14 @@ metres, so the mapping is a straight multiply by the pixel size.
 Two mask conventions meet here and they happen to agree: this project's is
 bool with True == masked, pyFAI's is "nonzero == ignored".
 
-Accuracy, measured rather than asserted (see `validate()`): the per-pixel q of
-this integrator matches psana's own `azav__azav_matrix_q` to an rms of 7e-5
-A^-1 -- 0.3% of a 0.02 A^-1 bin -- and pyFAI's solid-angle array matches
-psana's `geom` to six digits. Binning this module's image and mask by psana's
-geometry instead of pyFAI's moves the profile by 0.07% (median). That check
-validates the geometry and the binning machinery, which is all psana is
-authoritative for here; the small-data `azav_azav` profile is NOT a reference
-for the profile itself, as it carries the lab's manual mask and its own shots.
+Panel placement comes directly from psana. The optical constants below remain
+experiment-specific because the stored psana z map has the wrong distance.
 
 Canvas pixels no panel maps onto (the assembly gaps) are never real data, so
 they are folded into the mask regardless of what the pipeline says about them.
 
 Run:  python -m automask.azimuthal             # both EVAL_RUNS
       python -m automask.azimuthal 475
-      python -m automask.azimuthal --validate  # geometry cross-check only
 """
 from __future__ import annotations
 import os
@@ -146,36 +139,6 @@ def plot_run(run: int, npt: int = NPT, out: Optional[str] = None):
     return fig
 
 
-def validate(run: int = 475):
-    """Cross-check this integrator's geometry against psana's, from small-data.
-
-    psana stores the per-pixel q, solid-angle and polarization arrays it used
-    for its own reduction. Those are an independent implementation of the same
-    optics, so disagreement means one of us has the geometry wrong -- which is
-    worth re-running whenever the center, distance or assembly changes. This is
-    the only function here that needs h5py; the plotting path stays numpy-only.
-    """
-    import h5py
-    path = os.path.join(geometry.SMALLDATA, f"xppl1016922_Run{run:04d}.h5")
-    with h5py.File(path, "r") as f:
-        g = f[f"UserDataCfg/{geometry.DET}"]
-        mq = g["azav__azav_matrix_q"][()].reshape(2, 512, 1024)
-        pol = g["azav__azav_pol"][()].reshape(2, 512, 1024)
-        geo = g["azav__azav_geom"][()].reshape(2, 512, 1024)
-
-    ai = integrator(run)
-    dq = geometry.asm_to_panel(ai.array_from_unit(unit="q_A^-1"), run) - mq
-    sa = geometry.asm_to_panel(ai.solidAngleArray(), run)
-    dsa = sa / sa.max() - geo
-    dpol = geometry.asm_to_panel(ai.polarization(factor=POLARIZATION), run) - pol
-    print(f"=== geometry cross-check vs psana (run {run}) ===")
-    print(f"  q          : rms {dq.std():.2e}  max {np.abs(dq).max():.2e} A^-1")
-    print(f"  solid angle: rms {dsa.std():.2e}  max {np.abs(dsa).max():.2e}")
-    print(f"  polarization (factor {POLARIZATION:+.0f}): "
-          f"rms {dpol.std():.2e}  max {np.abs(dpol).max():.2e}")
-    return {"q": dq, "solid_angle": dsa, "polarization": dpol}
-
-
 def main(runs=None):
     from automask.evaluation import EVAL_RUNS
     for run in (EVAL_RUNS if runs is None else runs):
@@ -184,9 +147,4 @@ def main(runs=None):
 
 if __name__ == "__main__":
     import sys
-    args = sys.argv[1:]
-    if "--validate" in args:
-        args.remove("--validate")
-        validate(*[int(a) for a in args])
-    else:
-        main([int(a) for a in args] or None)
+    main([int(a) for a in sys.argv[1:]] or None)

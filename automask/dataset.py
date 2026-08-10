@@ -1,8 +1,8 @@
 """
 dataset.py -- numpy-only access to the frozen masking dataset.
 
-No psana, no h5py, no LCLS filesystem: just loads the .npy arrays produced by
-producers/extract_dataset.py.  All masks follow one convention: bool, True == masked.
+No psana, no h5py, no LCLS filesystem: this only loads frozen benchmark arrays.
+All masks follow one convention: bool, True == masked.
 
     from automask.dataset import load_image, load_mask, list_images, list_masks
 

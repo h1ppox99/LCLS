@@ -1,22 +1,17 @@
 # automask — automated detector masking (xppl1016922, Jungfrau1M)
 
-This is the self-contained masking project for the recovered LCLS experiment.
-After the one-time build, masking and sweeps use only the regenerated NumPy
-arrays. Raw XTC is needed only to recreate the verified run-475 reference.
+This is the masking project for the recovered LCLS experiment. Production run
+profiling, calibration, geometry, and feature materialization all use psana/XTC.
 
 ## Recovery status
 
-The frozen `automask/data/` arrays are intentionally gitignored and may be
-missing after recovery.  Recreate them in this order:
+The FeatureStore cache is intentionally gitignored and may be missing after
+recovery. It can be prewarmed, or populated on demand by the masking pipeline:
 
 ```bash
-python -m automask.producers.baseline_mask --source xtc --run 475
-python -m automask.producers.extract_dataset
 python -m automask.producers.build_features
 ```
 
-The first command reproduces the original run-475 notebook recipe. The
-HDF5-only `--source smalldata` mode is diagnostic only and is not a reference.
 `build_features` is optional: it only prewarms the FeatureStore cache, which the
 evaluation loop otherwise fills on demand from raw XTC.
 
@@ -48,12 +43,10 @@ All arrays come in two forms: **`_asm`** = assembled image `(1064, 1030)` (what
 `Mask.npy` is), and **`_panel`** = raw Jungfrau geometry `(2, 512, 1024)`.
 All masks are **bool with `True == masked (excluded)`**.
 
-### Input images — calibrated run sums (`data/images/`)
-Per run (389, 475), three sum flavours: `sum_calib`, `sum_calib_dropped`,
-`sum_calib_dropped_square` (the last two enable per-pixel variance/RMS if you
-want noise-based masking). Source: `Sums/jungfrau1M_alcove_calib*` in small-data
-— these are full-run sums (~40k / ~3.2k events), far higher statistics than the
-notebook's 100-frame sum.
+### Input images — archived benchmark arrays (`data/images/`)
+The optional real-data evaluation uses frozen run sums if they are available.
+They are not inputs to production feature extraction and are no longer rebuilt
+by this package.
 
 ### Reference masks (`data/masks/`)
 | name | %masked (asm) | what it is |
@@ -72,8 +65,8 @@ shared run-475 target, so run-389 real-mask scores are provisional.
 ## Dependencies
 
 Runtime dependencies are declared in the repository-root `pyproject.toml`.
-`psana` remains external and is only needed for raw XTC access; `h5py` is used
-by the one-time small-data producers.
+`psana` remains external and is needed for production XTC access; `h5py` is
+used only for bounded temporary staging during robust reductions.
 
 ## Usage
 
@@ -90,17 +83,13 @@ pred = img == 0                            # trivial baseline
 print(score(pred, gt))                     # {'iou':.., 'precision':.., 'recall':..}
 ```
 
-## Rebuild the frozen data
+## Prewarm production features
 
 ```
-python -m automask.producers.baseline_mask --run 475
-python -m automask.producers.extract_dataset
 python -m automask.producers.build_features
 ```
 
 ## Baseline to beat
 
-`producers/baseline_mask.py` is the faithful transcription of the notebook's manual
-recipe (zero-mask via `sumimg<=0` + 5×5 dilation, plus 3 hand-drawn rectangles and a
-triangle). It is restored as `automask.producers.baseline_mask`; XTC mode is
-the notebook-faithful path and writes `human_Mask_source.npy` for extraction.
+The lab's original notebook workflow remains under `xpp_sharing/` as the
+read-only comparison point. Production automasking does not import it.

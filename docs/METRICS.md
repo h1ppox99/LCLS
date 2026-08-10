@@ -207,8 +207,8 @@ ranks, since absolute levels differ between runs.
 
 > ⚠ **The tier-2 rows below predate the frozen noise reference** and have not been
 > re-measured against it. Re-running `studies/metric_validation.py` needs the
-> frozen inputs (`automask/data/`) and `hdf5/smalldata/`, neither of which is
-> present in this checkout, so the change is verified only on synthetic fields
+> archived frozen benchmark inputs, which are not rebuilt by the production
+> package, so the change is verified only on synthetic fields
 > where the truth is known by construction. The synthetic evidence says the clean
 > case is unchanged to three decimals and only rings with a variance-inflating
 > defect move — but `azim_excess`, `azim_gain` and `azim_winrate` should be

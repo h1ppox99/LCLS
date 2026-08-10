@@ -8,11 +8,12 @@ from pathlib import Path
 
 import numpy as np
 
-from automask.io.lcls_xpp import COLON, ROOT, SmallData, smalldata_path
 from automask.io.read_xtc import JUNGFRAU_NAME, XTC_DIR, calib_dir, local_run_source
-from automask.io.smalldata import Lcls1SmallDataDetectors
+from automask.io.lcls1_adapters import Lcls1DetectorAdapters
 from automask.run_profile import RunProfile
 
+ROOT = Path(__file__).resolve().parent.parent
+COLON = chr(0xF022)
 
 _PAYLOAD_ACCESSOR_VETO = {
     "TypeId", "Version", "calib", "data", "frame", "image", "raw", "waveform"
@@ -316,7 +317,7 @@ def profile_run_values(
     """Profile one run through smalldata_tools and psana payload discovery."""
     source = source or local_run_source(run)
     data_source = source.open()
-    detector_set = detector_set or Lcls1SmallDataDetectors(data_source)
+    detector_set = detector_set or Lcls1DetectorAdapters(data_source)
     payloads = {}
     columns = {}
     field_metadata = {}
@@ -514,21 +515,3 @@ def print_detector_geometry(run, detector_name=JUNGFRAU_NAME, source=None):
     }
     rows = [{"property": key, "value": value} for key, value in geometry.items()]
     _show_table("Jungfrau geometry", rows)
-
-
-def print_small_data_inventory(run):
-    path = Path(smalldata_path(run))
-    summary = {
-        "file": path.name,
-        "exists": path.exists(),
-        "size": _human_bytes(path.stat().st_size) if path.exists() else "—",
-        "events": "—",
-        "top-level groups": "—",
-    }
-    if not path.exists():
-        return summary
-    with SmallData(run) as small_data:
-        summary["events"] = small_data.nevents
-        summary["top-level groups"] = ", ".join(small_data.keys())
-    _show_table("Small-data content", [summary])
-    return summary

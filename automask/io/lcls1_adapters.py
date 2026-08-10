@@ -1,9 +1,9 @@
-"""Integration with the official SLAC ``smalldata_tools`` checkout."""
+"""Official SLAC detector adapters for psana1 event profiling."""
 
 from __future__ import annotations
 
 
-class Lcls1SmallDataDetectors:
+class Lcls1DetectorAdapters:
     """XPP detector adapters backed by ``smalldata_tools``."""
 
     def __init__(self, data_source):

@@ -80,12 +80,10 @@ existence of a directory. If it prints `det.calib() -> shape (2, 512, 1024)`,
 the environment is good and the study stages can run.
 
 
-The raw XTC reader is optional after the frozen NumPy dataset has been built.
-Complete run-475 XTC is required to reproduce the notebook reference exactly.
+Raw XTC is the production source for profiling and feature extraction.
 
 ```bash
 source psana_env.sh
-python -m automask.producers.baseline_mask --source xtc --run 475 --n-images 100
 # Optional: prewarm the FeatureStore cache so evaluation stays numpy-only.
 python -m automask.producers.build_features --run 389 475
 ```
@@ -96,4 +94,4 @@ stream files and configures calibration lookup when opened.
 
 Run 389 is incomplete locally: only truncated stream `s00` is available. It
 cannot produce a complete bright-only sum or a verified run-specific reference
-mask. Use `--source smalldata` only for diagnostic images, never as a reference.
+mask.
