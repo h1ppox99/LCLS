@@ -74,7 +74,6 @@ from automask.shot_selection import ShotSelection
 
 PKG = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # .../automask
 CACHE_DIR = os.path.join(PKG, "outputs", "cache", "folds")
-PANEL_SHAPE = (2, 512, 1024)
 N_FOLDS = 10
 
 LIT = BEAM_ON_SELECTION
@@ -193,15 +192,16 @@ def build(run: int, k: int = N_FOLDS, selection: ShotSelection = LIT) -> FoldMom
                         zip(block_of_shot.tolist(), fold_of_shot.tolist())))
 
     n = np.zeros(k, dtype=np.float64)
-    s1 = np.zeros((k, *PANEL_SHAPE), dtype=np.float64)
-    s2 = np.zeros((k, *PANEL_SHAPE), dtype=np.float64)
     dn = np.zeros(k, dtype=np.float64)
-    ds1 = np.zeros((k, *PANEL_SHAPE), dtype=np.float64)
-    ds2 = np.zeros((k, *PANEL_SHAPE), dtype=np.float64)
+    s1 = s2 = ds1 = ds2 = None
     used = 0
     for event_index, panel in iter_calibrated(run, indices, source=profile.source):
         b, f = by_event[event_index]
         frame = panel.astype(np.float64)
+        if s1 is None:
+            # Shaped by the frames psana decodes, not by an assumed geometry.
+            s1, s2, ds1, ds2 = (np.zeros((k, *frame.shape), dtype=np.float64)
+                                for _ in range(4))
         sq = frame * frame
         n[b] += 1
         s1[b] += frame

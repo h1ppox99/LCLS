@@ -48,7 +48,9 @@ import torch
 import torchvision
 
 from automask.dataset import score
-from automask.evaluation import EVAL_RUNS, load_sample
+from automask.evaluation import EVAL_RUNS, reference_mask
+from automask.sample import Sample
+from automask.selection_presets import BEAM_ON_SELECTION
 from automask.masking import production_pipeline
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -74,13 +76,9 @@ class RunInput:
 
 
 def load_run(run: int, pipe) -> RunInput:
-    reductions = tuple(sorted(set(pipe.reductions_needed()) | {"mean"}))
-    sample = load_sample(
-        run, selection=pipe.shot_selection, reductions=reductions,
-        calibrations=pipe.calibrations_needed(),
-    )
+    sample = Sample.from_store(run, BEAM_ON_SELECTION, pipe.needs())
     return RunInput(run=run, mean=np.asarray(sample.mean, float),
-                    std=np.asarray(sample.std, float), human=sample.human,
+                    std=np.asarray(sample.std, float), human=reference_mask(run),
                     floor=pipe.floor(sample), real=sample.real)
 
 
@@ -246,10 +244,7 @@ def main(runs: Sequence[int] = EVAL_RUNS, out: Optional[str] = None):
     results = []
     for run in runs:
         data = load_run(run, pipe)
-        prod = pipe.run(load_sample(
-            run, selection=pipe.shot_selection, reductions=pipe.reductions_needed(),
-            calibrations=pipe.calibrations_needed(),
-        ))
+        prod = pipe.run(Sample.from_store(run, BEAM_ON_SELECTION, pipe.needs()))
         print(f"\n=== run {run} ===")
         s_prod = _row("production pipeline", prod, data)
         _row("geometry+calib floor", data.floor, data)

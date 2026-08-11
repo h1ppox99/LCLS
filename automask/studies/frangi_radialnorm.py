@@ -27,7 +27,9 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from automask.evaluation import load_sample, EVAL_RUNS
+from automask.evaluation import EVAL_RUNS, reference_mask
+from automask.sample import Sample
+from automask.selection_presets import BEAM_ON_SELECTION
 from automask.masking import production_pipeline
 from automask.dataset import score
 from automask.stats.sigma_clipping import sigma_clipping_stat
@@ -44,25 +46,25 @@ MIN_BIN = 30                            # min pixels for a trustworthy per-bin s
 def current_mask(sample):
     pipe = production_pipeline("union")
     floor = pipe.floor(sample)
-    var = next(d for d in pipe.detectors if d.stat == "variance")
+    var = next(d for d in pipe.evidence_channels if d.stat == "variance")
     return floor | var.pick(sample)
 
 
-def radial_full_norm(sumimg, real, center, bin_width=3.0):
+def radial_full_norm(image, real, center, bin_width=3.0):
     """Per-annulus robust z: (x - median_bin) / (1.4826 * MAD_bin). Bins too small
     for a stable MAD fall back to the global robust scale. ~real set to 0."""
-    sumimg = sumimg.astype(np.float64, copy=False)
+    image = image.astype(np.float64, copy=False)
     c0, c1 = center
-    i0, i1 = np.indices(sumimg.shape)
+    i0, i1 = np.indices(image.shape)
     bin_idx = (np.hypot(i0 - c0, i1 - c1) // bin_width).astype(np.int64)
     n_bins = int(bin_idx.max()) + 1
     med = np.zeros(n_bins)
     scale = np.zeros(n_bins)
     # global fallback scale
-    allres = sumimg[real] - np.median(sumimg[real])
+    allres = image[real] - np.median(image[real])
     gscale = 1.4826 * np.median(np.abs(allres)) or 1.0
     for b in range(n_bins):
-        vals = sumimg[(bin_idx == b) & real]
+        vals = image[(bin_idx == b) & real]
         if vals.size == 0:
             med[b], scale[b] = 0.0, gscale
             continue
@@ -70,7 +72,7 @@ def radial_full_norm(sumimg, real, center, bin_width=3.0):
         s = 1.4826 * np.median(np.abs(vals - m))
         med[b] = m
         scale[b] = s if (vals.size >= MIN_BIN and s > 0) else gscale
-    out = (sumimg - med[bin_idx]) / scale[bin_idx]
+    out = (image - med[bin_idx]) / scale[bin_idx]
     out[~real] = 0.0
     return out
 
@@ -78,9 +80,9 @@ def radial_full_norm(sumimg, real, center, bin_width=3.0):
 def responses(sample):
     """dict label -> (input_field, frangi_response) for the input variants."""
     s = sample
-    raw = s.sumimg.astype(np.float64)
-    med = sigma_clipping_stat(s.sumimg, s.real, s.center)         # current
-    full = radial_full_norm(s.sumimg, s.real, s.center)           # proposed
+    raw = s.mean.astype(np.float64)
+    med = sigma_clipping_stat(s.mean, s.real, s.center)         # current
+    full = radial_full_norm(s.mean, s.real, s.center)           # proposed
     out = {}
     out["raw (bright)"] = (raw, frangi_ridges(raw, sigmas=SIGMAS, black_ridges=False))
     out["med+globalz (bright)"] = (med, frangi_ridges(med, sigmas=SIGMAS, black_ridges=False))
@@ -101,12 +103,12 @@ def logshow(ax, resp, real, title):
 
 
 def run_figs(run):
-    s = load_sample(run)
+    s = Sample.from_store(run, BEAM_ON_SELECTION, pipe.needs())
     cur = current_mask(s)
     domain = s.real & ~cur
     resp = responses(s)
 
-    base = np.arcsinh(s.sumimg / (np.nanmedian(np.abs(s.sumimg[s.real])) + 1e-9))
+    base = np.arcsinh(s.mean / (np.nanmedian(np.abs(s.mean[s.real])) + 1e-9))
     vlo, vhi = np.nanpercentile(base[s.real], [2, 99])
     labels = list(resp.keys())
 
@@ -132,11 +134,11 @@ def run_figs(run):
         r = resp[lab][1]
         k = auto_threshold(r, domain)
         added = (r > k) & domain if np.isfinite(k) else np.zeros_like(domain)
-        iou = score(cur | added, s.human)["iou"]
+        iou = score(cur | added, reference_mask(s.run))["iou"]
         print(f"  {lab:24s} {k:9.4f} {100*added.mean():8.3f} {iou:7.3f}")
         ax.imshow(base.T, cmap="gray", vmin=vlo, vmax=vhi, origin="lower")
-        blue = np.zeros((*s.sumimg.shape, 4)); blue[cur] = (0.1, 0.4, 1.0, 0.4)
-        red = np.zeros((*s.sumimg.shape, 4)); red[added] = (1, 0, 0, 1)
+        blue = np.zeros((*s.mean.shape, 4)); blue[cur] = (0.1, 0.4, 1.0, 0.4)
+        red = np.zeros((*s.mean.shape, 4)); red[added] = (1, 0, 0, 1)
         ax.imshow(np.transpose(blue, (1, 0, 2)), origin="lower")
         ax.imshow(np.transpose(red, (1, 0, 2)), origin="lower")
         ax.set_title(f"{lab}\nauto-k={k:.4f}  +{100*added.mean():.3f}%  IoU {iou:.3f}",

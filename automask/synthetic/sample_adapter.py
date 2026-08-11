@@ -3,42 +3,37 @@ synthetic/sample_adapter.py -- inject synthetic artifacts into a run-level Sampl
 
 The single-image path (evaluate.py, mode="image") scores a masker that sees only
 one 2-D image, so its variance channel is absent. This adapter instead corrupts a
-full ``automask.evaluation.Sample`` so the *production* ``Pipeline`` -- variance
-(reads ``std``), blackhat (reads ``mean``), geometry+calib floor
+full ``automask.sample.Sample`` so the *production* ``Pipeline`` -- variance
+(reads ``std``), blackhat (reads ``mean``), geometry + pixel-status floor
 -- can be scored on the same synthetic artifacts.
 
 An artifact is injected CONSISTENTLY across the intensity-derived arrays a real
 artifact would move together:
 
-  * streak   -- additive bright line. Added to ``sumimg`` and ``mean``, each
-                scaled to its OWN robust std (the amplitude is in sigma units).
+  * streak   -- additive bright line. Added to ``mean``, scaled to its robust
+                std (the amplitude is in sigma units).
                 ``std`` is left unchanged: extra photons would only *raise*
                 shot noise, and the low-variance detector (mode="low") keys on
                 DARK/dead pixels -- a bright streak is out of its polarity, which
                 the score will (correctly) reflect.
-  * beamstop -- multiplicative shadow. ``sumimg``, ``mean`` AND ``std`` are all
+  * beamstop -- multiplicative shadow. ``mean`` AND ``std`` are both
                 multiplied by the same transmission factor (a simple linear
                 attenuation model): fewer counts -> lower mean AND lower spread,
                 so the shadow shows up as a low-variance, locally-dark island the
                 production pipeline is built to catch.
 
 Geometry stays valid because the factor is > 0 (real pixels stay
-real) and the streak is additive. Only originally-valid pixels (``~human``) are
-modified, and the injected mask is a subset of that region, matching the
+real) and the streak is additive. Only pixels in the caller-supplied valid
+``region`` are modified, and the injected mask is a subset of it, matching the
 image-path convention. The source Sample is never mutated.
 """
 from __future__ import annotations
 
-from dataclasses import replace
-
 import numpy as np
 
+from automask.sample import Sample
 from automask.synthetic.artifacts import (beamstop_factor, hot_patch_profile,
                                           streak_profile, _robust_stats)
-
-# Sample fields served in native panel geometry rather than assembled space.
-# They cannot be rotated with the assembled arrays (see rotate_sample).
-PANEL_FIELDS = ("pedestals", "pixel_rms")
 
 
 def rotate_sample(sample, degrees: int):
@@ -60,37 +55,36 @@ def rotate_sample(sample, degrees: int):
     if int(degrees) % 90 != 0:
         raise ValueError(f"rotations must be multiples of 90, got {degrees}")
     k = (int(degrees) // 90) % 4
-    rot = lambda a: np.rot90(a, k)
-    dropped = {f: None for f in PANEL_FIELDS if k and getattr(sample, f, None) is not None}
-    shot_images = {
-        field: rot(getattr(sample, field))
-        for field in ("mean", "std", "median", "mad")
-        if getattr(sample, field) is not None
-    }
-    return replace(
-        sample, sumimg=rot(sample.sumimg), human=rot(sample.human),
-        calib=rot(sample.calib), **shot_images, **dropped,
-    )
+    arrays = {}
+    for name, array in sample.arrays.items():
+        if array.ndim == 3:          # native panel geometry, not assembled
+            if k:
+                continue             # dropped: see the note above
+            arrays[name] = array
+        else:
+            arrays[name] = np.rot90(array, k)
+    return Sample(run=sample.run, arrays=arrays, selection=sample.selection)
 
 
-def corrupt_sample(sample, name: str, rng, params: dict):
+def corrupt_sample(sample, name: str, rng, params: dict, region):
     """Inject one artifact into ``sample``; return ``(corrupted_sample, injected)``.
 
     ``params`` are the already-resolved generator parameters (as produced by the
-    evaluate.py loop). Geometry is built from ``rng`` exactly as the single-image
-    generators build it, so a given seed reproduces the same artifact in either
-    mode. ``injected`` is bool, True where the artifact was placed (subset of the
-    originally-valid region).
+    evaluate.py loop). ``region`` is the boolean map of originally-valid pixels
+    the artifact may touch -- supplied by the caller rather than read off the
+    Sample, which no longer carries a reference mask. Geometry is built from
+    ``rng`` exactly as the single-image generators build it, so a given seed
+    reproduces the same artifact in either mode. ``injected`` is bool, True where
+    the artifact was placed (subset of ``region``).
     """
-    region = ~sample.human                          # originally-valid pixels
-    grid = sample.sumimg.shape
+    grid = sample.mean.shape
     p = dict(params)
 
     if name == "streak":
         amplitude_sigma = p.pop("amplitude_sigma", 8.0)
         profile_unit, band = streak_profile(grid, rng, **p)
         updates = {}
-        for field in ("sumimg", "mean"):
+        for field in ("mean",):
             arr = np.array(getattr(sample, field), dtype=np.float64, copy=True)
             _, sd = _robust_stats(arr[region])
             arr[region] += amplitude_sigma * sd * profile_unit[region]
@@ -101,7 +95,7 @@ def corrupt_sample(sample, name: str, rng, params: dict):
         p.setdefault("shape_kind", p.pop("shape", "random"))
         factor, core = beamstop_factor(grid, rng, **p)
         updates = {}
-        for field in ("sumimg", "mean", "std"):
+        for field in ("mean", "std"):
             arr = np.array(getattr(sample, field), dtype=np.float64, copy=True)
             arr[region] = arr[region] * factor[region]
             updates[field] = arr
@@ -110,13 +104,8 @@ def corrupt_sample(sample, name: str, rng, params: dict):
     elif name == "hot_patch":
         # Additive bright patch in the PEDESTAL constants -- a leaky/high-dark-
         # current region of sensor. Geometry is drawn in assembled space (so the
-        # injected mask is comparable with the other artifacts and with `human`)
+        # injected mask is comparable with the other artifacts and the reference)
         # and mapped into native panel geometry to corrupt the constant itself.
-        if sample.pedestals is None:
-            raise ValueError(
-                "hot_patch corrupts the 'pedestals' calibration, which this Sample "
-                "was not loaded with; the pipeline under test must declare it "
-                "(see Pipeline.calibrations_needed)")
         from automask.geometry import asm_to_panel
 
         p.setdefault("shape_kind", p.pop("shape", "random"))
@@ -134,4 +123,4 @@ def corrupt_sample(sample, name: str, rng, params: dict):
         raise ValueError(f"no Sample adapter for artifact {name!r} "
                          f"(supported: streak, beamstop, beamstop_small, hot_patch)")
 
-    return replace(sample, **updates), injected
+    return sample.with_arrays(**updates), injected

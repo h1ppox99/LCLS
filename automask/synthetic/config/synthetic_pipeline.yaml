@@ -3,7 +3,7 @@
 # Run:  python -m automask.synthetic.evaluate --config automask/synthetic/config/synthetic_pipeline.yaml
 #
 # Unlike the "image" baseline (which scores a single-image module:function masker),
-# this mode corrupts a full run-level Sample (sumimg/mean/std) via the adapter and
+# this mode corrupts a full run-level Sample (mean/std/pedestals) via the adapter and
 # scores the PRODUCTION Pipeline -- so the variance channel is present. Physics:
 #   * beamstop  -- multiplicative attenuation lowers mean AND variance -> the
 #                  low-variance / dark-speck detectors catch it (recall should jump

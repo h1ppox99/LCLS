@@ -19,7 +19,9 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from automask.evaluation import load_sample, EVAL_RUNS
+from automask.evaluation import EVAL_RUNS, reference_mask
+from automask.sample import Sample
+from automask.selection_presets import BEAM_ON_SELECTION
 from automask.masking import production_pipeline
 from automask.regularization.frangi import frangi_ridges, auto_threshold
 
@@ -34,19 +36,19 @@ def current_mask(sample):
     """geometry+calib floor UNION the production variance detector pick."""
     pipe = production_pipeline("union")
     floor = pipe.floor(sample)
-    var = next(d for d in pipe.detectors if d.stat == "variance")
+    var = next(d for d in pipe.evidence_channels if d.stat == "variance")
     return floor | var.pick(sample)
 
 
 def response(sample):
     """Frangi response on the sum image and the domain it is thresholded over."""
-    resp = frangi_ridges(sample.sumimg)
+    resp = frangi_ridges(sample.mean)
     domain = sample.real & ~current_mask(sample)
     return resp, domain
 
 
 def plot_run(run, ax_log, ax_lin):
-    sample = load_sample(run)
+    sample = Sample.from_store(run, BEAM_ON_SELECTION, pipe.needs())
     resp, domain = response(sample)
     v = resp[domain]
     v = v[v > FLOOR]

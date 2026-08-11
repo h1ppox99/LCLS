@@ -25,7 +25,7 @@ BEAM_CENTER = (1005.0, 45.0)
 
 def get_center(run: int, det: str = DET) -> tuple[float, float]:
     """Beam center in assembled-array (axis0, axis1) index order -- matches
-    `dataset.load_image()`'s `(1064, 1030)` shape directly.
+    the `(1064, 1030)` assembled arrays ImageStore serves.
 
     This experiment used one fixed Jungfrau geometry and beam center.
     """

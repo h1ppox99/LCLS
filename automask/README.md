@@ -3,10 +3,10 @@
 This is the masking project for the recovered LCLS experiment. Production run
 profiling, calibration, geometry, and selected-shot image materialization use psana/XTC.
 
-## Recovery status
+## Image cache
 
-The ImageStore cache is intentionally gitignored and may be missing after
-recovery. It can be prewarmed, or populated on demand by the masking pipeline:
+The ImageStore cache is intentionally gitignored. It can be prewarmed, or
+populated on demand by the masking pipeline:
 
 ```bash
 python -m automask.producers.build_images
@@ -15,11 +15,32 @@ python -m automask.producers.build_images
 `build_images` is optional: it only prewarms the ImageStore cache, which the
 evaluation loop otherwise fills on demand from raw XTC.
 
+## Building a mask
+
+```python
+from automask.masking import Channel, Pipeline
+from automask.sample import Sample
+
+pipe = Pipeline(channels=[
+    Channel("geometry", field_reg=None),        # floor: unmapped/ASIC lines
+    Channel("status_as_mask", field_reg=None),  # floor: psana pixel status, per run
+    Channel("variance", VarianceParams(k=3.5, mode="low"), field_reg="tv"),
+])
+sample = Sample.from_store(475, selection, pipe.needs())
+mask = pipe.run(sample)                          # bool, True == masked
+```
+
+One list of channels. Whether a channel belongs to the intensity-free floor is
+read from its stat's registered `kind`, so floor channels are configured — and
+parameterised — exactly like every other one.
+
 ## Adding a method
 
 Drop one file in `stats/`, `regularization/`, or `combine/` that defines a compute
 function, a `Params` dataclass, and a `register_*` call; add it to that package's
-`__init__.py` import line and a matching `conf/<group>/<name>.yaml`. It is then
+`__init__.py` import line and a matching `conf/<group>/<name>.yaml`. A stat's
+`needs` names the Sample arrays it reads — reductions (`mean`/`std`/`median`/`mad`)
+or psana calibration accessors (`pedestals`, `rms`, `status_as_mask`). It is then
 selectable by name everywhere (`Pipeline`, the registries, and the sweep driver).
 
 ## Sweeping hyperparameters
@@ -43,18 +64,13 @@ All arrays come in two forms: **`_asm`** = assembled image `(1064, 1030)` (what
 `Mask.npy` is), and **`_panel`** = raw Jungfrau geometry `(2, 512, 1024)`.
 All masks are **bool with `True == masked (excluded)`**.
 
-### Input images — archived benchmark arrays (`data/images/`)
-The optional real-data evaluation uses frozen run sums if they are available.
-They are not inputs to production selected-shot reductions and are no longer rebuilt
-by this package.
-
 ### Reference masks (`data/masks/`)
 | name | %masked (asm) | what it is |
 |---|---|---|
 | `human_Mask` | 13.86% | **run-475 target only** — notebook dead-pixel + geometry mask |
 | `cmask_run{389,475}` | 1.90% | production combined bad-pixel mask |
 | `mask_run{389,475}`  | 1.98% | production bad-pixel mask |
-| `statusMask_run{389,475}` | 0.42% | derived from calibration `pixel_status` (pure detector bad pixels) |
+| `statusMask_run{389,475}` | 0.42% | historical freeze of `pixel_status`; the pipeline now reads this from psana per run (verified bit-identical) |
 
 Note the two families measure different things: `human_Mask` includes **geometry**
 regions; the `*mask*` family is **bad pixels only**. A full auto-masker must
@@ -72,16 +88,21 @@ used only for bounded temporary staging during robust reductions.
 
 ```python
 # automask is an installed package (pip install -e . --no-deps) — import directly:
-from automask.dataset import load_image, load_mask, score
+from automask.dataset import load_mask, score
+from automask.image_store import ImageStore
+from automask.selection_presets import BEAM_ON_SELECTION
 
-img = load_image("sum_calib_run0475")     # (1064,1030) float32
-gt  = load_mask("human_Mask")             # (1064,1030) bool, True==masked
+img = ImageStore().reduce(475, BEAM_ON_SELECTION, "mean")   # (1064,1030), from XTC
+gt = load_mask("human_Mask")                                # bool, True==masked
 
 # ... your auto-masking algorithm ...
 pred = img == 0                            # trivial baseline
 
 print(score(pred, gt))                     # {'iou':.., 'precision':.., 'recall':..}
 ```
+
+`data/masks/` holds the hand-drawn references and is the only frozen input left;
+every array a pipeline consumes is computed from the run.
 
 ## Prewarm production images
 

@@ -70,10 +70,7 @@ def asic_polish_stat(panel, run, asic=256, n_iter=3):
 
 def compute(sample, params: AsicPolishParams | None = None):
     p = params or AsicPolishParams()
-    if sample.pedestals is None:
-        raise ValueError(
-            "asic_polish needs the 'pedestals' calibration; it was not in the "
-            "pipeline's needs()")
+    # A missing 'pedestals' raises from Sample with the name and what was loaded.
     return asic_polish_stat(sample.pedestals, sample.run, p.asic, p.n_iter)
 
 

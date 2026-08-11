@@ -33,7 +33,6 @@ from typing import Optional
 import numpy as np
 
 from automask import geometry
-from automask.dataset import load_image
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FIG_DIR = os.path.join(HERE, "outputs", "figures")

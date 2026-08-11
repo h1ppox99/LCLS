@@ -1,9 +1,10 @@
-# Default sweep config: ONE detector (stat + field-reg + optional mask-reg) unioned
-# onto the geometry+calib floor, evaluated across eval.runs. Override any field on
-# the CLI; use -m (multirun) to sweep, e.g.
+# Default sweep config: ONE evidence channel (stat + field-reg + optional mask-reg)
+# unioned onto the standard geometry + pixel-status floor, evaluated across
+# eval.runs. The floor is added by build_pipeline and is never swept. Override any
+# field on the CLI; use -m (multirun) to sweep, e.g.
 #   python studies/sweep_hyperparameters.py -m \
 #     stat=variance stat.params.k=2,2.5,3,3.5 regularization.params.weight=5,10,15
-# Select a full multi-detector recipe with e.g. experiment=production.
+# Select a full multi-channel recipe with e.g. experiment=production.
 defaults:
   - stat: variance
   - regularization: tv
@@ -13,8 +14,8 @@ defaults:
   - _self_
   - optional experiment: null
 
-# Set by an experiment (# @package _global_); null => single detector from the groups.
-detectors: null
+# Set by an experiment (# @package _global_); null => single channel from the groups.
+channels: null
 
 # Emit per-run agreement figures into outputs/figures/.
 figures: false

@@ -7,7 +7,8 @@
 # A scalar artifact param is used as-is; a [lo, hi] pair is sampled uniformly per
 # example (ints stay ints). 'center' is a fractional [row, col] passed through.
 
-image: sum_calib_run0475          # (1064, 1030) run-sum image
+image: 475                       # run number -> its selected-shot mean
+                                 # (a .npy path also works)
 mask: human_Mask                  # bool ground-truth, True == masked/invalid
 masker: automask.masking:mask_image
 output_dir: automask/outputs/synthetic

@@ -15,7 +15,7 @@ Workflow (see ``bundle_kit`` for the cluster side):
 
 Run standalone::
 
-    python draw_hand_mask.py --sum sum_calib_run0475_asm.npy \\
+    python draw_hand_mask.py --sum mean_run0475_asm.npy \\
                              --base base_run0475_asm.npy --out human_run0475.npy
 
 or from a notebook / the repo::
@@ -39,8 +39,6 @@ import json
 import os
 
 import numpy as np
-
-ASM_SHAPE = (1064, 1030)
 
 
 def _has_display():
@@ -130,8 +128,8 @@ def _shapes_from_json(raw):
 # --------------------------------------------------------------------------- #
 # background scaling for display
 # --------------------------------------------------------------------------- #
-def _disp(sumimg):
-    a = np.asarray(sumimg, dtype=np.float64)
+def _disp(image):
+    a = np.asarray(image, dtype=np.float64)
     a = np.maximum(a, 0)
     lo, hi = np.percentile(a[a > 0], (1, 99)) if (a > 0).any() else (0, 1)
     a = np.log1p(np.clip(a, 0, hi))
@@ -161,7 +159,7 @@ def editor(run=None, *, sum_img=None, base_mask=None, shapes_json=None,
     Provide either ``run`` (resolves arrays from the repo via automask.dataset)
     or explicit ``sum_img`` / ``base_mask`` paths-or-arrays (laptop / kit mode).
     """
-    sumimg, base, dflt_out, dflt_json = _resolve_inputs(
+    image, base, dflt_out, dflt_json = _resolve_inputs(
         run, sum_img, base_mask, out, out_shapes)
     out = out or dflt_out
     # Derive the shapes sidecar from the mask name so it is unique per run.
@@ -205,7 +203,7 @@ def editor(run=None, *, sum_img=None, base_mask=None, shapes_json=None,
              "show_base": True, "show_bg": True}
 
     fig, ax = plt.subplots(figsize=(11, 11))
-    bg = ax.imshow(_disp(sumimg), cmap="gray", origin="upper",
+    bg = ax.imshow(_disp(image), cmap="gray", origin="upper",
                    interpolation="nearest")
     add, era = _rasterize(shapes, base.shape)
     ov = ax.imshow(_overlay(base, add, era), origin="upper",
@@ -410,52 +408,66 @@ def _as_array(x):
     return np.load(x)
 
 
+def run_image(run):
+    """The assembled lit mean for `run`, from ImageStore (psana on a cache miss).
+
+    Repo/cluster only -- kit mode never calls this, which is what keeps the
+    laptop side numpy-only.
+    """
+    from automask.image_store import ImageStore
+    from automask.selection_presets import BEAM_ON_SELECTION
+    return ImageStore().reduce(run, BEAM_ON_SELECTION, "mean").astype(np.float64)
+
+
 def _resolve_inputs(run, sum_img, base_mask, out, out_shapes):
-    sumimg = _as_array(sum_img)
+    image = _as_array(sum_img)
     base = _as_array(base_mask)
-    if (sumimg is None or base is None) and run is not None:
-        # repo mode: pull from the frozen dataset
-        from automask.dataset import load_image, load_mask   # local import
-        if sumimg is None:
-            sumimg = load_image(f"sum_calib_run{run:04d}").astype(np.float64)
+    if (image is None or base is None) and run is not None:
+        # repo mode: compute from the run itself
+        if image is None:
+            image = run_image(run)
         if base is None:
             base = build_base(run)
-    if sumimg is None or base is None:
+    if image is None or base is None:
         raise ValueError("need either run= (repo mode) or both sum_img= and "
                          "base_mask= (kit mode)")
     base = np.asarray(base).astype(bool)
     tag = f"run{run:04d}" if run is not None else "hand"
     dflt_out = f"human_Mask_{tag}_asm.npy"
     dflt_json = f"hand_{tag}.json"
-    return sumimg, base, dflt_out, dflt_json
+    return image, base, dflt_out, dflt_json
 
 
 def build_base(run):
-    """Floor base = pad(calib, 2) | geometry(pad 2).  Repo/cluster only.
+    """The pipeline's own 100%-precision floor for `run`.  Repo/cluster only.
 
-    This is exactly the pipeline's 100%-precision floor (``automask.stats``
-    calib + geometry), so the reference the user draws == floor | hand and is
-    scored on the same footing as the masker's floor.  ``calib`` is the psana
-    pixel-status mask (``statusMask``); geometry is the ASIC/gap border lines.
+    Not a reimplementation of it: this runs `Pipeline.floor` over the registered
+    floor channels (geometry + psana pixel status), so the reference the user
+    draws == floor | hand is scored on exactly the same footing as the masker's
+    floor, and stays that way if the floor changes.
     """
-    from automask.dataset import load_image, load_mask
-    from automask.stats.geometry import geometry_mask
-    from automask.regularization.pad import pad_mask
-    calib = load_mask(f"statusMask_run{run:04d}")
-    sumimg = load_image(f"sum_calib_run{run:04d}")
-    return (pad_mask(calib, 2) | geometry_mask(sumimg != 0, pad=2, frac=0.4)).astype(bool)
+    from automask.masking import Pipeline, floor_channels
+    from automask.sample import Sample
+    from automask.selection_presets import BEAM_ON_SELECTION
+
+    pipeline = Pipeline(floor_channels())
+    sample = Sample.from_store(run, BEAM_ON_SELECTION, pipeline.needs())
+    return pipeline.floor(sample).astype(bool)
 
 
 # --------------------------------------------------------------------------- #
 # cluster side: freeze base + bundle a portable kit to scp to a laptop
 # --------------------------------------------------------------------------- #
 def bundle_kit(run, dest):
-    """Write {sum, base, editor, README} for `run` into `dest` (a scp-able dir)."""
-    from automask.dataset import load_image
+    """Write {image, base, editor, README} for `run` into `dest` (a scp-able dir).
+
+    Everything psana-dependent happens HERE, on the cluster; the kit itself is
+    two .npy files the laptop opens with numpy alone.
+    """
     os.makedirs(dest, exist_ok=True)
-    sumimg = load_image(f"sum_calib_run{run:04d}").astype(np.float32)
+    image = run_image(run).astype(np.float32)
     base = build_base(run)
-    np.save(os.path.join(dest, f"sum_calib_run{run:04d}_asm.npy"), sumimg)
+    np.save(os.path.join(dest, f"mean_run{run:04d}_asm.npy"), image)
     np.save(os.path.join(dest, f"base_run{run:04d}_asm.npy"), base)
     import shutil
     shutil.copy(os.path.abspath(__file__), os.path.join(dest, "draw_hand_mask.py"))
@@ -464,7 +476,7 @@ def bundle_kit(run, dest):
         "Needs only numpy + matplotlib on your laptop:\n"
         "    pip install numpy matplotlib\n\n"
         "Draw:\n"
-        f"    python draw_hand_mask.py --sum sum_calib_run{run:04d}_asm.npy \\\n"
+        f"    python draw_hand_mask.py --sum mean_run{run:04d}_asm.npy \\\n"
         f"        --base base_run{run:04d}_asm.npy --out human_Mask_run{run:04d}_asm.npy\n\n"
         f"Then scp human_Mask_run{run:04d}_asm.npy (+ hand_run{run:04d}.json) back.\n")
     with open(os.path.join(dest, "README.md"), "w") as f:

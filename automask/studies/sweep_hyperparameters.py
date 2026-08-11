@@ -10,8 +10,10 @@ import yaml
 from omegaconf import DictConfig, ListConfig, OmegaConf
 
 from automask.combine.base import COMBINERS
-from automask.evaluation import evaluate, load_sample
-from automask.masking import Detector, Pipeline
+from automask.evaluation import evaluate, reference_mask
+from automask.masking import Channel, Pipeline, floor_channels
+from automask.sample import Sample
+from automask.selection_presets import BEAM_ON_SELECTION
 from automask.regularization.base import REGULARIZERS
 from automask.stats.base import STATS
 
@@ -34,9 +36,9 @@ def _params(registry, name, cfg_params):
 def _reg_params(names, cfg_params):
     """Build regularizer params for a slot that may name one stage or several.
 
-    Mirrors `Detector._stages`: `names` is None / a name / a list of names, and
+    Mirrors `Channel._stages`: `names` is None / a name / a list of names, and
     `cfg_params` is correspondingly None / a mapping / a list of mappings. Returns
-    the params in the shape `Detector` expects."""
+    the params in the shape `Channel` expects."""
     if not names:
         return None
     raw = _to_plain(cfg_params) if cfg_params else None
@@ -58,35 +60,43 @@ def _reg_names(value):
     return list(_to_plain(value))
 
 
-def _detector_from_dict(detector: dict) -> Detector:
-    stat = detector["stat"]
-    field_reg = _reg_names(detector.get("field_reg"))
-    mask_reg = _reg_names(detector.get("mask_reg"))
-    return Detector(
-        stat, STATS[stat].params(**(detector.get("stat_params") or {})),
+def _channel_from_dict(channel: dict) -> Channel:
+    stat = channel["stat"]
+    field_reg = _reg_names(channel.get("field_reg"))
+    mask_reg = _reg_names(channel.get("mask_reg"))
+    return Channel(
+        stat, STATS[stat].params(**(channel.get("params") or {})),
         field_reg=field_reg,
-        field_reg_params=_reg_params(field_reg, detector.get("field_reg_params")),
+        field_reg_params=_reg_params(field_reg, channel.get("field_reg_params")),
         mask_reg=mask_reg,
-        mask_reg_params=_reg_params(mask_reg, detector.get("mask_reg_params")),
+        mask_reg_params=_reg_params(mask_reg, channel.get("mask_reg_params")),
+        name=channel.get("name"),
     )
 
 
 def build_pipeline(cfg: DictConfig) -> Pipeline:
+    """The swept evidence channels on the standard intensity-free floor.
+
+    The conf lists evidence channels only; the floor is always the same and is
+    not swept, so it is added here rather than repeated in every experiment file.
+    """
     combiner = cfg.combine.name
     combiner_params = _params(COMBINERS, combiner, cfg.combine.get("params"))
-    if cfg.get("detectors"):
-        detectors = [_detector_from_dict(OmegaConf.to_container(d, resolve=True)) for d in cfg.detectors]
+    if cfg.get("channels"):
+        evidence = [_channel_from_dict(OmegaConf.to_container(c, resolve=True))
+                    for c in cfg.channels]
     else:
         field_reg = _reg_names(cfg.regularization.name)
         mask_reg = _reg_names(cfg.mask_reg.name)
-        detectors = [Detector(
+        evidence = [Channel(
             cfg.stat.name, _params(STATS, cfg.stat.name, cfg.stat.get("params")),
             field_reg=field_reg,
             field_reg_params=_reg_params(field_reg, cfg.regularization.get("params")),
             mask_reg=mask_reg,
             mask_reg_params=_reg_params(mask_reg, cfg.mask_reg.get("params")),
         )]
-    return Pipeline(detectors, combiner=combiner, combiner_params=combiner_params)
+    return Pipeline(floor_channels() + evidence, combiner=combiner,
+                    combiner_params=combiner_params)
 
 
 def _synthetic_scores(cfg: DictConfig, pipe: Pipeline, runs, out_dir: str) -> dict:
@@ -125,7 +135,8 @@ def _synthetic_scores(cfg: DictConfig, pipe: Pipeline, runs, out_dir: str) -> di
 def main(cfg: DictConfig):
     pipe = build_pipeline(cfg)
     runs = list(cfg.eval.runs)
-    label = (",".join(d.stat for d in pipe.detectors) + f" | {cfg.combine.name}")
+    label = (",".join(c.label for c in pipe.evidence_channels)
+             + f" | {cfg.combine.name}")
     synthetic = bool(cfg.eval.get("synthetic", True))
     kind = "synthetic" if synthetic else "human-mask"
     print(f"=== {label}  (runs {runs}, {kind} eval) ===")
@@ -146,7 +157,7 @@ def main(cfg: DictConfig):
         extra = {"mean_residual_iou": mean["residual_iou"]}
 
     # Flatten the swept overrides for the results row.
-    row = {"detectors": label, "combine": cfg.combine.name, "eval": kind,
+    row = {"channels": label, "combine": cfg.combine.name, "eval": kind,
            "mean_iou": mean["iou"], "mean_precision": mean["precision"],
            "mean_recall": mean["recall"], **extra}
     for k in ("stat", "regularization", "mask_reg"):
@@ -185,13 +196,14 @@ def main(cfg: DictConfig):
         figure_dir = os.path.join(AUTOMASK, "outputs", "figures")
         os.makedirs(figure_dir, exist_ok=True)
         for run in runs:
-            sample = load_sample(run)
+            sample = Sample.from_store(run, BEAM_ON_SELECTION, pipe.needs())
             out = os.path.join(figure_dir, f"sweep_{cfg.stat.name}_run{run:04d}.png")
-            viz.save_agreement(pipe.run(sample), pipe.floor(sample), sample.human, run, out,
+            viz.save_agreement(pipe.run(sample), pipe.floor(sample),
+                               reference_mask(run), run, out,
                                title=f"{label} — run {run}")
             print(f"  [saved] {out}")
             panels = os.path.join(figure_dir, f"panels_{cfg.stat.name}_run{run:04d}.png")
-            viz.detector_panels(pipe, sample, out=panels)
+            viz.channel_panels(pipe, sample, out=panels)
             print(f"  [saved] {panels}")
     return mean["iou"]
 

@@ -43,7 +43,9 @@ from typing import Optional, Sequence
 import numpy as np
 
 from automask.dataset import score
-from automask.evaluation import EVAL_RUNS, load_sample
+from automask.evaluation import EVAL_RUNS, reference_mask
+from automask.sample import Sample
+from automask.selection_presets import BEAM_ON_SELECTION
 from automask.masking import production_pipeline
 from automask.regularization.area_gate import AreaGateParams, area_gate
 from automask.regularization.fill_holes import fill_holes
@@ -102,12 +104,13 @@ def figure(results, path, ks=KS):
     gs = fig.add_gridspec(n, 5)
     for row, r in enumerate(results):
         s, prod, best = r["sample"], r["prod"], r["best"]
+        human = reference_mask(s.run)
         added = best["mask"] & ~prod
-        overlay = np.zeros(s.human.shape + (3,))
+        overlay = np.zeros(human.shape + (3,))
         overlay[prod] = (0.85, 0.85, 0.85)                     # production mask
-        overlay[added & s.human] = (0.15, 0.60, 0.20)          # right addition
-        overlay[added & ~s.human] = (0.85, 0.20, 0.15)         # wrong addition
-        overlay[s.human & ~prod & ~added] = (0.20, 0.35, 0.85)  # still missed
+        overlay[added & human] = (0.15, 0.60, 0.20)            # right addition
+        overlay[added & ~human] = (0.85, 0.20, 0.15)           # wrong addition
+        overlay[human & ~prod & ~added] = (0.20, 0.35, 0.85)   # still missed
         panels = [
             (r["cleaned"][0], "gray",
              f"run {s.run}: what PatchCore actually sees\n"
@@ -148,14 +151,10 @@ def main(runs: Sequence[int] = EVAL_RUNS, out: Optional[str] = None):
     results = []
     for run in runs:
         other = [r for r in runs if r != run][0]
-        reductions = tuple(sorted(set(pipe.reductions_needed()) | {"mean"}))
-        sample = load_sample(
-            run, selection=pipe.shot_selection, reductions=reductions,
-            calibrations=pipe.calibrations_needed(),
-        )
+        sample = Sample.from_store(run, BEAM_ON_SELECTION, pipe.needs())
         prod = pipe.run(sample)
-        s_prod = score(prod, sample.human)
-        missing = int((sample.human & ~prod).sum())
+        s_prod = score(prod, reference_mask(sample.run))
+        missing = int((reference_mask(sample.run) & ~prod).sum())
         print(f"\n=== run {run} ===")
         print(f"  production: IoU {s_prod['iou']:.3f}  prec {s_prod['precision']:.3f}"
               f"  rec {s_prod['recall']:.3f}   -- {missing} px of the human mask "
@@ -168,7 +167,7 @@ def main(runs: Sequence[int] = EVAL_RUNS, out: Optional[str] = None):
             if over.get("bank_run") == "OTHER":
                 over["bank_run"] = other
             z = patchcore_compute(sample, PatchCoreParams(**over))
-            curve = [contribution(pick(z, float(k), sample, reg), prod, sample.human)
+            curve = [contribution(pick(z, float(k), sample, reg), prod, reference_mask(sample.run))
                      for k in KS]
             curves[label] = curve
             # The unconstrained argmax is degenerate: union IoU is maximal when

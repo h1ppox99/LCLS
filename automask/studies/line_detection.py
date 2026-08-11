@@ -69,7 +69,9 @@ from skimage.feature import peak_local_max
 from skimage.transform import radon
 
 from automask.dataset import score
-from automask.evaluation import EVAL_RUNS, load_sample
+from automask.evaluation import EVAL_RUNS, reference_mask
+from automask.sample import Sample
+from automask.selection_presets import BEAM_ON_SELECTION
 from automask.masking import production_pipeline
 from automask.stats.base import robust_z
 from automask.stats.blackhat import blackhat_stat
@@ -126,7 +128,7 @@ def darkness_field(sample, radius: int = 5) -> np.ndarray:
     """Black-hat darkness z-score of the run-sum image: large == darker than the
     local surroundings. Line defects on this detector are dark (shadows, dead
     rows, scratches), which is why this is the field the line finders read."""
-    return blackhat_stat(sample.sumimg, sample.real, radius=radius)
+    return blackhat_stat(sample.mean, sample.real, radius=radius)
 
 
 def anomaly_map(field: np.ndarray, domain: np.ndarray, p: Params) -> np.ndarray:
@@ -264,10 +266,7 @@ def context(run: int, p: Params):
     # this study exists to justify -- otherwise `prod` already contains the Hough
     # pixels and every "added" column reads zero.
     pipe = production_pipeline("union", line_detector=False)
-    sample = load_sample(
-        run, selection=pipe.shot_selection, reductions=pipe.reductions_needed(),
-        calibrations=pipe.calibrations_needed(),
-    )
+    sample = Sample.from_store(run, BEAM_ON_SELECTION, pipe.needs())
     prod = pipe.run(sample)                 # per-pixel production baseline
     domain = sample.real & ~prod            # only NEW pixels count
     field = darkness_field(sample, radius=p.blackhat_radius)
@@ -305,7 +304,7 @@ def study_run(run: int, p: Params = None):
           f"{'added%':>8s} {'add-prec':>9s}")
     rows = {}
     for name, M in variants.items():
-        s, add, ap = _added_scores(M, prod, sample.human)
+        s, add, ap = _added_scores(M, prod, reference_mask(sample.run))
         rows[name] = (s, add, ap)
         print(f"  {name:12s} {100*M.mean():8.3f} {s['iou']:7.3f} "
               f"{s['precision']:7.3f} {s['recall']:7.3f} {add:8.3f} {ap:9.3f}")
@@ -330,7 +329,7 @@ def sweep_run(run: int, p: Params = None):
     and reused across the grid; only peak-picking and back-projection repeat."""
     p = p or Params()
     sample, prod, domain, field, binary = context(run, p)
-    base = score(prod, sample.human)["iou"]
+    base = score(prod, reference_mask(sample.run))["iou"]
     print(f"\n=== run {run} — sensitivity sweep (production IoU {base:.3f}) ===")
 
     sino = radon_sinogram(binary, domain, p.radon)
@@ -339,7 +338,7 @@ def sweep_run(run: int, p: Params = None):
     for k, w in RADON_GRID:
         rp = replace(p.radon, k=k, width=w)
         M, _, _, _, peaks = radon_lines(binary, domain, rp, sino=sino)
-        s, add, ap = _added_scores(prod | M, prod, sample.human)
+        s, add, ap = _added_scores(prod | M, prod, reference_mask(sample.run))
         print(f"  {'':7s} {k:5.1f} {w:6.1f} {len(peaks):6d} {add:8.3f} "
               f"{s['iou']:7.3f} {s['iou']-base:+7.3f} {ap:9.3f}")
 
@@ -348,15 +347,15 @@ def sweep_run(run: int, p: Params = None):
     for L, t in HOUGH_GRID:
         hp = replace(p.hough, line_length=L, threshold=t)
         M, segments = hough_lines(binary, domain, hp)
-        s, add, ap = _added_scores(prod | M, prod, sample.human)
+        s, add, ap = _added_scores(prod | M, prod, reference_mask(sample.run))
         print(f"  {'':7s} {L:5d} {t:6d} {len(segments):6d} {add:8.3f} "
               f"{s['iou']:7.3f} {s['iou']-base:+7.3f} {ap:9.3f}")
 
 
 def _base_display(sample):
     """arcsinh-compressed sum image + robust display limits (as in the frangi study)."""
-    base = np.arcsinh(sample.sumimg /
-                      (np.nanmedian(np.abs(sample.sumimg[sample.real])) + 1e-9))
+    base = np.arcsinh(sample.mean /
+                      (np.nanmedian(np.abs(sample.mean[sample.real])) + 1e-9))
     vlo, vhi = np.nanpercentile(base[sample.real], [2, 99])
     return base, vlo, vhi
 
@@ -442,7 +441,7 @@ def _figure(run, sample, p, prod, field, domain,
 
     # 8. agreement of that mask against the human reference
     full = prod | rad | hgh
-    A[7].imshow(agree_rgb(full, sample.human))
+    A[7].imshow(agree_rgb(full, reference_mask(sample.run)))
     A[7].set_title("agreement vs human reference\n"
                    "green=TP  red=FP  blue=FN", fontsize=9)
     A[7].set_xticks([]); A[7].set_yticks([])

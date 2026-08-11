@@ -5,13 +5,14 @@
 /stats/
 /results/
 
-# --- automask frozen inputs & generated outputs (regenerable) ---
+# --- automask reference masks & generated outputs ---
+# automask/data/ now holds only the hand-drawn reference masks (data/masks/);
+# every array a pipeline consumes is computed from XTC via ImageStore.
 automask/data/
 automask/outputs/
 /outputs/
 
-# --- bulk archives / external datasets ---
-/data/.downloads/
+# --- bulk archives ---
 *.tar
 *.tar.gz
 *.cxi

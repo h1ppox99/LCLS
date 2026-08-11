@@ -11,7 +11,7 @@ Statistics come from the *cleaned* run sums (per-event outliers already dropped)
     mean(x^2)   = Sum_dropped_square / N
     var(x)      = mean(x^2) - mean(x)^2          (>= 0, verified)
     rms(x)      = sqrt(var)
-where N is the number of events in the run (from data/manifest.json).
+where N is the number of shots the selection kept.
 
 Why RMS for masking:
     * dead / disconnected pixels   -> rms ~ 0
@@ -35,7 +35,10 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 
 AUTOMASK = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # .../automask
-from automask.dataset import load_image, load_mask, manifest
+from automask.dataset import load_mask
+from automask.geometry import panel_to_asm
+from automask.image_store import ImageStore
+from automask.selection_presets import BEAM_ON_SELECTION
 
 FEAT = os.path.join(AUTOMASK, "outputs", "features")
 IMG_OUT = os.path.join(AUTOMASK, "outputs", "figures")
@@ -47,26 +50,42 @@ OVERLAY = mcolors.ListedColormap([(1, 1, 1, 0), (1, 0, 0, 0.6)])
 
 
 def mean_rms(run: int, form: str):
-    """Per-pixel (mean, rms) from the cleaned sums; N = events in the run."""
-    N = manifest()["n_events"][str(run)]
-    sx = load_image(f"sum_calib_dropped_run{run:04d}", form).astype(np.float64)
-    sxx = load_image(f"sum_calib_dropped_square_run{run:04d}", form).astype(np.float64)
-    mean = sx / N
-    var = np.clip(sxx / N - mean**2, 0, None)   # clip float round-off below 0
-    return mean, np.sqrt(var)
+    """Per-pixel (mean, rms) over the selected shots, straight from ImageStore.
+
+    The store already streams both moments in one pass, so the old frozen
+    sum/sum-of-squares pair and the event count they had to be divided by are
+    no longer needed.
+    """
+    store = ImageStore()
+    mean = store.reduce(run, BEAM_ON_SELECTION, "mean", form).astype(np.float64)
+    rms = store.reduce(run, BEAM_ON_SELECTION, "std", form).astype(np.float64)
+    return mean, rms
+
+
+def _n_shots(run: int) -> int:
+    counts = ImageStore().counts(run, BEAM_ON_SELECTION, "mean") or {}
+    return int(counts.get("n_used") or counts.get("n_selected") or 0)
+
+
+def _status_mask(run: int) -> np.ndarray:
+    """psana pixel status for `run`, in panel form (True == flagged bad).
+
+    psana's convention is 1 == good; the project's is True == masked.
+    """
+    return ImageStore().calibration(run, "status_as_mask") == 0
 
 
 def summarize(run: int):
     """Print per-pixel RMS statistics on the native panel geometry."""
     mean, rms = mean_rms(run, "panel")
-    status = load_mask(f"statusMask_run{run:04d}", "panel")   # True == flagged bad
+    status = _status_mask(run)                                # True == flagged bad
     r = rms.ravel()
     finite = r[np.isfinite(r)]
     med = np.median(finite)
     # simple physical bands relative to the median good-pixel RMS
     dead = rms < 0.05 * med
     hot = rms > 20 * med
-    print(f"\n--- run {run}  (N={manifest()['n_events'][str(run)]} events, "
+    print(f"\n--- run {run}  (N={_n_shots(run)} selected shots, "
           f"panel {rms.shape}) ---")
     print(f"  RMS   median {med:.3g}   p1 {np.percentile(finite,1):.3g}   "
           f"p99 {np.percentile(finite,99):.3g}   max {finite.max():.3g}")
@@ -76,9 +95,9 @@ def summarize(run: int):
           f"({100*hot.mean():.3f}%)")
     cand = dead | hot
     inter = int((cand & status).sum())
-    print(f"  reference statusMask bad  : {int(status.sum()):6d} "
+    print(f"  psana pixel_status bad    : {int(status.sum()):6d} "
           f"({100*status.mean():.3f}%)")
-    print(f"  of statusMask-bad pixels, {100*inter/max(status.sum(),1):.1f}% "
+    print(f"  of pixel_status-bad pixels, {100*inter/max(status.sum(),1):.1f}% "
           f"are extreme-RMS (dead|hot) -> RMS is a strong bad-pixel signal")
 
 
@@ -93,7 +112,7 @@ def save_features(run: int):
 
 def plot_rms(run: int, cmap: str):
     mean, rms = mean_rms(run, "asm")
-    status = load_mask(f"statusMask_run{run:04d}")            # asm
+    status = panel_to_asm(_status_mask(run), run)             # asm
     human = load_mask("human_Mask")
 
     # robust display ranges from the real (non-gap) pixels
@@ -111,7 +130,7 @@ def plot_rms(run: int, cmap: str):
     fig.colorbar(im, ax=ax[1], fraction=0.046, pad=0.04)
     ax[2].imshow(rms, norm=rnorm, cmap="magma")
     ax[2].imshow(status, cmap=OVERLAY)
-    ax[2].set_title(f"RMS + statusMask ({100*status.mean():.2f}%)")
+    ax[2].set_title(f"RMS + pixel_status ({100*status.mean():.2f}%)")
     ax[3].imshow(rms, norm=rnorm, cmap="magma")
     ax[3].imshow(human, cmap=OVERLAY)
     ax[3].set_title(f"RMS + human_Mask ({100*human.mean():.2f}%)")

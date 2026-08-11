@@ -30,7 +30,9 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from automask.evaluation import EVAL_RUNS, load_sample
+from automask.evaluation import EVAL_RUNS, reference_mask
+from automask.sample import Sample
+from automask.selection_presets import BEAM_ON_SELECTION
 from automask.masking import production_pipeline
 from automask.unsupervised.azimuthal import (
     CLIP_Q, MIN_SECTORS, N_MIN, TARGET_CELL, cell_moments, excess_scatter,
@@ -46,13 +48,10 @@ OUT_DIR = os.path.join(HERE, "outputs")
 # ==========================================================================
 def variants(run):
     prod = production_pipeline()
-    sample = load_sample(
-        run, selection=prod.shot_selection, reductions=prod.reductions_needed(),
-        calibrations=prod.calibrations_needed(),
-    )
+    sample = Sample.from_store(run, BEAM_ON_SELECTION, prod.needs())
     floor = prod.floor(sample)
-    names = [d.stat for d in prod.detectors]
-    picks = {d.stat: d.pick(sample) for d in prod.detectors}
+    names = [d.stat for d in prod.evidence_channels]
+    picks = {d.stat: d.pick(sample) for d in prod.evidence_channels}
     out = {"unmasked": np.zeros_like(floor), "floor only": floor.copy()}
     for r in range(1, len(names) + 1):
         for combo in itertools.combinations(names, r):
@@ -80,7 +79,7 @@ def random_control(mask, floor, valid, rng):
 def run_study(run: int, n_sectors: int = 12, sector_sweep=(4, 8, 16, 32), rng=None):
     rng = rng or np.random.default_rng(0)
     q, chi, inten, valid = pixel_frame(
-        load_sample(run, reductions=(), calibrations=())
+        Sample.from_store(run, BEAM_ON_SELECTION)
     )
     masks, floor = variants(run)
     usable = valid & np.isfinite(inten)

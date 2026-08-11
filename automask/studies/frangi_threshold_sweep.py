@@ -26,7 +26,9 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from automask.evaluation import load_sample, EVAL_RUNS
+from automask.evaluation import EVAL_RUNS, reference_mask
+from automask.sample import Sample
+from automask.selection_presets import BEAM_ON_SELECTION
 from automask.masking import production_pipeline
 from automask.dataset import score
 from automask.regularization.frangi import frangi_ridges, auto_threshold
@@ -46,18 +48,18 @@ LADDERS = {
 def current_mask(sample):
     pipe = production_pipeline("union")
     floor = pipe.floor(sample)
-    var = next(d for d in pipe.detectors if d.stat == "variance")
+    var = next(d for d in pipe.evidence_channels if d.stat == "variance")
     return floor | var.pick(sample)
 
 
 def sweep_run(run, ratios, tag):
-    s = load_sample(run)
+    s = Sample.from_store(run, BEAM_ON_SELECTION, pipe.needs())
     cur = current_mask(s)
     domain = s.real & ~cur
-    resp = frangi_ridges(s.sumimg)                 # locked defaults (1,2,3),0.5
+    resp = frangi_ridges(s.mean)                 # locked defaults (1,2,3),0.5
     k0 = auto_threshold(resp, domain)
 
-    base = np.arcsinh(s.sumimg / (np.nanmedian(np.abs(s.sumimg[s.real])) + 1e-9))
+    base = np.arcsinh(s.mean / (np.nanmedian(np.abs(s.mean[s.real])) + 1e-9))
     vlo, vhi = np.nanpercentile(base[s.real], [2, 99])
 
     n = len(ratios); ncol = 3; nrow = int(np.ceil(n / ncol))
@@ -70,13 +72,13 @@ def sweep_run(run, ratios, tag):
         k = ratio * k0
         ridges = (resp > k) & domain
         full = cur | ridges
-        iou = score(full, s.human)["iou"]
+        iou = score(full, reference_mask(s.run))["iou"]
         print(f"  {ratio:7.4f} {k:9.5f} {100*ridges.mean():8.3f} "
               f"{100*full.mean():8.3f} {iou:7.3f}")
 
         ax.imshow(base.T, cmap="gray", vmin=vlo, vmax=vhi, origin="lower")
-        blue = np.zeros((*s.sumimg.shape, 4)); blue[cur] = (0.1, 0.4, 1.0, 0.45)
-        red = np.zeros((*s.sumimg.shape, 4)); red[ridges] = (1, 0, 0, 1)
+        blue = np.zeros((*s.mean.shape, 4)); blue[cur] = (0.1, 0.4, 1.0, 0.45)
+        red = np.zeros((*s.mean.shape, 4)); red[ridges] = (1, 0, 0, 1)
         ax.imshow(np.transpose(blue, (1, 0, 2)), origin="lower")
         ax.imshow(np.transpose(red, (1, 0, 2)), origin="lower")
         lab = "auto-k" if ratio == 1.0 else f"{ratio:g}x auto-k"

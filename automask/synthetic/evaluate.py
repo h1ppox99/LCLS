@@ -42,7 +42,7 @@ if not os.environ.get("MPLBACKEND") and not (
     matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from automask.dataset import load_image, load_mask
+from automask.dataset import load_mask
 from automask.synthetic.artifacts import ARTIFACTS
 from automask.synthetic.metrics import masking_metrics
 from automask.viz import agree_rgb
@@ -64,16 +64,26 @@ def _cases():
 
 
 # --------------------------------------------------------------------------
-# loading helpers -- accept a dataset name OR a filesystem .npy path
+# loading helpers -- accept a filesystem .npy path, a run number, or a mask name
 # --------------------------------------------------------------------------
 def _is_path(spec: str) -> bool:
     return spec.endswith(".npy") or os.sep in spec
 
 
-def _load_source_image(spec: str) -> tuple[np.ndarray, str]:
-    if _is_path(spec):
+def _load_source_image(spec) -> tuple[np.ndarray, str]:
+    """A `.npy` path, or a run number whose selected-shot mean to corrupt."""
+    if isinstance(spec, str) and _is_path(spec):
         return np.load(spec).astype(np.float64), os.path.splitext(os.path.basename(spec))[0]
-    return load_image(spec).astype(np.float64), spec
+    try:
+        run = int(spec)
+    except (TypeError, ValueError):
+        raise ValueError(
+            f"image source {spec!r} is neither a .npy path nor a run number"
+        ) from None
+    from automask.image_store import ImageStore
+    from automask.selection_presets import BEAM_ON_SELECTION
+    image = ImageStore().reduce(run, BEAM_ON_SELECTION, "mean").astype(np.float64)
+    return image, f"run{run:04d}"
 
 
 def _load_gt_mask(spec: str) -> np.ndarray:
@@ -184,7 +194,9 @@ def _pipeline_context(cfg):
     source, so every run is corrupted with the same artifact suite.
     """
     from automask.masking import production_pipeline
-    from automask.evaluation import load_sample
+    from automask.evaluation import reference_mask
+    from automask.sample import Sample
+    from automask.selection_presets import BEAM_ON_SELECTION
     from automask.synthetic.sample_adapter import corrupt_sample, rotate_sample
 
     runs = cfg.get("runs") or [cfg["run"]]
@@ -195,23 +207,27 @@ def _pipeline_context(cfg):
         pipe = production_pipeline(combiner)
         model = f"production_pipeline(combiner={combiner})"
     else:
-        model = "swept_pipeline(" + ",".join(d.stat for d in pipe.detectors) + ")"
+        model = ("swept_pipeline("
+                 + ",".join(c.label for c in pipe.evidence_channels) + ")")
     signature = (f"{model} "
                  f"run{'s' if len(runs) > 1 else ''} {runs if len(runs) > 1 else runs[0]}")
 
     def make_source(run):
-        sample = load_sample(run)
+        sample = Sample.from_store(run, BEAM_ON_SELECTION, pipe.needs())
+        human = reference_mask(run)
         def for_rotation(degrees):
+            k = (int(degrees) // 90) % 4
             rs = rotate_sample(sample, degrees)
-            region = ~rs.human
-            full = np.ones_like(rs.human, dtype=bool)
+            rhuman = np.rot90(human, k)               # the reference rotates with it
+            region = ~rhuman                          # originally-valid pixels
+            full = np.ones_like(rhuman, dtype=bool)
             def run_example(name, rng, params):
                 if name == ORIGINAL:                  # no injection: score vs the real mask
                     pred = pipe.run(rs).astype(bool)
-                    return rs.sumimg, rs.sumimg, rs.human, pred, full
-                csample, injected = corrupt_sample(rs, name, rng, params)
+                    return rs.mean, rs.mean, rhuman, pred, full
+                csample, injected = corrupt_sample(rs, name, rng, params, region)
                 pred = pipe.run(csample).astype(bool)
-                return rs.sumimg, csample.sumimg, injected, pred, region
+                return rs.mean, csample.mean, injected, pred, region
             return run_example
         return f"run{run:04d}", for_rotation
 

@@ -1,13 +1,14 @@
 """
-dataset.py -- numpy-only access to the frozen masking dataset.
+dataset.py -- numpy-only access to the frozen REFERENCE masks.
 
-No psana, no h5py, no LCLS filesystem: this only loads frozen benchmark arrays.
+No psana, no h5py, no LCLS filesystem. Only the hand-drawn masks live here: they
+are measurements someone made once, so they cannot be recomputed. Every array a
+pipeline consumes comes from `ImageStore` instead (see `automask.sample`).
 All masks follow one convention: bool, True == masked.
 
-    from automask.dataset import load_image, load_mask, list_images, list_masks
+    from automask.dataset import load_mask, list_masks, score
 
-    img  = load_image("sum_calib_run0475")        # (1064, 1030) float32
-    gt   = load_mask("human_Mask")                # (1064, 1030) bool, True==masked
+    gt = load_mask("human_Mask")                  # (1064, 1030) bool, True==masked
 """
 from __future__ import annotations
 import os, json
@@ -15,7 +16,6 @@ import numpy as np
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _DATA = os.path.join(_HERE, "data")
-_IMG = os.path.join(_DATA, "images")
 _MSK = os.path.join(_DATA, "masks")
 
 
@@ -30,18 +30,9 @@ def _load(dirpath: str, name: str, form: str) -> np.ndarray:
     return np.load(path)
 
 
-def load_image(name: str, form: str = "asm") -> np.ndarray:
-    """Load a sum image. form='asm' (1064,1030) or 'panel' (2,512,1024)."""
-    return _load(_IMG, name, form)
-
-
 def load_mask(name: str, form: str = "asm") -> np.ndarray:
     """Load a reference mask (bool, True==masked). form='asm' or 'panel'."""
     return _load(_MSK, name, form).astype(bool)
-
-
-def list_images() -> list[str]:
-    return sorted(n[:-4] for n in os.listdir(_IMG) if n.endswith(".npy"))
 
 
 def list_masks() -> list[str]:
@@ -66,5 +57,4 @@ def score(pred: np.ndarray, truth: np.ndarray) -> dict:
 
 
 if __name__ == "__main__":
-    print("images:", list_images())
-    print("masks :", list_masks())
+    print("masks:", list_masks())

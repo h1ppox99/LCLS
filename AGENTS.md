@@ -26,12 +26,11 @@ sitting alongside the data mirror. There is no `src/` wrapper. Import project co
 
 | path | role |
 |------|------|
-| **`automask/`** | **Main working area.** The auto-masking project, an installable package. Numpy-only after a one-time extract; scores predicted masks vs references by IoU/precision/recall. Core: `masking.py` (STATS/REGULARIZERS/COMBINERS registries + `Detector`/`Pipeline`, run `python -m automask.masking`), `stats/` `regularization/` `combine/` (one file per method), `evaluation.py` (`Sample`/`evaluate`), `dataset.py` (loaders/score). Sweeps via Hydra: `conf/` + `studies/sweep_hyperparameters.py` + `scripts/*.sh`. `io/` are the reusable readers, `producers/` build the frozen inputs, `studies/` are exploratory, `data/` is the frozen input (`images/` sums, `masks/` references incl. the human ground truth, `geometry/` ix/iy maps, `manifest.json`), `outputs/` is everything generated and is **gitignored**. Start here. |
+| **`automask/`** | **Main working area.** The auto-masking project, an installable package. Core: `masking.py` (STATS/REGULARIZERS/COMBINERS registries + `Channel`/`Pipeline`), `stats/` `regularization/` `combine/` (one file per method), `sample.py` (`Sample`, the per-run arrays a pipeline reads), `image_store.py` (selected-shot reductions + psana calibration constants, content-hashed cache), `run_profile.py` + `utils.py` (one XTC pass -> per-shot field table), `shot_selection.py` (field-native `Condition`/`ShotSelection`), `evaluation.py` (`evaluate`/`report` against the hand masks), `dataset.py` (loaders/score). Sweeps via Hydra: `conf/` + `studies/sweep_hyperparameters.py` + `scripts/*.sh`. `io/` are the psana readers, `producers/` prewarm the cache, `studies/` are exploratory, `data/masks/` holds the human reference masks, `outputs/` is generated and **gitignored**. Start here. |
 | `automask/unsupervised/` | **Label-free mask metrics** — how a mask is scored when no human reference exists (production). Four tiers of increasing assumption: `parsimony.py` (size, floor containment, blob coherence), `stability.py` (reproducibility under shot resampling, input noise and knob jitter), `azimuthal.py` (excess azimuthal scatter vs a size-matched random control), `event_axis.py` (per-pixel cross-fold stationarity χ²). `folds.py` caches per-pixel moments in 10 disjoint shot folds (one XTC pass) so all resampling is numpy-only afterwards. Validated against the human mask by `studies/metric_validation.py`; see `docs/METRICS.md`. |
-| `automask/identification/` | **Masking as inference on a forward model** — `x = tau·F·A·S(q;theta_c) + F·J + eps`, so a mask is `{tau≠1} ∪ {J≠0}`. `conditions.py` (what plays the role of the condition `c`, + one XTC pass to per-condition per-pixel means), `twoway.py` (what is identifiable — only *within-ring* structure — and the two-stage tau→J estimator), `harmonics.py` (the azimuthal harmonic cut and its geometric limits), `priors.py` (one MAP detector per artifact class), `forward.py` (simulator with known truth). Exploratory, not production: every claim it encodes is a falsifiable experiment in `studies/loss_identification.py`; see `docs/IDENTIFICATION.md`. |
 | `xpp_sharing/` | **The lab's current production method** (CO2 delay-scan notebooks + `utils.py`). Reference/baseline to improve on — manual mask, diode normalization, delay binning. Read-only. |
-| `automask/io/` | Reusable readers (import as `automask.io.<name>`): `lcls_xpp.py` (small-data + calib, numpy/h5py), `read_xtc.py` (psana XTC → frames), `setup_psdm_layout.py`. |
-| `docs/`, `psana_env.sh` | `DATA_OVERVIEW.md` (layout) + `PSANA_XTC.md` (how to open XTC) + `DATA.md` (what a single shot records) + `METRICS.md` (label-free mask scoring) + `IDENTIFICATION.md` (the forward-model reformulation and which of its claims survive measurement); and the env-activation script (repo root). |
+| `automask/io/` | psana readers (import as `automask.io.<name>`): `psana1.py` (`Psana1RunSource` — the local↔SLAC seam: `from_files` opens explicit streams, `from_experiment` uses the standard resolver), `read_xtc.py` (calibrated frames, calibration constants, panel index maps), `lcls1_adapters.py` (official `smalldata_tools` detector adapters for profiling). |
+| `docs/`, `psana_env.sh` | `DATA_OVERVIEW.md` (layout) + `PSANA_XTC.md` (how to open XTC) + `DATA.md` (what a single shot records) + `METRICS.md` (label-free mask scoring); and the env-activation script (repo root). |
 | `xtc/` | Raw per-event detector data (psana XTC format). |
 | `hdf5/smalldata/` | Reduced per-event HDF5 summaries. **Start data analysis here** — no psana needed. |
 | `calib/` | psana detector calibration constants. |
@@ -89,25 +88,58 @@ small-data files already embed the applied calibration, so you rarely need `cali
 - **Geometry gotcha:** use `dis_to_sam = 190 mm`, **not** the per-pixel `z` map (stale psana
   default of 100 mm). In-plane `x`/`y` are fine.
 
+## Masking model
+
+One run in, one boolean mask out (`True == masked`). Four stages, in order:
+
+1. **Profile** — `utils.profile_run_values(run)` makes one XTC pass and returns a `RunProfile`:
+   every per-shot field psana and `smalldata_tools` expose, discovered, not declared.
+2. **Select** — `ShotSelection(where=(Condition(field, op, value), ...), trim=..., n_shots=...)`
+   over those field names. The library has no beam/branch concepts; experimental meaning lives
+   in the caller.
+3. **Mask** — `Pipeline(channels=[Channel(stat, params, field_reg=..., mask_reg=...), ...],
+   combiner=...)`. ONE list: whether a channel is part of the intensity-free floor is read from
+   its stat's registered `kind`, never declared twice. `Pipeline.needs()` names every array the
+   channels read; `Sample.from_store(run, selection, needs)` materializes exactly those — a name
+   in `image_store.REDUCTIONS` is reduced over the selected shots, anything else is passed
+   straight to `psana.Detector` as a calibration accessor (`pedestals`, `rms`, `status_as_mask`).
+4. **Score** — label-free via `unsupervised/` (production), or against the hand masks via
+   `evaluation.evaluate` (runs 389/475 only).
+
+Conventions that bite if ignored:
+
+- **Reductions are assembled, calibration constants are native panel.** Assembling scatters onto
+  a zero-filled canvas, so a constant whose zero means something (`status_as_mask`) must be
+  interpreted BEFORE `geometry.panel_to_asm`. `ImageStore.calibration` serves panel form only.
+- **psana masks are `1 == good`; project masks are `True == masked`.** The consuming statistic
+  converts; `io/read_xtc.detector_calibration` returns psana's values untouched.
+- **Detector facts are asked of psana, never hardcoded** — panel shape from `Detector.shape(run)`,
+  the assembled canvas from `(ix.max()+1, iy.max()+1)`, the gain-stage count from the constant's
+  own leading axis. Do not reintroduce shape constants.
+- **A `Sample` carries no ground truth.** The human mask comes from `evaluation.reference_mask(run)`.
+
 ## Gotchas
 
 - **Colons in filenames.** psana names contain `:` (e.g. `Epix100a::CalibV1`,
   `XppGon.0:Epix100a.1`). This copy was made on macOS, which can't store `:`, so each `:` is
   replaced by the private-use char **U+F022**. Typing a literal colon path fails ("No such
-  file or directory"). Use glob/tab-completion, `os.listdir`/`os.walk`, `lcls_xpp.resolve()`,
-  or a `calib/Epix100a*` wildcard — never a hand-typed colon path.
+  file or directory"). Use glob/tab-completion, `os.listdir`/`os.walk`,
+  or a `calib/Epix100a*` wildcard — never a hand-typed colon path. Note psana itself reads
+  the psdm tree (`$SIT_PSDM_DATA/xpp/xppl1016922/calib`, real colons), not the repo `calib/`.
 - **Truncated run 389.** All four present streams are truncated. psana reads them fine —
   6 471 events decode cleanly (full Jungfrau raw frames included), then each stream stops at
   its truncation with an `EOF while reading datagram payload` warning, no crash. But:
   (a) **open it by explicit file path**, not `exp=xppl1016922:run=389` — the run-resolver
   rejects the incomplete layout ("XTC file(s) is empty"); use
-  `automask.io.read_xtc.open_local_run(389)`, which globs the streams. (b) Those 6 471 events
+  `automask.io.read_xtc.local_run_source(389)`, which globs the streams into a
+  `Psana1RunSource`. `slac_run_source(389)` is the same thing via the standard resolver. (b) Those 6 471 events
   are a **subset** of the 40 003 in small data, so **XTC event indices do not line up with
   small-data row indices for run 389** — never join the two by index (run 475 is complete and
   does align). (c) The streams carry Jungfrau + beamline monitors (EBeam, gas detector,
   BMMONs, IPMs, the XPP-AIN-01 analog input) but **not** the Epix panels. (d) `.calib()`
-  needs the calib dir wired into psana's search path (`automask/io/setup_psdm_layout.py`);
-  `.raw()` works regardless.
+  needs the calib dir wired into psana's search path (`Psana1RunSource` does this via
+  `psana.setOption`; `automask/dev/setup_psdm_layout.py` builds the psdm tree); `.raw()`
+  works regardless.
 - **There is no laser, and `lightStatus/laser` is a lie.** One x-ray beam is split into two
   branches, **CC** and **VCC**, selected per shot by the analog voltages `ai/ch02` (CC) and
   `ai/ch03` (VCC), thresholded at 2 V. EVR codes 90/91 are labelled `'Laser on'`/`'Laser off'`

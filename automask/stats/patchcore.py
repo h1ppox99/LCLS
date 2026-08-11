@@ -76,11 +76,14 @@ class PatchCoreParams:
 #  what we already know is bad, before PatchCore ever runs
 # ==========================================================================
 def known_mask(sample, source: str) -> np.ndarray:
-    """The trusted mask fed back into PatchCore: `floor` = geometry+calib only,
-    `production` = the full production pipeline (floor + variance + hough_lines +
-    asic_polish), `human` = the hand mask. Only `human` needs a label."""
+    """The trusted mask fed back into PatchCore: `floor` = geometry + pixel-status
+    only, `production` = the full production pipeline (floor + variance +
+    hough_lines + asic_polish), `human` = the hand mask. Only `human` needs a
+    label, which is why it is fetched from the evaluation layer rather than read
+    off the Sample -- a Sample carries no ground truth."""
     if source == "human":
-        return np.asarray(sample.human, bool)
+        from automask.evaluation import reference_mask
+        return reference_mask(sample.run)
     from automask.masking import production_pipeline
     pipe = production_pipeline("union")
     if source == "floor":
@@ -227,7 +230,7 @@ def anomaly_map(sample, bank, p: PatchCoreParams,
         d = torch.cdist(chunk, bank)
         dists.append(d.topk(p.neighbours, largest=False).values.mean(1))
     score = torch.cat(dists).reshape(1, 1, h, w)
-    full = F.interpolate(score, size=sample.human.shape, mode="bilinear",
+    full = F.interpolate(score, size=sample.mean.shape, mode="bilinear",
                          align_corners=False)[0, 0].cpu().numpy()
     return gaussian_filter(full, p.blur_sigma) if p.blur_sigma > 0 else full
 
@@ -251,9 +254,10 @@ def _bank_for(sample, p: PatchCoreParams):
     if p.bank_run is None:
         src = sample
     else:
-        from automask.evaluation import load_sample
-        src = load_sample(
-            p.bank_run, reductions=("mean", "std"), calibrations=("pedestals",)
+        from automask.sample import Sample
+        from automask.selection_presets import BEAM_ON_SELECTION
+        src = Sample.from_store(
+            p.bank_run, BEAM_ON_SELECTION, ("mean", "std", "pedestals")
         )
     _BANK_CACHE[key] = fit_bank(src, p, known_mask(src, p.known))
     return _BANK_CACHE[key]

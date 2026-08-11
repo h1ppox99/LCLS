@@ -45,8 +45,10 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from automask.dataset import score
-from automask.evaluation import EVAL_RUNS, load_sample
-from automask.masking import Detector, Pipeline, production_pipeline
+from automask.evaluation import EVAL_RUNS, reference_mask
+from automask.sample import Sample
+from automask.selection_presets import BEAM_ON_SELECTION
+from automask.masking import Channel, Pipeline, production_pipeline
 from automask.unsupervised import METRICS, Candidate, MetricContext, score_candidate
 from automask.unsupervised.stability import pipeline_jitter
 
@@ -54,8 +56,8 @@ HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT_DIR = os.path.join(HERE, "outputs")
 
 # The selected-shot images and calibration needed by every candidate.
-REDUCTIONS = ("std", "mean")
-CALIBRATIONS = ("pedestals",)
+# Every Sample array the candidate pipelines read, in one place.
+NEEDS = ("mean", "std", "pedestals", "status_as_mask")
 
 
 # ==========================================================================
@@ -74,13 +76,13 @@ def _pipe(k=3.5, tv=4.0, dets=("variance", "hough", "asic"), combiner="union"):
 
     d = []
     if "variance" in dets:
-        d.append(Detector("variance", VarianceParams(k=k, mode="low"),
+        d.append(Channel("variance", VarianceParams(k=k, mode="low"),
                           field_reg="tv", field_reg_params=TVParams(tv)))
     if "hough" in dets:
-        d.append(Detector("hough_lines", HoughLinesParams(defectiveness_scale=5.0),
+        d.append(Channel("hough_lines", HoughLinesParams(defectiveness_scale=5.0),
                           field_reg=None))
     if "asic" in dets:
-        d.append(Detector("asic_polish",
+        d.append(Channel("asic_polish",
                           AsicPolishParams(asic=256, n_iter=3, k=15.0, mode="high"),
                           field_reg=["blob_scale"], field_reg_params=[BlobScaleParams()],
                           mask_reg=["fill_holes", "area_gate"],
@@ -173,7 +175,7 @@ def build_panel(quick: bool = False):
     cands += [
         Candidate("dilate_r2", _morph(prod, "dilate", 2), note="mild over-mask"),
         Candidate("erode_r2", _morph(prod, "erode", 2), note="mild under-mask"),
-        Candidate("human_ref", lambda s: s.human, static=True,
+        Candidate("human_ref", lambda s: reference_mask(s.run), static=True,
                   note="the ground truth itself -- a metric that does not rank "
                        "this near the top is suspect"),
     ]
@@ -192,17 +194,16 @@ def build_panel(quick: bool = False):
 #  scoring
 # ==========================================================================
 def score_run(run: int, cands, seed: int = 0) -> dict:
-    sample = load_sample(
-        run, reductions=REDUCTIONS, calibrations=CALIBRATIONS
-    )
+    sample = Sample.from_store(run, BEAM_ON_SELECTION, NEEDS)
+    human = reference_mask(run)
     ctx = MetricContext(sample=sample, seed=seed)
     floor = ctx.floor()
-    target = sample.human & ~floor
+    target = human & ~floor
     rows = {}
     for c in cands:
         m = c.mask(ctx)
         row = score_candidate(c, ctx)
-        row["truth_iou"] = score(m, sample.human)["iou"]
+        row["truth_iou"] = score(m, human)["iou"]
         row["truth_residual"] = score(m & ~floor, target)["iou"]
         row["masked_frac"] = float(m.mean())
         rows[c.name] = row
