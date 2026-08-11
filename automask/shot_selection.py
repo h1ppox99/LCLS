@@ -112,7 +112,7 @@ class ShotSelection:
     All conditions are ANDed. The optional percentile trim is evaluated only
     among shots that pass those conditions. ``n_shots`` then takes evenly
     spaced survivors in stream order. ``normalization`` names the field used by
-    the feature reducer and automatically excludes non-finite and zero values.
+    ImageStore and automatically excludes non-finite and zero values.
     """
 
     where: Tuple[Condition, ...] = ()

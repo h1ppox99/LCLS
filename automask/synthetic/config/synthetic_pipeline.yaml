@@ -3,7 +3,7 @@
 # Run:  python -m automask.synthetic.evaluate --config automask/synthetic/config/synthetic_pipeline.yaml
 #
 # Unlike the "image" baseline (which scores a single-image module:function masker),
-# this mode corrupts a full run-level Sample (sumimg/umean/ustd) via the adapter and
+# this mode corrupts a full run-level Sample (sumimg/mean/std) via the adapter and
 # scores the PRODUCTION Pipeline -- so the variance channel is present. Physics:
 #   * beamstop  -- multiplicative attenuation lowers mean AND variance -> the
 #                  low-variance / dark-speck detectors catch it (recall should jump
@@ -19,7 +19,7 @@ output_dir: automask/outputs/synthetic_pipeline
 seed: 0
 n_per_artifact: 3
 rotations: [0]                    # production pipeline now includes asic_polish,
-                                   # which needs `pedestal` (panel-form -- dropped
+                                   # which needs `pedestals` (panel-form -- dropped
                                    # under any non-zero rotation, see rotate_sample)
 
 artifacts:
@@ -49,12 +49,12 @@ artifacts:
 
   # 4. hot patch -- additive bright region injected into the PEDESTAL constants,
   #    the polarity of a high-dark-current sensor defect (the real one on run 475).
-  #    Only asic_polish reads `pedestal`, so this case scores that channel; the
+  #    Only asic_polish reads `pedestals`, so this case scores that channel; the
   #    production intensity/dispersion detectors are out of polarity and will
   #    (correctly) score near zero on it, exactly as `streak` does for them.
   #    `axis_ratio` away from 1.0 is the point: it measures how much a compact-blob
   #    detector degrades on shapes that are NOT disks.
-  #    NOTE: rotations must stay [0] -- panel-form features cannot be rotated with
+  #    NOTE: rotations must stay [0] -- panel-form constants cannot be rotated with
   #    the assembled arrays (rotate_sample raises).
   hot_patch:
     shape: random

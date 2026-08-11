@@ -28,7 +28,7 @@ def blackhat_stat(lit, real, radius=5):
 
 def compute(sample, params: BlackhatParams | None = None):
     radius = 5 if params is None else params.radius
-    return blackhat_stat(sample.umean, sample.real, radius=radius)
+    return blackhat_stat(sample.mean, sample.real, radius=radius)
 
 
 register_stat(StatSpec(
@@ -37,6 +37,6 @@ register_stat(StatSpec(
     params=BlackhatParams,
     kind="field",
     mode="high",
-    needs=("umean", "real"),
-    doc="grey black-hat response z-score; needs lit-beam umean",
+    needs=("mean", "real"),
+    doc="grey black-hat response z-score; needs the selected-shot mean",
 ))

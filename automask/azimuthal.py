@@ -112,7 +112,10 @@ def plot_run(run: int, npt: int = NPT, out: Optional[str] = None):
     import matplotlib.pyplot as plt
 
     pipe = production_pipeline("union")
-    sample = load_sample(run, features=pipe.features_needed())
+    sample = load_sample(
+        run, selection=pipe.shot_selection, reductions=pipe.reductions_needed(),
+        calibrations=pipe.calibrations_needed(),
+    )
     mask = pipe.run(sample)
     img = load_image(f"sum_calib_run{run:04d}").astype(np.float64)
 

@@ -76,12 +76,18 @@ def verdict(name: str, value: float) -> str:
     return "ok" if value <= ref * 3 else "WEAK"    # leak-style: within 3x nominal
 
 
-def score_card(pipeline, run: int, seed: int = 0, features=("ustd", "umean", "pedestal")):
+def score_card(
+    pipeline, run: int, seed: int = 0,
+    reductions=("std", "mean"), calibrations=("pedestals",),
+):
     """Score one pipeline on one run with every label-free metric."""
     from automask.evaluation import load_sample
     from automask.unsupervised.stability import pipeline_jitter
 
-    sample = load_sample(run, features=features)
+    sample = load_sample(
+        run, selection=pipeline.shot_selection, reductions=reductions,
+        calibrations=calibrations,
+    )
     ctx = MetricContext(sample=sample, seed=seed)
     cand = Candidate("pipeline", pipeline.run, jitter=pipeline_jitter(pipeline))
     row = score_candidate(cand, ctx)

@@ -1,13 +1,11 @@
 """
 viz.py -- the project's figures, in four layers built on one rendering primitive.
 
-Plotting lives here, *above* the FeatureStore, rather than as methods on the
-frozen spec classes: rendering a selector's effect means resolving it to an
-image, which reaches down into ``FeatureStore`` -> XTC. Keeping that here leaves
-``ShotSelection`` / ``FeatureSpec`` pure numpy and psana-free (their whole point).
+Plotting lives above ImageStore: rendering a selector's effect may resolve raw
+XTC frames, while ShotSelection itself remains numpy-only and psana-free.
 
   1. primitive          ``show``               -- render one (1064,1030) array well.
-  2. selection views     ``show_feature``       -- one feature/selection as an image.
+  2. selection views     ``show_image``         -- one reduction as an image.
                          ``compare_selections`` -- a grid to eyeball selector effects.
   3. mask evaluation     ``agree_rgb`` / ``save_agreement`` -- TP/FP/FN overlays.
   4. sweeps              ``plot_results_heatmap`` -- 2-D IoU heatmap over two knobs.
@@ -59,26 +57,11 @@ def show(img, ax=None, *, mask=None, robust=True, vmin=None, vmax=None,
     return im
 
 
-# ── 2. selection / feature views ──────────────────────────────────────────────
-def _resolve_spec(spec, reduction):
-    """Coerce a catalogue name, a FeatureSpec, or a bare ShotSelection into a
-    FeatureSpec the FeatureStore can key on (name is irrelevant to the cache)."""
-    from automask.features import get_spec
-    from automask.features.base import FeatureSpec
-    from automask.shot_selection import ShotSelection
-    if isinstance(spec, str):
-        return get_spec(spec)
-    if isinstance(spec, FeatureSpec):
-        return spec
-    if isinstance(spec, ShotSelection):
-        return FeatureSpec("_", reduction, spec)
-    raise TypeError(f"expected str | FeatureSpec | ShotSelection, got {type(spec).__name__}")
-
-
+# ── 2. selection views ────────────────────────────────────────────────────────
 def _sel_label(sel, n_used=None):
     """Compact one-line summary of a ShotSelection's knobs, for panel titles.
 
-    ``n_used`` (the actual shots the cached feature was built from) wins over the
+    ``n_used`` (the actual shots the cached image was built from) wins over the
     requested ``sel.n_shots`` when known -- so ``n=`` reflects availability, not
     just the config (e.g. a run with fewer accessible shots than requested)."""
     bits = [condition.label() for condition in sel.where]
@@ -95,26 +78,22 @@ def _sel_label(sel, n_used=None):
     return " ".join(bits)
 
 
-def _n_used(store, run, spec):
-    """Actual shots the cached feature used, from the sidecar (``None`` if absent)."""
-    c = store.counts(run, spec)
+def _n_used(store, run, selection, reduction):
+    """Actual shots a cached reduction used, or ``None`` when unavailable."""
+    c = store.counts(run, selection, reduction)
     return c.get("n_used") if c else None
 
 
-def show_feature(run, spec, ax=None, store=None, reduction="mean", out=None, **kw):
-    """Render one feature image for ``run``.
+def show_image(
+    run, selection, reduction="mean", ax=None, store=None, out=None, **kw
+):
+    """Render one selected-shot reduction, computing it on a cache miss."""
+    from automask.image_store import ImageStore
 
-    ``spec`` may be a catalogue name (``"umean"``), a ``FeatureSpec``, or a bare
-    ``ShotSelection`` (paired with ``reduction``, default ``"mean"``). Resolved
-    through the FeatureStore -- served from the warm cache if present, else
-    computed from XTC (needs the psana env). Saves a PNG when ``out`` is given.
-    """
-    from automask.features import FeatureStore
-    spec = _resolve_spec(spec, reduction)
-    store = store or FeatureStore()
-    img = store.get(run, spec)
-    label = _sel_label(spec.selection, _n_used(store, run, spec))
-    title = kw.pop("title", f"run {run:04d} — {spec.reduction} · {label}")
+    store = store or ImageStore()
+    img = store.reduce(run, selection, reduction)
+    label = _sel_label(selection, _n_used(store, run, selection, reduction))
+    title = kw.pop("title", f"run {run:04d} — {reduction} · {label}")
     im = show(img, ax=ax, title=title, **kw)
     if out:
         im.axes.figure.savefig(out, dpi=110, bbox_inches="tight")
@@ -123,18 +102,19 @@ def show_feature(run, spec, ax=None, store=None, reduction="mean", out=None, **k
 
 def compare_selections(run, selections, reduction="mean", store=None,
                        shared_scale=True, out=None, **kw):
-    """Grid of one feature panel per selection -- the 'effect of different shot
-    selectors' figure.
+    """Grid of one reduction per ShotSelection.
 
-    ``selections`` is a list of ShotSelection (or FeatureSpec / catalogue names).
     With ``shared_scale`` all panels share one 1–99th-percentile colour scale
     (so brightness differences between selectors are real, not per-panel
     autoscaled) plus a single shared colourbar. Returns the Figure.
     """
-    from automask.features import FeatureStore
-    store = store or FeatureStore()
-    specs = [_resolve_spec(s, reduction) for s in selections]
-    imgs = [store.get(run, s) for s in specs]
+    from automask.image_store import ImageStore
+    from automask.shot_selection import ShotSelection
+
+    if not all(isinstance(selection, ShotSelection) for selection in selections):
+        raise TypeError("selections must contain only ShotSelection objects")
+    store = store or ImageStore()
+    imgs = [store.reduce(run, selection, reduction) for selection in selections]
 
     vmin = vmax = None
     if shared_scale:
@@ -147,10 +127,12 @@ def compare_selections(run, selections, reduction="mean", store=None,
     fig, axes = plt.subplots(1, n, figsize=(5.2 * n, 5.6), squeeze=False)
     axes = axes[0]
     im = None
-    for ax, spec, img in zip(axes, specs, imgs):
+    for ax, selection, img in zip(axes, selections, imgs):
         im = show(img, ax=ax, robust=not shared_scale, vmin=vmin, vmax=vmax,
                   cbar=False,
-                  title=_sel_label(spec.selection, _n_used(store, run, spec)), **kw)
+                  title=_sel_label(
+                      selection, _n_used(store, run, selection, reduction)
+                  ), **kw)
     if shared_scale and im is not None:
         fig.colorbar(im, ax=list(axes), fraction=0.025, pad=0.02)
     fig.suptitle(f"run {run:04d} — {reduction}", fontsize=13)
@@ -179,7 +161,7 @@ def show_mask(mask, ax=None, color=(0.85, 0.1, 0.1), title=""):
 
 
 def _detector_input(detector, sample):
-    """The image a detector reads, as (feature name, assembled array), or None."""
+    """The image a detector reads, as (field name, assembled array), or None."""
     from automask.stats.base import STATS
     from automask.geometry import panel_to_asm
     for name in STATS[detector.stat].needs:
@@ -197,7 +179,7 @@ def _detector_input(detector, sample):
 
 def detector_panels(pipeline, sample, out=None, floor_row=True, store=None):
     """One row per masking channel: its input image left, the mask it gives right."""
-    from automask.features import FEATURES, FeatureStore
+    from automask.image_store import ImageStore
 
     base = pipeline.floor(sample)
     rows, skipped = [], []
@@ -212,15 +194,14 @@ def detector_panels(pipeline, sample, out=None, floor_row=True, store=None):
     if not rows:
         raise ValueError("no detector in this pipeline reads an assembled image")
 
-    store = store or FeatureStore()
+    store = store or ImageStore()
     fig, axes = plt.subplots(len(rows), 2, figsize=(11, 5.4 * len(rows)),
                              squeeze=False)
     for (d, fname, img), (ax_l, ax_r) in zip(rows, axes):
-        spec = FEATURES.get(fname)
-        if spec is not None and spec.selection is not None:
-            label = f"{fname} — {_sel_label(spec.selection, _n_used(store, sample.run, spec))}"
-        elif spec is not None:
-            label = f"{fname} — calib constant (assembled)"
+        if fname in ("mean", "std", "median", "mad"):
+            label = f"{fname} — {_sel_label(sample.selection, _n_used(store, sample.run, sample.selection, fname))}"
+        elif fname in ("pedestals", "pixel_rms"):
+            label = f"{fname} — calibration constant"
         else:
             label = f"{fname} — run sum"
         if d is None:

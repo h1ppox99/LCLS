@@ -1,18 +1,18 @@
 # automask — automated detector masking (xppl1016922, Jungfrau1M)
 
 This is the masking project for the recovered LCLS experiment. Production run
-profiling, calibration, geometry, and feature materialization all use psana/XTC.
+profiling, calibration, geometry, and selected-shot image materialization use psana/XTC.
 
 ## Recovery status
 
-The FeatureStore cache is intentionally gitignored and may be missing after
+The ImageStore cache is intentionally gitignored and may be missing after
 recovery. It can be prewarmed, or populated on demand by the masking pipeline:
 
 ```bash
-python -m automask.producers.build_features
+python -m automask.producers.build_images
 ```
 
-`build_features` is optional: it only prewarms the FeatureStore cache, which the
+`build_images` is optional: it only prewarms the ImageStore cache, which the
 evaluation loop otherwise fills on demand from raw XTC.
 
 ## Adding a method
@@ -45,7 +45,7 @@ All masks are **bool with `True == masked (excluded)`**.
 
 ### Input images — archived benchmark arrays (`data/images/`)
 The optional real-data evaluation uses frozen run sums if they are available.
-They are not inputs to production feature extraction and are no longer rebuilt
+They are not inputs to production selected-shot reductions and are no longer rebuilt
 by this package.
 
 ### Reference masks (`data/masks/`)
@@ -83,10 +83,10 @@ pred = img == 0                            # trivial baseline
 print(score(pred, gt))                     # {'iou':.., 'precision':.., 'recall':..}
 ```
 
-## Prewarm production features
+## Prewarm production images
 
 ```
-python -m automask.producers.build_features
+python -m automask.producers.build_images
 ```
 
 ## Baseline to beat

@@ -28,7 +28,7 @@ Run once:
 then (in the psana env):
 
     export SIT_PSDM_DATA=/Data/hippolyte.wallaert/psdm
-    python -m automask.producers.build_features --run 475
+    python -m automask.producers.build_images --run 475
 
 Re-running is safe (idempotent): it rebuilds the links.
 """

@@ -11,9 +11,10 @@ from __future__ import annotations
 
 import numpy as np
 
-from automask.features.base import FeatureSpec
-from automask.features.store import FeatureStore
-from automask.masking import Detector
+from automask.image_store import (
+    ImageStore, _calibration_content_key, _content_key, _reduction_stub,
+)
+from automask.masking import Detector, Pipeline, production_pipeline
 from automask.regularization.area_gate import area_gate
 from automask.regularization.blob_scale import blob_scale
 from automask.regularization.fill_holes import fill_holes
@@ -132,6 +133,15 @@ def test_detector_rejects_field_reg_on_a_pick_stat():
         raise AssertionError(f"expected ValueError for field_reg={field_reg!r}")
 
 
+def test_pipeline_splits_reduction_and_calibration_requirements():
+    pipeline = production_pipeline()
+    assert pipeline.reductions_needed() == ("std",)
+    assert pipeline.calibrations_needed() == ("pedestals",)
+    blackhat = Pipeline([Detector("blackhat")])
+    assert blackhat.reductions_needed() == ("mean",)
+    assert blackhat.calibrations_needed() == ()
+
+
 # -- shot selection --------------------------------------------------------
 def _profile(n=100, **values):
     columns = {"intensity": np.linspace(1.0, 100.0, n), **values}
@@ -149,13 +159,13 @@ def test_run_profile_returns_canonical_columns():
         raise AssertionError("expected a missing-field error")
 
 
-def test_feature_store_reuses_injected_run_profile(tmp_path):
+def test_image_store_reuses_injected_run_profile(tmp_path):
     profile = _profile(3)
-    store = FeatureStore(cache_dir=tmp_path, run_profile=profile)
+    store = ImageStore(cache_dir=tmp_path, run_profile=profile)
     assert store.profile(475) is profile
 
 
-def test_feature_store_profiles_each_run_once(tmp_path, monkeypatch):
+def test_image_store_profiles_each_run_once(tmp_path, monkeypatch):
     import automask.utils as utils
 
     calls = []
@@ -165,7 +175,7 @@ def test_feature_store_profiles_each_run_once(tmp_path, monkeypatch):
         return RunProfile(run, 0, [], {}, {}, [])
 
     monkeypatch.setattr(utils, "profile_run_values", profile_run)
-    store = FeatureStore(cache_dir=tmp_path)
+    store = ImageStore(cache_dir=tmp_path)
     assert store.profile(12) is store.profile(12)
     assert store.profile(13) is store.profile(13)
     assert calls == [(12, False), (13, False)]
@@ -259,47 +269,143 @@ def test_describe_reports_an_empty_selection_without_raising():
     assert description["n_selected"] == 0
 
 
-# -- FeatureSpec sources ---------------------------------------------------
-def test_events_content_key_covers_the_whole_selection():
+# -- ImageStore ------------------------------------------------------------
+def test_reduction_content_key_covers_the_whole_selection():
     """The warm XTC cache hash covers the complete generic selection recipe."""
     import hashlib
     import json
     from dataclasses import asdict
 
-    spec = FeatureSpec("umean", "mean", ShotSelection(where=(
+    selection = ShotSelection(where=(
         Condition("state", "==", "sample"),
-    )))
-    payload = json.dumps({"reduction": "mean", "selection": asdict(spec.selection)},
+    ))
+    payload = json.dumps({"reduction": "mean", "selection": asdict(selection)},
                          sort_keys=True)
-    assert spec.content_key == hashlib.sha1(payload.encode()).hexdigest()[:12]
-    other = FeatureSpec("umean", "mean", ShotSelection(where=(
-        Condition("state", "==", "dark"),
-    )))
-    assert spec.content_key != other.content_key
+    assert _content_key(selection, "mean") == hashlib.sha1(
+        payload.encode()
+    ).hexdigest()[:12]
+    assert _reduction_stub(475, selection, "mean") == \
+        "mean_b7a9d7729a67_run0475"
+    variants = (
+        ShotSelection(where=(Condition("state", "==", "dark"),)),
+        ShotSelection(where=selection.where, trim=PercentileTrim("intensity", 0.1, 0.2)),
+        ShotSelection(where=selection.where, n_shots=10),
+        ShotSelection(where=selection.where, normalization="intensity"),
+    )
+    keys = {_content_key(selection, "mean"), _content_key(selection, "std")}
+    keys.update(_content_key(other, "mean") for other in variants)
+    assert len(keys) == 2 + len(variants)
 
 
-def test_calib_and_event_specs_do_not_collide():
-    a = FeatureSpec("pedestal", source="calib", constant="pedestals", gain=0,
-                    form="panel")
-    b = FeatureSpec("pixel_rms", source="calib", constant="pixel_rms", gain=0,
-                    form="panel")
-    c = FeatureSpec("umean", "mean", ShotSelection(where=(
+def test_calibration_and_reduction_keys_do_not_collide():
+    selection = ShotSelection(where=(
         Condition("state", "==", "sample"),
-    )))
-    keys = {a.content_key, b.content_key, c.content_key}
+    ))
+    keys = {
+        _calibration_content_key("pedestals", 0),
+        _calibration_content_key("pixel_rms", 0),
+        _content_key(selection, "mean"),
+    }
     assert len(keys) == 3
-    assert a.cache_stub(475).startswith("pedestalsg0_")
+    assert _reduction_stub(475, selection, "mean").startswith("mean_")
+    assert _calibration_content_key("pedestals", 0) == "14b618c9b510"
 
 
-def test_feature_spec_validates_its_source():
-    for kwargs in ({"source": "calib"},                    # missing constant/gain
-                   {"reduction": "mean"},                  # events, no selection
-                   {"source": "nope"}):
+def test_image_store_validates_reduction_form_and_gain(tmp_path):
+    store = ImageStore(cache_dir=tmp_path)
+    selection = ShotSelection()
+    calls = (
+        lambda: store.reduce(1, selection, "sum"),
+        lambda: store.reduce(1, selection, "mean", form="bad"),
+        lambda: store.reduce(1, object(), "mean"),
+        lambda: store.calibration(1, "pedestals", gain=-1),
+        lambda: store.calibration(1, "pedestals", gain=3),
+        lambda: store.calibration(1, "", gain=0),
+        lambda: store.calibration(1, "pedestals", form="bad"),
+    )
+    for call in calls:
         try:
-            FeatureSpec("x", **kwargs)
-        except ValueError:
+            call()
+        except (TypeError, ValueError):
             continue
-        raise AssertionError(f"expected ValueError for {kwargs!r}")
+        raise AssertionError("expected validation error")
+
+
+def _small_store(tmp_path, monkeypatch):
+    import automask.image_store as image_store
+    import automask.io.read_xtc as read_xtc
+
+    monkeypatch.setattr(image_store, "PANEL_SHAPE", (1, 2, 2))
+    monkeypatch.setattr(image_store, "ASM_SHAPE", (2, 2))
+    monkeypatch.setattr(
+        read_xtc, "panel_geometry",
+        lambda run, source=None: (
+            np.array([[[0, 0], [1, 1]]]), np.array([[[0, 1], [0, 1]]])
+        ),
+    )
+    profile = RunProfile(7, 2, [], {}, {}, [], source=object())
+    return ImageStore(cache_dir=tmp_path, run_profile=profile)
+
+
+def test_mean_std_are_co_computed_and_cache_hits_skip_compute(tmp_path, monkeypatch):
+    store = _small_store(tmp_path, monkeypatch)
+    calls = []
+
+    def accumulate(run, selection):
+        calls.append((run, selection))
+        return (
+            np.arange(4).reshape(1, 2, 2),
+            np.arange(4, 8).reshape(1, 2, 2),
+            {"n_events": 2, "n_eligible": 2, "n_selected": 2, "n_used": 2},
+        )
+
+    monkeypatch.setattr(store, "_accumulate", accumulate)
+    selection = ShotSelection()
+    np.testing.assert_array_equal(store.reduce(7, selection, "mean"), [[0, 1], [2, 3]])
+    np.testing.assert_array_equal(
+        store.reduce(7, selection, "std", form="panel"),
+        np.arange(4, 8, dtype=np.float32).reshape(1, 2, 2),
+    )
+    assert len(calls) == 1
+    assert store.counts(7, selection, "mean")["n_used"] == 2
+
+
+def test_median_mad_are_co_computed(tmp_path, monkeypatch):
+    store = _small_store(tmp_path, monkeypatch)
+    calls = []
+
+    def stage(run, selection, path):
+        path.touch()
+        calls.append((run, selection))
+        return {"n_events": 2, "n_eligible": 2, "n_selected": 2, "n_used": 2}
+
+    monkeypatch.setattr(store, "_stage_frames", stage)
+    monkeypatch.setattr(
+        store, "_robust_reduce",
+        lambda path: (np.ones((1, 2, 2)), np.full((1, 2, 2), 2.0)),
+    )
+    selection = ShotSelection()
+    assert np.all(store.reduce(7, selection, "mad") == 2.0)
+    assert np.all(store.reduce(7, selection, "median", form="panel") == 1.0)
+    assert len(calls) == 1
+
+
+def test_calibration_caches_panel_and_assembled_forms(tmp_path, monkeypatch):
+    import automask.io.read_xtc as read_xtc
+
+    store = _small_store(tmp_path, monkeypatch)
+    calls = []
+
+    def calibration(run, constant, source=None):
+        calls.append((run, constant, source))
+        return np.arange(12).reshape(3, 1, 2, 2)
+
+    monkeypatch.setattr(read_xtc, "detector_calibration", calibration)
+    panel = store.calibration(7, "pedestals", gain=1)
+    assembled = store.calibration(7, "pedestals", gain=1, form="asm")
+    np.testing.assert_array_equal(panel, np.arange(4, 8).reshape(1, 2, 2))
+    np.testing.assert_array_equal(assembled, [[4, 5], [6, 7]])
+    assert len(calls) == 1
 
 
 if __name__ == "__main__":

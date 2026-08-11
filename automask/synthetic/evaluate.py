@@ -253,7 +253,7 @@ def evaluate_config(cfg: dict, pipeline=None) -> dict:
         run_example = for_rotation(degrees)
         for type_idx, name in enumerate(cases):
             # An artifact may restrict which rotations it is valid under (e.g.
-            # `hot_patch` corrupts a panel-form feature, which has no image
+            # `hot_patch` corrupts a panel-form constant, which has no image
             # rotation -- see sample_adapter.rotate_sample). Popped here so it
             # never reaches the generator as a parameter.
             acfg = dict(artifact_cfg.get(name) or {})

@@ -26,7 +26,7 @@ implemented via `PatchCoreParams.bank_run`:
   deliberately NOT used here: it maximizes diversity, which preferentially keeps
   the outliers -- exactly the wrong bias when the "clean" set is contaminated.)
 
-The frame is painted as an RGB image the backbone can read (`umean`, `ustd` and
+The frame is painted as an RGB image the backbone can read (`mean`, `std` and
 the valid-pixel flag in the three channels), asinh-compressed and
 percentile-stretched. Output is a robust-z field, `mode="high"` (far from normal
 == defective).
@@ -143,7 +143,7 @@ def render(sample, known: Optional[np.ndarray] = None, fill: str = "none",
     good = real & ~known if known is not None else real
     bad = ~good
     chans = []
-    for arr in (np.asarray(sample.umean, float), np.asarray(sample.ustd, float)):
+    for arr in (np.asarray(sample.mean, float), np.asarray(sample.std, float)):
         if fill != "none":
             arr = _fill(arr, bad, fill, seed)
             chans.append(_stretch(arr, good))
@@ -252,7 +252,9 @@ def _bank_for(sample, p: PatchCoreParams):
         src = sample
     else:
         from automask.evaluation import load_sample
-        src = load_sample(p.bank_run, features=("umean", "ustd", "pedestal"))
+        src = load_sample(
+            p.bank_run, reductions=("mean", "std"), calibrations=("pedestals",)
+        )
     _BANK_CACHE[key] = fit_bank(src, p, known_mask(src, p.known))
     return _BANK_CACHE[key]
 
@@ -279,7 +281,7 @@ register_stat(StatSpec(
     params=PatchCoreParams,
     kind="field",
     mode="high",
-    needs=("umean", "ustd"),
+    needs=("mean", "std"),
     doc="PatchCore: distance from an ImageNet-feature memory bank of normal "
         "patches; high z == unlike anything normal",
 ))

@@ -72,7 +72,7 @@ irreproducibility is non-stationarity rather than counting statistics.
 > document was measured under the old layout and needs re-running at SLAC**; the
 > cache filename carries a layout tag so stale files rebuild rather than load.
 
-One subtlety: resampled samples replace only `sumimg`/`umean`/`ustd`, never the
+One subtlety: resampled samples replace only `sumimg`/`mean`/`std`, never the
 geometry floor or the calibration masks, and `sumimg` keeps its exact zero
 support. Otherwise the assembled canvas itself would flicker between draws and
 tier-1 would measure the canvas instead of the detectors.

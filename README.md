@@ -11,8 +11,8 @@ automask/          the project — an installable Python package (import automas
   io/              production psana/XTC readers and official detector adapters
   dev/             local-mirror setup and raw-format validation tools
   stats/ regularization/ combine/   the masking method registries
-  features/        per-run feature specs + cached FeatureStore
-  producers/       optionally prewarm feature caches from psana/XTC
+  image_store.py   selected-shot reductions + detector calibration cache
+  producers/       optionally prewarm image caches from psana/XTC
   studies/         exploratory scripts + the Hydra sweep driver
   synthetic/       synthetic-artifact benchmark (no real data needed)
   conf/ scripts/   Hydra configs + sweep launchers
@@ -75,18 +75,20 @@ environment can instead use `python -m pip install -e .`.
 
 ```python
 from automask.utils import profile_run_values
+from automask.image_store import ImageStore
 from automask.shot_selection import Condition, ShotSelection
 
 profile = profile_run_values(475)
 selection = ShotSelection(where=(Condition("ai/ch03", "<=", 2.0),))
 event_indices = selection.resolve(profile)
+mean_image = ImageStore(run_profile=profile).reduce(475, selection, "mean")
 ```
 
 ## Build and run
 
 ```bash
-# Optional: prewarm production features from XTC.
-python -m automask.producers.build_features
+# Optional: prewarm production selected-shot images from XTC.
+python -m automask.producers.build_images
 
 python -m automask.masking
 python -m automask.synthetic.evaluate \

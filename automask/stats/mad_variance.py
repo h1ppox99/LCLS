@@ -5,11 +5,11 @@ Same construction as `stats/variance.py` -- signed robust-MAD z-score of the
 log10 per-pixel dispersion over the beam-on shots -- with two deliberate
 differences:
 
-  * the dispersion is the ``umad`` feature (1.4826-scaled median absolute
-    deviation over shots) instead of ``ustd``. Same ShotSelection, so the two
+  * the dispersion is the ``mad`` reduction (1.4826-scaled median absolute
+    deviation over shots) instead of ``std``. Same ShotSelection, so the two
     differ only in the estimator: MAD ignores the tails, so a pixel that is
-    quiet most of the time but spikes on a handful of shots gets a small ``umad``
-    and a large ``ustd``.
+    quiet most of the time but spikes on a handful of shots gets a small ``mad``
+    and a large ``std``.
   * ``mode="high"``, i.e. the flagged side is LARGE dispersion, not small.
 
 Because the MAD is insensitive to a minority of outlying shots, a pixel needs to
@@ -34,16 +34,16 @@ class MadVarianceParams:
     mode: str = "high"      # flag LARGE robust dispersion (unstable pixels)
 
 
-def mad_variance_stat(umad):
-    """Signed robust-MAD z-score of log10(per-pixel MAD `umad`).
+def mad_variance_stat(mad):
+    """Signed robust-MAD z-score of log10(per-pixel MAD).
 
     z >> 0 = anomalously large robust dispersion (persistently unstable pixels),
     z << 0 = low dispersion (dead/shadowed) -- thresholded mode="high"."""
-    return robust_z(umad, umad > 0, transform=np.log10)
+    return robust_z(mad, mad > 0, transform=np.log10)
 
 
 def compute(sample, params: MadVarianceParams | None = None):
-    return mad_variance_stat(sample.umad)
+    return mad_variance_stat(sample.mad)
 
 
 register_stat(StatSpec(
@@ -52,6 +52,6 @@ register_stat(StatSpec(
     params=MadVarianceParams,
     kind="field",
     mode="high",
-    needs=("umad",),
+    needs=("mad",),
     doc="robust-MAD z of log10 per-pixel MAD; high z == persistently unstable",
 ))

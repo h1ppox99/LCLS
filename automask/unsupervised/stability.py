@@ -52,7 +52,7 @@ from typing import Callable, Optional
 import numpy as np
 
 from automask.unsupervised.base import MetricSpec, iou, register_metric
-from automask.unsupervised.folds import fold_sample, with_shot_features
+from automask.unsupervised.folds import fold_sample, with_shot_images
 
 N_NOISE = 3           # analytic-noise repetitions
 N_HYPER = 4           # hyperparameter-jitter repetitions
@@ -68,25 +68,27 @@ FIXED_KNOBS = frozenset({"asic", "defectiveness_scale"})
 # ==========================================================================
 #  perturbing the DATA
 # ==========================================================================
-def n_shots(run: int, default: int = 800) -> int:
-    """Number of frames the run's lit features were reduced over, from the
-    FeatureStore's sidecar (the sample size the analytic noise scales with)."""
-    from automask.features import FeatureStore, get_spec
-    counts = FeatureStore().counts(run, get_spec("ustd"))
+def n_shots(run: int, selection=None, default: int = 800) -> int:
+    """Number of frames in a cached selected-shot standard deviation."""
+    from automask.image_store import ImageStore
+    from automask.selection_presets import BEAM_ON_SELECTION
+
+    selection = selection or BEAM_ON_SELECTION
+    counts = ImageStore().counts(run, selection, "std")
     if not counts:
         return default
     return int(counts.get("n_used") or counts.get("n_selected") or default)
 
 
 def sum_scale(sample) -> float:
-    """The ratio `sumimg / umean` -- how many shots' worth the frozen sum image
+    """The ratio `sumimg / mean` -- how many shots' worth the frozen sum image
     is, in the units the mean is served in. Taken as a median over live pixels
-    rather than assumed, because the sum image and the features were frozen by
+    rather than assumed, because the sum and selected-shot images were frozen by
     different producers and need not share a shot count."""
-    real = sample.real & (sample.umean != 0)
+    real = sample.real & (sample.mean != 0)
     if not real.any():
         raise ValueError("no pixels with both a sum and a nonzero mean")
-    return float(np.median(sample.sumimg[real] / sample.umean[real]))
+    return float(np.median(sample.sumimg[real] / sample.mean[real]))
 
 
 def noisy_sample(sample, rng, n: Optional[int] = None):
@@ -97,17 +99,17 @@ def noisy_sample(sample, rng, n: Optional[int] = None):
     are applied per pixel independently -- the approximation this metric makes,
     and the reason the fold-based versions exist.
     """
-    n = n or n_shots(int(sample.run))
-    if sample.umean is None or sample.ustd is None:
+    n = n or n_shots(int(sample.run), sample.selection)
+    if sample.mean is None or sample.std is None:
         raise ValueError(
-            "stab_noise needs the 'umean' and 'ustd' features; load_sample was "
+            "stab_noise needs the 'mean' and 'std' reductions; load_sample was "
             "called without them")
-    sd = np.asarray(sample.ustd, dtype=np.float64)
-    mean = np.asarray(sample.umean, dtype=np.float64)
+    sd = np.asarray(sample.std, dtype=np.float64)
+    mean = np.asarray(sample.mean, dtype=np.float64)
     mean_p = mean + rng.standard_normal(mean.shape) * sd / np.sqrt(n)
     sd_p = sd * np.maximum(
         1.0 + rng.standard_normal(sd.shape) / np.sqrt(2.0 * (n - 1)), 0.0)
-    return with_shot_features(sample, mean_p, sd_p, sum_scale(sample))
+    return with_shot_images(sample, mean_p, sd_p, sum_scale(sample))
 
 
 # ==========================================================================
@@ -157,7 +159,8 @@ def jitter_pipeline(pipe, eps: float, rng):
                      mask_reg=d.mask_reg,
                      mask_reg_params=_jitter_slot(d.mask_reg_params, eps, rng))
             for d in pipe.detectors]
-    return Pipeline(detectors=dets, floor_stats=list(pipe.floor_stats),
+    return Pipeline(detectors=dets, shot_selection=pipe.shot_selection,
+                    floor_stats=list(pipe.floor_stats),
                     combiner=pipe.combiner,
                     combiner_params=jitter_params(pipe.combiner_params, eps, rng))
 
@@ -227,7 +230,7 @@ def stab_hyper(cand, ctx, reps: int = N_HYPER, eps: float = EPS_HYPER) -> float:
 register_metric(MetricSpec(
     name="stab_noise", compute=stab_noise, higher_is_better=True, tier=1,
     needs_maker=True,
-    doc="IoU under analytic per-pixel resampling of the shot-derived features"))
+    doc="IoU under analytic per-pixel resampling of selected-shot images"))
 register_metric(MetricSpec(
     name="stab_alt", compute=stab_alt, higher_is_better=True, tier=1,
     needs_maker=True, doc="IoU between masks from even vs odd shot blocks"))

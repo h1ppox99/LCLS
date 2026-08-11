@@ -70,11 +70,11 @@ def asic_polish_stat(panel, run, asic=256, n_iter=3):
 
 def compute(sample, params: AsicPolishParams | None = None):
     p = params or AsicPolishParams()
-    if sample.pedestal is None:
+    if sample.pedestals is None:
         raise ValueError(
-            "asic_polish needs the 'pedestal' feature; load_sample was called "
-            "without it (see Pipeline.features_needed)")
-    return asic_polish_stat(sample.pedestal, sample.run, p.asic, p.n_iter)
+            "asic_polish needs the 'pedestals' calibration; load_sample was called "
+            "without it (see Pipeline.calibrations_needed)")
+    return asic_polish_stat(sample.pedestals, sample.run, p.asic, p.n_iter)
 
 
 register_stat(StatSpec(
@@ -83,6 +83,6 @@ register_stat(StatSpec(
     params=AsicPolishParams,
     kind="field",
     mode="high",
-    needs=("pedestal",),
+    needs=("pedestals",),
     doc="per-ASIC median-polish z of the pedestal constants; pair with blob_scale",
 ))

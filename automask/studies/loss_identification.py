@@ -104,7 +104,10 @@ def exp_a1_drift(run: int, **kw) -> Result:
     from automask.unsupervised.azimuthal import build_frame
 
     pipe = production_pipeline()
-    sample = load_sample(run, features=pipe.features_needed())
+    sample = load_sample(
+        run, selection=pipe.shot_selection, reductions=pipe.reductions_needed(),
+        calibrations=pipe.calibrations_needed(),
+    )
     fr = build_frame(sample, pipe.floor(sample))
     fm = F.load(run)
     keep = fr.usable & ~fr.floor
@@ -242,7 +245,10 @@ def exp_a3_anisotropy(run: int, m_max: int = 8, **kw) -> Result:
     from automask.unsupervised.azimuthal import build_frame, pixel_frame
 
     pipe = production_pipeline()
-    sample = load_sample(run, features=pipe.features_needed())
+    sample = load_sample(
+        run, selection=pipe.shot_selection, reductions=pipe.reductions_needed(),
+        calibrations=pipe.calibrations_needed(),
+    )
     fr = build_frame(sample, pipe.floor(sample))
     # `AzimuthalFrame` does not carry chi, and it must come from the beam
     # centre, not from raw pixel indices.
@@ -572,7 +578,10 @@ def _condition_frame(run: int, scheme: str, n_groups: int):
     from automask.unsupervised.azimuthal import build_frame
 
     pipe = production_pipeline()
-    sample = load_sample(run, features=pipe.features_needed())
+    sample = load_sample(
+        run, selection=pipe.shot_selection, reductions=pipe.reductions_needed(),
+        calibrations=pipe.calibrations_needed(),
+    )
     floor = pipe.floor(sample)
     fr = build_frame(sample, floor)
     gm = load_conditions(run, scheme, n_groups)
@@ -883,7 +892,10 @@ def exp_p3_class_disjoint(run: int, **kw) -> Result:
     from automask.masking import production_pipeline
 
     pipe = production_pipeline()
-    sample = load_sample(run, features=pipe.features_needed())
+    sample = load_sample(
+        run, selection=pipe.shot_selection, reductions=pipe.reductions_needed(),
+        calibrations=pipe.calibrations_needed(),
+    )
     resid = sample.human & ~pipe.floor(sample)
     lab, n = ndi.label(resid)
     if n == 0:

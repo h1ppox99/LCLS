@@ -53,9 +53,9 @@ from automask.unsupervised.stability import pipeline_jitter
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT_DIR = os.path.join(HERE, "outputs")
 
-# The features every candidate's stats need, plus `umean` for the analytic-noise
-# metric. Asked for explicitly so a cold cache builds once, not per candidate.
-FEATURES = ("ustd", "umean", "pedestal")
+# The selected-shot images and calibration needed by every candidate.
+REDUCTIONS = ("std", "mean")
+CALIBRATIONS = ("pedestals",)
 
 
 # ==========================================================================
@@ -192,7 +192,9 @@ def build_panel(quick: bool = False):
 #  scoring
 # ==========================================================================
 def score_run(run: int, cands, seed: int = 0) -> dict:
-    sample = load_sample(run, features=FEATURES)
+    sample = load_sample(
+        run, reductions=REDUCTIONS, calibrations=CALIBRATIONS
+    )
     ctx = MetricContext(sample=sample, seed=seed)
     floor = ctx.floor()
     target = sample.human & ~floor

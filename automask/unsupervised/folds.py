@@ -2,10 +2,9 @@
 unsupervised/folds.py -- per-pixel moments accumulated in K disjoint shot folds.
 
 The reproducibility metrics need to ask "would this mask come out the same from
-a DIFFERENT set of shots?". Answering that from the FeatureStore is impossible:
-a feature there is keyed by a ShotSelection, and the selection has no notion of a
-sub-sample, so every query returns the same 800 shots. Rather than widen
-ShotSelection (which would rekey and invalidate every cached feature), this
+a DIFFERENT set of shots?". An ImageStore reduction is keyed by a ShotSelection,
+and the selection has no notion of a sub-sample, so every query returns the same
+800 shots. Rather than widen ShotSelection (which would rekey cached images), this
 module makes one XTC pass that accumulates the same per-pixel moments the store
 does -- n, sum, sum-of-squares -- but keeps them SPLIT over K folds instead of
 pooled. Everything downstream (split-half, bootstrap over folds, the event-axis
@@ -69,7 +68,8 @@ from typing import Optional, Sequence
 
 import numpy as np
 
-from automask.features.catalog import LIT_SELECTION
+from automask.image_store import _content_key
+from automask.selection_presets import BEAM_ON_SELECTION
 from automask.shot_selection import ShotSelection
 
 PKG = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # .../automask
@@ -77,7 +77,7 @@ CACHE_DIR = os.path.join(PKG, "outputs", "cache", "folds")
 PANEL_SHAPE = (2, 512, 1024)
 N_FOLDS = 10
 
-LIT = LIT_SELECTION
+LIT = BEAM_ON_SELECTION
 
 
 @dataclass
@@ -160,8 +160,7 @@ LAYOUT = "v2"
 
 
 def cache_path(run: int, k: int = N_FOLDS, selection: ShotSelection = LIT) -> str:
-    from automask.features.base import FeatureSpec
-    key = FeatureSpec("_", "mean", selection).content_key
+    key = _content_key(selection, "mean")
     return os.path.join(CACHE_DIR, f"folds_{LAYOUT}_{key}_k{k}_run{run:04d}.npz")
 
 
@@ -247,12 +246,12 @@ def load(run: int, k: int = N_FOLDS, selection: ShotSelection = LIT) -> FoldMome
 # ==========================================================================
 #  a Sample restricted to a subset of shots
 # ==========================================================================
-def with_shot_features(base, mean_asm: np.ndarray, std_asm: np.ndarray, scale: float):
+def with_shot_images(base, mean_asm: np.ndarray, std_asm: np.ndarray, scale: float):
     """Copy of Sample `base` with its shot-derived fields replaced.
 
-    Replaced: `umean`, `ustd` (the reductions the store serves) and `sumimg`
+    Replaced: `mean`, `std` (the reductions the store serves) and `sumimg`
     (the run-sum image every intensity stat reads, rebuilt as `mean * scale`).
-    Left alone: `human`, `calib`, `pedestal`, `pixel_rms` -- none of those is
+    Left alone: `human`, `calib`, `pedestals`, `pixel_rms` -- none of those is
     estimated from this run's shots, so resampling shots must not perturb them.
 
     `sumimg`'s zero set is forced to match the frozen sum image: `real` is a
@@ -264,8 +263,8 @@ def with_shot_features(base, mean_asm: np.ndarray, std_asm: np.ndarray, scale: f
     sumimg[base.sumimg == 0] = 0.0
     return dataclasses.replace(
         base, sumimg=sumimg,
-        umean=np.asarray(mean_asm, dtype=np.float64),
-        ustd=np.asarray(std_asm, dtype=np.float64))
+        mean=np.asarray(mean_asm, dtype=np.float64),
+        std=np.asarray(std_asm, dtype=np.float64))
 
 
 def fold_sample(base, fm: FoldMoments, folds: Sequence[int], dealt: bool = False):
@@ -281,8 +280,8 @@ def fold_sample(base, fm: FoldMoments, folds: Sequence[int], dealt: bool = False
     from automask.geometry import panel_to_asm
 
     n, mean, std = fm.moments(folds, dealt=dealt)
-    return with_shot_features(base, panel_to_asm(mean, fm.run),
-                              panel_to_asm(std, fm.run), float(fm.n.sum()))
+    return with_shot_images(base, panel_to_asm(mean, fm.run),
+                            panel_to_asm(std, fm.run), float(fm.n.sum()))
 
 
 def main(runs: Optional[Sequence[int]] = None, k: int = N_FOLDS):

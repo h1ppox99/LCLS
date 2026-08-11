@@ -44,6 +44,8 @@ from automask.regularization.base import REGULARIZERS
 from automask.combine.base import COMBINERS
 from automask.evaluation import Sample, load_sample, evaluate, EVAL_RUNS  # noqa: F401
 from automask.dataset import score
+from automask.selection_presets import BEAM_ON_SELECTION
+from automask.shot_selection import ShotSelection
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 MASK_DIR = os.path.join(HERE, "outputs", "masks")
@@ -195,22 +197,26 @@ class Detector:
 @dataclass
 class Pipeline:
     detectors: List[Detector] = field(default_factory=list)
+    shot_selection: ShotSelection = BEAM_ON_SELECTION
     floor_stats: List[str] = field(default_factory=lambda: ["geometry", "calib"])
     combiner: str = "union"
     combiner_params: object = None
 
-    def features_needed(self) -> Tuple[str, ...]:
-        """Shot-selection features this pipeline's stats require, from their
-        declared `needs` (floor stats + detectors), restricted to the feature
-        catalogue. This is what the evaluation loop materializes -- the masking
-        strategy decides which features get built from XTC."""
-        from automask.features import FEATURES
+    def _needs(self) -> set[str]:
         wanted = set()
         for name in self.floor_stats:
             wanted |= set(STATS[name].needs)
         for d in self.detectors:
             wanted |= set(STATS[d.stat].needs)
-        return tuple(sorted(n for n in wanted if n in FEATURES))
+        return wanted
+
+    def reductions_needed(self) -> Tuple[str, ...]:
+        """Selected-shot reductions required by this pipeline's statistics."""
+        return tuple(sorted(self._needs() & {"mean", "std", "median", "mad"}))
+
+    def calibrations_needed(self) -> Tuple[str, ...]:
+        """Detector calibration constants required by this pipeline."""
+        return tuple(sorted(self._needs() & {"pedestals", "pixel_rms"}))
 
     def floor(self, sample) -> np.ndarray:
         """OR of the intensity-free floor stats (geometry + calib), 100%-precision."""
@@ -357,7 +363,10 @@ def report(RUN: int):
     """Per-detector + combined scores for one run, with agreement figures."""
     pipe = production_pipeline("union")
     pipe_sum = production_pipeline("weighted_sum")
-    sample = load_sample(RUN, features=pipe.features_needed())
+    sample = load_sample(
+        RUN, selection=pipe.shot_selection, reductions=pipe.reductions_needed(),
+        calibrations=pipe.calibrations_needed(),
+    )
 
     floor = pipe.floor(sample)
     human = sample.human

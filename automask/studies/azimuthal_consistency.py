@@ -46,7 +46,10 @@ OUT_DIR = os.path.join(HERE, "outputs")
 # ==========================================================================
 def variants(run):
     prod = production_pipeline()
-    sample = load_sample(run, features=prod.features_needed())
+    sample = load_sample(
+        run, selection=prod.shot_selection, reductions=prod.reductions_needed(),
+        calibrations=prod.calibrations_needed(),
+    )
     floor = prod.floor(sample)
     names = [d.stat for d in prod.detectors]
     picks = {d.stat: d.pick(sample) for d in prod.detectors}
@@ -76,7 +79,9 @@ def random_control(mask, floor, valid, rng):
 # ==========================================================================
 def run_study(run: int, n_sectors: int = 12, sector_sweep=(4, 8, 16, 32), rng=None):
     rng = rng or np.random.default_rng(0)
-    q, chi, inten, valid = pixel_frame(load_sample(run, features=()))
+    q, chi, inten, valid = pixel_frame(
+        load_sample(run, reductions=(), calibrations=())
+    )
     masks, floor = variants(run)
     usable = valid & np.isfinite(inten)
 

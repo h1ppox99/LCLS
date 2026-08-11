@@ -2,7 +2,7 @@
 studies/maskrcnn.py -- can an OFF-THE-SHELF Mask R-CNN mask a detector?
 
 Same contract as `masking.Pipeline`: consume the reductions of one
-`ShotSelection` (the production lit selection -> `umean`, `ustd`) and emit a
+`ShotSelection` (the production lit selection -> `mean`, `std`) and emit a
 boolean mask. Here the masker is torchvision's `maskrcnn_resnet50_fpn_v2` with
 its COCO weights, used **zero-shot** -- no fine-tuning, no labels, nothing
 learned from this experiment. Two runs of ground truth are far too few to train
@@ -21,9 +21,9 @@ hide that the operating point is being chosen on the test run.
 Three input renderings are tried, since the network's prior is about *images*
 and how the features are painted into RGB is the only free choice left:
 
-    umean   -- lit-beam mean, grayscale-replicated
-    ustd    -- lit-beam std, grayscale-replicated (the variance detector's input)
-    stack   -- (umean, ustd, valid-pixel flag) as R/G/B
+    mean   -- lit-beam mean, grayscale-replicated
+    std    -- lit-beam std, grayscale-replicated (the variance detector's input)
+    stack   -- (mean, std, valid-pixel flag) as R/G/B
 
 Each is percentile-stretched to [0, 1]; torchvision applies the ImageNet
 normalization itself. Inference is a 512-crop sliding window, so structures are
@@ -56,7 +56,7 @@ OUT = os.path.join(HERE, "outputs", "figures")
 
 CROP = 512
 STRIDE = 256
-VARIANTS = ("umean", "ustd", "stack")
+VARIANTS = ("mean", "std", "stack")
 THRESHOLDS = np.round(np.arange(0.05, 0.96, 0.05), 2)
 
 
@@ -66,17 +66,21 @@ THRESHOLDS = np.round(np.arange(0.05, 0.96, 0.05), 2)
 @dataclass
 class RunInput:
     run: int
-    umean: np.ndarray
-    ustd: np.ndarray
+    mean: np.ndarray
+    std: np.ndarray
     human: np.ndarray
     floor: np.ndarray
     real: np.ndarray
 
 
 def load_run(run: int, pipe) -> RunInput:
-    sample = load_sample(run, features=pipe.features_needed() + ("umean",))
-    return RunInput(run=run, umean=np.asarray(sample.umean, float),
-                    ustd=np.asarray(sample.ustd, float), human=sample.human,
+    reductions = tuple(sorted(set(pipe.reductions_needed()) | {"mean"}))
+    sample = load_sample(
+        run, selection=pipe.shot_selection, reductions=reductions,
+        calibrations=pipe.calibrations_needed(),
+    )
+    return RunInput(run=run, mean=np.asarray(sample.mean, float),
+                    std=np.asarray(sample.std, float), human=sample.human,
                     floor=pipe.floor(sample), real=sample.real)
 
 
@@ -95,11 +99,11 @@ def _stretch(a: np.ndarray, real: np.ndarray) -> np.ndarray:
 
 def render(data: RunInput, variant: str) -> np.ndarray:
     """(3, H, W) float32 in [0, 1] -- the frame as an RGB image."""
-    u = _stretch(data.umean, data.real)
-    s = _stretch(data.ustd, data.real)
-    if variant == "umean":
+    u = _stretch(data.mean, data.real)
+    s = _stretch(data.std, data.real)
+    if variant == "mean":
         img = np.stack([u, u, u])
-    elif variant == "ustd":
+    elif variant == "std":
         img = np.stack([s, s, s])
     elif variant == "stack":
         img = np.stack([u, s, data.real.astype(float)])
@@ -242,7 +246,10 @@ def main(runs: Sequence[int] = EVAL_RUNS, out: Optional[str] = None):
     results = []
     for run in runs:
         data = load_run(run, pipe)
-        prod = pipe.run(load_sample(run, features=pipe.features_needed()))
+        prod = pipe.run(load_sample(
+            run, selection=pipe.shot_selection, reductions=pipe.reductions_needed(),
+            calibrations=pipe.calibrations_needed(),
+        ))
         print(f"\n=== run {run} ===")
         s_prod = _row("production pipeline", prod, data)
         _row("geometry+calib floor", data.floor, data)

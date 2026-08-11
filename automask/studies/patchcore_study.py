@@ -111,7 +111,7 @@ def figure(results, path, ks=KS):
         panels = [
             (r["cleaned"][0], "gray",
              f"run {s.run}: what PatchCore actually sees\n"
-             f"(umean after the trusted masks, {best['label']})"),
+             f"(mean after the trusted masks, {best['label']})"),
             (np.clip(r["z_best"], -3, 12), "viridis",
              f"PatchCore anomaly field on the cleaned frame"),
             (prod, "magma", f"production pipeline   IoU {r['s_prod']['iou']:.3f}"),
@@ -148,7 +148,11 @@ def main(runs: Sequence[int] = EVAL_RUNS, out: Optional[str] = None):
     results = []
     for run in runs:
         other = [r for r in runs if r != run][0]
-        sample = load_sample(run, features=pipe.features_needed() + ("umean",))
+        reductions = tuple(sorted(set(pipe.reductions_needed()) | {"mean"}))
+        sample = load_sample(
+            run, selection=pipe.shot_selection, reductions=reductions,
+            calibrations=pipe.calibrations_needed(),
+        )
         prod = pipe.run(sample)
         s_prod = score(prod, sample.human)
         missing = int((sample.human & ~prod).sum())

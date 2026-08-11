@@ -80,12 +80,12 @@ existence of a directory. If it prints `det.calib() -> shape (2, 512, 1024)`,
 the environment is good and the study stages can run.
 
 
-Raw XTC is the production source for profiling and feature extraction.
+Raw XTC is the production source for profiling and selected-shot reductions.
 
 ```bash
 source psana_env.sh
-# Optional: prewarm the FeatureStore cache so evaluation stays numpy-only.
-python -m automask.producers.build_features --run 389 475
+# Optional: prewarm the ImageStore cache so evaluation stays numpy-only.
+python -m automask.producers.build_images --run 389 475
 ```
 
 `psana_env.sh` sets the `SIT_*` variables and activates the expected psana

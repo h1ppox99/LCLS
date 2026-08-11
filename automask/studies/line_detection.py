@@ -264,7 +264,10 @@ def context(run: int, p: Params):
     # this study exists to justify -- otherwise `prod` already contains the Hough
     # pixels and every "added" column reads zero.
     pipe = production_pipeline("union", line_detector=False)
-    sample = load_sample(run, features=pipe.features_needed())
+    sample = load_sample(
+        run, selection=pipe.shot_selection, reductions=pipe.reductions_needed(),
+        calibrations=pipe.calibrations_needed(),
+    )
     prod = pipe.run(sample)                 # per-pixel production baseline
     domain = sample.real & ~prod            # only NEW pixels count
     field = darkness_field(sample, radius=p.blackhat_radius)
