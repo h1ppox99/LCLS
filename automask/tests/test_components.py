@@ -18,7 +18,7 @@ from automask.regularization.area_gate import area_gate
 from automask.regularization.blob_scale import blob_scale
 from automask.regularization.fill_holes import fill_holes
 from automask.run_profile import RunProfile
-from automask.shot_selection import ShotMeta, ShotSelection
+from automask.shot_selection import Condition, PercentileTrim, ShotSelection
 from automask.stats.asic_polish import median_polish
 
 
@@ -133,64 +133,26 @@ def test_detector_rejects_field_reg_on_a_pick_stat():
 
 
 # -- shot selection --------------------------------------------------------
-def _meta(n=100, beam=None, cc=None, vcc=None, monitor=None, run=475):
-    """Synthetic ShotMeta: beam on, CC open, VCC closed, ramp intensity."""
-    ramp = np.linspace(1.0, 100.0, n) if monitor is None else np.asarray(monitor)
-    return ShotMeta(
-        run=run,
-        beam_on=np.ones(n, bool) if beam is None else np.asarray(beam),
-        cc_open=np.ones(n, bool) if cc is None else np.asarray(cc),
-        vcc_open=np.zeros(n, bool) if vcc is None else np.asarray(vcc),
-        intensity={"sample_diode": ramp, "ipm2": ramp * 1000.0})
+def _profile(n=100, **values):
+    columns = {"intensity": np.linspace(1.0, 100.0, n), **values}
+    return RunProfile(475, n, [], columns, {}, [])
 
 
-def test_shot_meta_is_built_from_canonical_profile_columns():
-    profile = RunProfile(
-        run=12,
-        events=3,
-        payloads=[],
-        values={
-            "DetInfo(NoDetector.0:Evr.0)/EvrData.DataV4/eventCode[137]":
-                np.array([1.0, 0.0, np.nan]),
-            "ai/ch02": np.array([5.0, 0.0, np.nan]),
-            "ai/ch03": np.array([0.0, 5.0, np.nan]),
-            "diodeU/channels[0]": np.array([1.0, 2.0, 3.0]),
-            "diodeU/sum": np.array([4.0, 5.0, 6.0]),
-            "gas_detector/f_11_ENRC": np.array([7.0, 8.0, 9.0]),
-        },
-        summary={},
-        epics=[],
-    )
-
-    meta = profile.shot_meta()
-
-    assert meta.run == 12
-    np.testing.assert_array_equal(meta.beam_on, [True, False, False])
-    np.testing.assert_array_equal(meta.cc_open, [True, False, False])
-    np.testing.assert_array_equal(meta.vcc_open, [False, True, False])
-    np.testing.assert_array_equal(meta.monitor("sample_diode"), [1.0, 2.0, 3.0])
-    assert set(meta.intensity) == {"sample_diode", "diodeU", "gasdet"}
+def test_run_profile_returns_canonical_columns():
+    profile = _profile(3, state=np.array(["a", "b", "a"]))
+    np.testing.assert_array_equal(profile.column("state"), ["a", "b", "a"])
+    try:
+        profile.column("missing")
+    except KeyError as error:
+        assert "available examples" in str(error)
+    else:
+        raise AssertionError("expected a missing-field error")
 
 
 def test_feature_store_reuses_injected_run_profile(tmp_path):
-    profile = RunProfile(
-        run=12,
-        events=3,
-        payloads=[],
-        values={
-            "DetInfo(NoDetector.0:Evr.0)/EvrData.DataV4/eventCode[137]":
-                np.ones(3),
-            "ai/ch02": np.full(3, 5.0),
-            "ai/ch03": np.zeros(3),
-            "diodeU/channels[0]": np.arange(1.0, 4.0),
-        },
-        summary={},
-        epics=[],
-    )
+    profile = _profile(3)
     store = FeatureStore(cache_dir=tmp_path, run_profile=profile)
-
-    assert store.profile(12) is profile
-    assert store.profile(12).shot_meta() is profile.shot_meta()
+    assert store.profile(475) is profile
 
 
 def test_feature_store_profiles_each_run_once(tmp_path, monkeypatch):
@@ -204,128 +166,115 @@ def test_feature_store_profiles_each_run_once(tmp_path, monkeypatch):
 
     monkeypatch.setattr(utils, "profile_run_values", profile_run)
     store = FeatureStore(cache_dir=tmp_path)
-
     assert store.profile(12) is store.profile(12)
     assert store.profile(13) is store.profile(13)
     assert calls == [(12, False), (13, False)]
 
 
-def test_beam_filter_selects_each_class():
-    beam = np.array([True, True, False, False])
-    meta = _meta(4, beam=beam, monitor=[1.0, 2.0, 3.0, 4.0])
-    kw = dict(n_shots=None, filter_low=0.0, filter_high=0.0)
-    assert list(ShotSelection(beam="on", **kw).resolve(meta)) == [0, 1]
-    assert list(ShotSelection(beam="off", **kw).resolve(meta)) == [2, 3]
-    assert list(ShotSelection(beam="any", **kw).resolve(meta)) == [0, 1, 2, 3]
+def test_conditions_are_field_native_and_anded():
+    profile = _profile(
+        5,
+        branch=np.array([0, 0, 1, 1, 1]),
+        quality=np.array([0.1, 0.5, 0.4, 0.8, 0.2]),
+    )
+    selection = ShotSelection(where=(
+        Condition("branch", "==", 1),
+        Condition("quality", "between", (0.3, 0.8)),
+    ))
+    np.testing.assert_array_equal(selection.resolve(profile), [2, 3])
 
 
-def test_cc_and_vcc_are_independent_and_anded():
-    cc = np.array([True, True, False, False])
-    vcc = np.array([True, False, True, False])
-    meta = _meta(4, cc=cc, vcc=vcc, monitor=[1.0, 2.0, 3.0, 4.0])
-    kw = dict(n_shots=None, filter_low=0.0, filter_high=0.0)
-    assert list(ShotSelection(cc="open", vcc="any", **kw).resolve(meta)) == [0, 1]
-    assert list(ShotSelection(cc="any", vcc="open", **kw).resolve(meta)) == [0, 2]
-    assert list(ShotSelection(cc="open", vcc="open", **kw).resolve(meta)) == [0]
-    assert list(ShotSelection(cc="open", vcc="closed", **kw).resolve(meta)) == [1]
-    assert list(ShotSelection(cc="closed", vcc="closed", **kw).resolve(meta)) == [3]
-    assert list(ShotSelection(cc="any", vcc="any", **kw).resolve(meta)) == [0, 1, 2, 3]
+def test_conditions_support_categorical_values():
+    profile = _profile(4, mode=np.array(["sample", "dark", "sample", "calib"]))
+    selection = ShotSelection(where=(
+        Condition("mode", "in", ("dark", "calib")),
+    ))
+    np.testing.assert_array_equal(selection.resolve(profile), [1, 3])
 
 
-def test_validity_floor_drops_zero_and_nan_readings():
-    meta = _meta(4, monitor=[0.0, np.nan, 3.0, 4.0])
-    sel = ShotSelection(n_shots=None, filter_low=0.0, filter_high=0.0)
-    assert list(sel.resolve(meta)) == [2, 3]
-
-
-def test_percentile_trim_drops_both_tails():
-    meta = _meta(100)
-    sel = ShotSelection(n_shots=None, filter_low=0.1, filter_high=0.1)
-    kept = sel.resolve(meta)
-    # ramp 1..100; np.quantile interpolates -> bounds 10.9 and 90.1
-    assert kept.size == 80
-    assert kept[0] == 10 and kept[-1] == 89
+def test_percentile_trim_drops_both_tails_after_conditions():
+    profile = _profile(100, admitted=np.r_[np.zeros(10), np.ones(90)])
+    selection = ShotSelection(
+        where=(Condition("admitted", "==", 1),),
+        trim=PercentileTrim("intensity", low=0.1, high=0.1),
+    )
+    kept = selection.resolve(profile)
+    assert kept.size == 72
+    assert kept[0] == 19 and kept[-1] == 90
 
 
 def test_n_shots_subsamples_evenly_across_survivors():
-    meta = _meta(100)
-    sel = ShotSelection(n_shots=10, filter_low=0.0, filter_high=0.0)
-    kept = sel.resolve(meta)
-    assert kept.size == 10
-    assert kept[0] == 0 and kept[-1] == 99
+    kept = ShotSelection(n_shots=10).resolve(_profile(100))
+    assert kept.size == 10 and kept[0] == 0 and kept[-1] == 99
     assert np.all(np.diff(kept) > 0)
 
 
-def test_resolve_raises_when_nothing_matches():
-    """Run 475 has zero VCC-open shots -- this must fail loudly, not silently."""
-    meta = _meta(10, vcc=np.zeros(10, bool))
-    try:
-        ShotSelection(vcc="open").resolve(meta)
-    except RuntimeError as e:
-        assert "no shots match" in str(e)
-        return
-    raise AssertionError("expected RuntimeError for an empty selection")
+def test_neutral_selection_needs_no_fields():
+    profile = RunProfile(12, 3, [], {}, {}, [])
+    np.testing.assert_array_equal(ShotSelection().resolve(profile), [0, 1, 2])
 
 
-def test_selection_rejects_unknown_monitors():
-    for kwargs in ({"intensity": "nope"}, {"normalization": "nope"}):
+def test_normalization_excludes_unusable_values():
+    profile = _profile(4, monitor=np.array([1.0, 0.0, np.nan, 4.0]))
+    selection = ShotSelection(normalization="monitor")
+    indices = selection.resolve(profile)
+    np.testing.assert_array_equal(indices, [0, 3])
+    assert selection.normalization_reference(profile, indices) == 2.5
+
+
+def test_selection_reports_empty_and_missing_fields():
+    profile = _profile(4, state=np.zeros(4))
+    for selection, error_type in (
+        (ShotSelection(where=(Condition("state", ">", 0),)), RuntimeError),
+        (ShotSelection(where=(Condition("missing", "==", 1),)), KeyError),
+        (ShotSelection(trim=PercentileTrim("missing")), KeyError),
+    ):
         try:
-            ShotSelection(**kwargs)
-        except ValueError:
+            selection.resolve(profile)
+        except error_type:
             continue
-        raise AssertionError(f"expected ValueError for {kwargs!r}")
+        raise AssertionError(f"expected {error_type.__name__} for {selection}")
 
 
-def test_selection_defaults_keep_both_local_runs_usable():
-    """cc defaults to open (free: CC is open on 100% of shots in 389 and 475);
-    vcc must default to any or run 475 yields nothing."""
-    sel = ShotSelection()
-    assert (sel.beam, sel.cc, sel.vcc) == ("on", "open", "any")
-    assert sel.intensity == "sample_diode"
+def test_describe_reports_generic_selection_stages():
+    profile = _profile(10, state=np.array([1] * 8 + [0] * 2))
+    selection = ShotSelection(
+        where=(Condition("state", "==", 1),), n_shots=3,
+    )
+    description = selection.describe(profile)
+    assert description["n_events"] == 10
+    assert description["conditions"][0]["n_matching"] == 8
+    assert description["n_after_conditions"] == 8
+    assert description["n_eligible"] == 8
+    assert description["n_after_trim"] == 8
+    assert description["n_selected"] == 3
 
 
-def test_shot_meta_rejects_ragged_and_unknown_monitors():
-    for kwargs in ({"intensity": {"sample_diode": np.ones(5)}},   # wrong length
-                   {"intensity": {"nope": np.ones(10)}},          # unknown monitor
-                   {"intensity": {}}):                            # no monitor at all
-        try:
-            ShotMeta(run=1, beam_on=np.ones(10, bool), cc_open=np.ones(10, bool),
-                     vcc_open=np.ones(10, bool), **kwargs)
-        except ValueError:
-            continue
-        raise AssertionError(f"expected ValueError for {kwargs!r}")
-
-
-def test_describe_breaks_down_each_filter():
-    meta = _meta(10, beam=np.array([True] * 8 + [False] * 2),
-                 vcc=np.array([True] * 3 + [False] * 7))
-    d = ShotSelection(beam="on", cc="open", vcc="any").describe(meta)
-    assert d["n_events"] == 10 and d["n_beam"] == 8
-    assert d["n_cc"] == 10 and d["n_vcc"] == 10 and d["n_accessible"] == 8
-
-
-def test_reference_intensity_uses_the_normalization_monitor():
-    meta = _meta(100)
-    sel = ShotSelection(intensity="sample_diode", normalization="ipm2")
-    idx = sel.resolve(meta)
-    assert np.isclose(sel.reference_intensity(meta, idx),
-                      np.median(meta.intensity["ipm2"][idx]))
+def test_describe_reports_an_empty_selection_without_raising():
+    profile = _profile(4, state=np.zeros(4))
+    description = ShotSelection(where=(
+        Condition("state", ">", 0),
+    )).describe(profile)
+    assert description["n_eligible"] == 0
+    assert description["n_selected"] == 0
 
 
 # -- FeatureSpec sources ---------------------------------------------------
 def test_events_content_key_covers_the_whole_selection():
-    """The warm XTC cache is keyed by this hash. It is deliberately NOT stable
-    across ShotSelection field renames -- the CC/VCC rework invalidated it on
-    purpose (see features/base.py)."""
+    """The warm XTC cache hash covers the complete generic selection recipe."""
     import hashlib
     import json
     from dataclasses import asdict
 
-    spec = FeatureSpec("umean", "mean", ShotSelection(beam="on"))
+    spec = FeatureSpec("umean", "mean", ShotSelection(where=(
+        Condition("state", "==", "sample"),
+    )))
     payload = json.dumps({"reduction": "mean", "selection": asdict(spec.selection)},
                          sort_keys=True)
     assert spec.content_key == hashlib.sha1(payload.encode()).hexdigest()[:12]
-    other = FeatureSpec("umean", "mean", ShotSelection(beam="on", vcc="open"))
+    other = FeatureSpec("umean", "mean", ShotSelection(where=(
+        Condition("state", "==", "dark"),
+    )))
     assert spec.content_key != other.content_key
 
 
@@ -334,7 +283,9 @@ def test_calib_and_event_specs_do_not_collide():
                     form="panel")
     b = FeatureSpec("pixel_rms", source="calib", constant="pixel_rms", gain=0,
                     form="panel")
-    c = FeatureSpec("umean", "mean", ShotSelection(beam="on"))
+    c = FeatureSpec("umean", "mean", ShotSelection(where=(
+        Condition("state", "==", "sample"),
+    )))
     keys = {a.content_key, b.content_key, c.content_key}
     assert len(keys) == 3
     assert a.cache_stub(475).startswith("pedestalsg0_")

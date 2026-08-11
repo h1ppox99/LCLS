@@ -81,18 +81,16 @@ def _sel_label(sel, n_used=None):
     ``n_used`` (the actual shots the cached feature was built from) wins over the
     requested ``sel.n_shots`` when known -- so ``n=`` reflects availability, not
     just the config (e.g. a run with fewer accessible shots than requested)."""
-    bits = [f"beam={sel.beam}"]
-    if sel.cc != "any":
-        bits.append(f"cc={sel.cc}")
-    if sel.vcc != "any":
-        bits.append(f"vcc={sel.vcc}")
+    bits = [condition.label() for condition in sel.where]
+    if not bits:
+        bits.append("all shots")
     if n_used is not None:
         bits.append(f"n={n_used}")
     elif sel.n_shots is not None:
         bits.append(f"n={sel.n_shots}")
-    bits.append(f"trim=[{sel.filter_low:g},{sel.filter_high:g}]")
-    bits.append(f"i0={sel.intensity}")
-    if sel.normalization != "none":
+    if sel.trim is not None:
+        bits.append(f"trim={sel.trim.field}[{sel.trim.low:g},{sel.trim.high:g}]")
+    if sel.normalization is not None:
         bits.append(f"norm={sel.normalization}")
     return " ".join(bits)
 

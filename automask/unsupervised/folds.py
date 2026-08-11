@@ -69,6 +69,7 @@ from typing import Optional, Sequence
 
 import numpy as np
 
+from automask.features.catalog import LIT_SELECTION
 from automask.shot_selection import ShotSelection
 
 PKG = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # .../automask
@@ -76,10 +77,7 @@ CACHE_DIR = os.path.join(PKG, "outputs", "cache", "folds")
 PANEL_SHAPE = (2, 512, 1024)
 N_FOLDS = 10
 
-# The lit-beam selection the production features use (features/catalog.py `_LIT`).
-# Kept identical on purpose: the folds must resample the SAME population the
-# pipeline is normally fed, or the stability they measure is not the pipeline's.
-LIT = ShotSelection(beam="on")
+LIT = LIT_SELECTION
 
 
 @dataclass
@@ -188,8 +186,7 @@ def build(run: int, k: int = N_FOLDS, selection: ShotSelection = LIT) -> FoldMom
     from automask.utils import profile_run_values
 
     profile = profile_run_values(run, show=False)
-    meta = profile.shot_meta()
-    indices = selection.resolve(meta)
+    indices = selection.resolve(profile)
     if indices.size < 2 * k:
         raise RuntimeError(f"run {run}: {indices.size} shots is too few for {k} folds")
     block_of_shot, fold_of_shot = assign_folds(indices.size, k)

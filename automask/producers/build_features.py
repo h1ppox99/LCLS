@@ -38,7 +38,7 @@ def main() -> None:
         for name in args.feature:
             spec = get_spec(name)
             store.get(run, spec)   # compute+cache on miss; no-op if already warm
-            over = (f"beam={spec.selection.beam!r}" if spec.source == "events"
+            over = (f"where={spec.selection.where!r}" if spec.source == "events"
                     else f"calib {spec.constant!r}")
             print(f"[prewarm] run {run:04d}: {name} "
                   f"({spec.reduction} over {over}) -> "

@@ -149,16 +149,21 @@ def exp_a2_interchangeable(run: int, n_folds: int = 10, **kw) -> Result:
     from automask.identification.conditions import LIT
     from automask.utils import profile_run_values
 
-    meta = profile_run_values(run, show=False).shot_meta()
-    idx = LIT.resolve(meta)
-    x = meta.monitor(LIT.intensity)[idx]
+    profile = profile_run_values(run, show=False)
+    idx = LIT.resolve(profile)
+    intensity_field = LIT.trim.field if LIT.trim is not None else LIT.normalization
+    if intensity_field is None:
+        raise ValueError("LIT needs a trim or normalization field for claim A2")
+    x = profile.column(intensity_field)[idx]
     x = (x - x.mean()) / (x.std() or 1.0)
     lags = (1, 2, 3, 5, 10, 20)
     acf = {L: float((x[:-L] * x[L:]).mean()) for L in lags}
     band = 2.0 / np.sqrt(x.size)
     bad_lags = [L for L, v in acf.items() if abs(v) > band]
 
-    branch = meta.cc_open[idx].astype(np.int8) + 2 * meta.vcc_open[idx].astype(np.int8)
+    cc = profile.column("ai/ch02")[idx] > 2.0
+    vcc = profile.column("ai/ch03")[idx] > 2.0
+    branch = cc.astype(np.int8) + 2 * vcc.astype(np.int8)
     flips = float(np.mean(branch[:-1] != branch[1:]))
     p = np.bincount(branch) / branch.size
     flips_iid = float(1.0 - (p ** 2).sum())
@@ -181,7 +186,6 @@ def exp_a2_interchangeable(run: int, n_folds: int = 10, **kw) -> Result:
     # that clusters into long blocks it need not balance anything.
     order = np.arange(idx.size)
     block = (order * n_folds) // idx.size
-    vcc = meta.vcc_open[idx]
     per_block = np.array([vcc[block == k].mean() for k in range(n_folds)])
     per_shot = np.array([vcc[order % n_folds == k].mean() for k in range(n_folds)])
     spread_c = float(per_block.max() - per_block.min())

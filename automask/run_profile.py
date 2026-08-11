@@ -9,7 +9,6 @@ import numpy as np
 
 if TYPE_CHECKING:
     from automask.io.psana1 import Psana1RunSource
-    from automask.shot_selection import ShotMeta
 
 
 @dataclass
@@ -25,14 +24,21 @@ class RunProfile:
     source: Optional["Psana1RunSource"] = field(
         default=None, repr=False, compare=False
     )
-    _shot_meta: Optional["ShotMeta"] = field(
-        default=None, init=False, repr=False, compare=False
-    )
 
-    def shot_meta(self) -> "ShotMeta":
-        """Return the cached shot-selection view of these canonical columns."""
-        if self._shot_meta is None:
-            from automask.shot_selection import ShotMeta
-
-            self._shot_meta = ShotMeta.from_profile(self)
-        return self._shot_meta
+    def column(self, name: str) -> np.ndarray:
+        """Return one canonical per-shot field with a concise missing-field error."""
+        if name not in self.values:
+            available = sorted(self.values)
+            shown = available[:12]
+            suffix = " ..." if len(available) > len(shown) else ""
+            raise KeyError(
+                f"run {self.run}: field {name!r} is unavailable; "
+                f"available examples: {shown}{suffix}"
+            )
+        values = np.asarray(self.values[name])
+        if values.ndim != 1 or values.shape[0] != self.events:
+            raise ValueError(
+                f"run {self.run}: field {name!r} has shape {values.shape}, "
+                f"expected ({self.events},)"
+            )
+        return values

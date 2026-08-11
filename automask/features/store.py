@@ -3,9 +3,8 @@ features/store.py -- resolve a FeatureSpec to a per-pixel array, compute-or-cach
 
 This is the only psana-touching part of the feature layer. ``get(run, spec)``
 returns the cached ``.npy`` if present (numpy-only, instant); otherwise it
-computes the feature from raw XTC -- ``ShotMeta`` -> ``selection.resolve`` ->
-``iter_calibrated`` -> reduce -> cache -> return. The canonical ``RunProfile``
-and its ``ShotMeta`` view are retained once per run. Evaluation therefore stays
+computes the feature from raw XTC -- ``RunProfile`` -> ``selection.resolve`` ->
+``iter_calibrated`` -> reduce -> cache -> return. Evaluation therefore stays
 numpy-only whenever the cache is warm, and auto-extends to any new selection or
 reduction on demand.
 
@@ -30,7 +29,7 @@ import numpy as np
 
 from automask.features.base import FeatureSpec
 from automask.run_profile import RunProfile
-from automask.shot_selection import NO_NORMALIZATION, ShotSelection
+from automask.shot_selection import ShotSelection
 
 ROOT = Path(__file__).resolve().parents[2]
 PANEL_SHAPE = (2, 512, 1024)
@@ -44,10 +43,11 @@ def _select_line(run: int, selection: ShotSelection, counts: dict) -> str:
     n_used = counts.get("n_used")
     used = "" if n_used is None or n_used == counts.get("n_selected") else \
         f", {n_used} used"
+    fields = ",".join(condition.field for condition in selection.where) or "none"
+    trim = selection.trim.field if selection.trim is not None else "none"
     return (f"[select] run {run:04d}: {counts['n_events']} shots total, "
-            f"{counts['n_accessible']} accessible "
-            f"(beam={selection.beam}, cc={selection.cc}, vcc={selection.vcc}, "
-            f"i0={selection.intensity}), "
+            f"{counts['n_eligible']} eligible "
+            f"(fields={fields}, trim={trim}), "
             f"{counts['n_selected']} selected{used}")
 
 
@@ -89,7 +89,8 @@ class FeatureStore:
     def counts(self, run: int, spec: FeatureSpec) -> Optional[dict]:
         """Persisted shot counts for a cached feature, or ``None`` if unavailable
         (miss, or a cache written before sidecars existed). Keys: ``n_events``,
-        ``n_accessible``, ``n_selected``, ``n_used``."""
+        ``n_after_conditions``, ``n_eligible``, ``n_after_trim``,
+        ``n_selected``, ``n_used``."""
         p = self.meta_path(run, spec)
         if not p.exists():
             return None
@@ -212,13 +213,14 @@ class FeatureStore:
         from automask.io.read_xtc import iter_calibrated
 
         profile = self.profile(run)
-        meta = profile.shot_meta()
-        indices = selection.resolve(meta)
-        counts = {**selection.describe(meta), "n_selected": int(indices.size)}
+        indices = selection.resolve(profile)
+        counts = selection.describe(profile)
         print(_select_line(run, selection, counts))
-        normalize = selection.normalization != NO_NORMALIZATION
-        reference = selection.reference_intensity(meta, indices) if normalize else 1.0
-        i0 = meta.monitor(selection.normalization) if normalize else None
+        normalize = selection.normalization is not None
+        reference = selection.normalization_reference(
+            profile, indices
+        ) if normalize else 1.0
+        i0 = profile.column(selection.normalization) if normalize else None
 
         with h5py.File(stage_path, "w") as h5:
             frames = h5.create_dataset(
@@ -275,13 +277,14 @@ class FeatureStore:
         from automask.io.read_xtc import iter_calibrated
 
         profile = self.profile(run)
-        meta = profile.shot_meta()
-        indices = selection.resolve(meta)
-        counts = {**selection.describe(meta), "n_selected": int(indices.size)}
+        indices = selection.resolve(profile)
+        counts = selection.describe(profile)
         print(_select_line(run, selection, counts))
-        normalize = selection.normalization != NO_NORMALIZATION
-        reference = selection.reference_intensity(meta, indices) if normalize else 1.0
-        i0 = meta.monitor(selection.normalization) if normalize else None
+        normalize = selection.normalization is not None
+        reference = selection.normalization_reference(
+            profile, indices
+        ) if normalize else 1.0
+        i0 = profile.column(selection.normalization) if normalize else None
 
         total = np.zeros(PANEL_SHAPE, dtype=np.float64)
         squared = np.zeros(PANEL_SHAPE, dtype=np.float64)

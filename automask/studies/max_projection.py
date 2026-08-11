@@ -27,7 +27,7 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 
 from automask.geometry import panel_to_asm
-from automask.shot_selection import ShotSelection
+from automask.shot_selection import Condition, ShotSelection
 
 AUTOMASK = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FEAT = os.path.join(AUTOMASK, "outputs", "features")
@@ -37,8 +37,9 @@ RUNS = (389, 475)
 
 #: Every beam-on frame, both branches, untrimmed and uncapped -- a max wants the
 #: whole run, and clipping the intensity tails would defeat the point.
-SELECTION = ShotSelection(beam="on", cc="any", vcc="any",
-                          n_shots=None, filter_low=0.0, filter_high=0.0)
+SELECTION = ShotSelection(where=(Condition(
+    "DetInfo(NoDetector.0:Evr.0)/EvrData.DataV4/eventCode[137]", "==", 1,
+),))
 
 
 def compute_mip(run: int, selection: ShotSelection = SELECTION):
@@ -47,10 +48,9 @@ def compute_mip(run: int, selection: ShotSelection = SELECTION):
     from automask.utils import profile_run_values
 
     profile = profile_run_values(run, show=False)
-    meta = profile.shot_meta()
-    indices = selection.resolve(meta)
-    print(f"[select] run {run:04d}: {meta.n_events} shots total, "
-          f"{selection.describe(meta)['n_accessible']} accessible, "
+    indices = selection.resolve(profile)
+    print(f"[select] run {run:04d}: {profile.events} shots total, "
+          f"{selection.describe(profile)['n_eligible']} eligible, "
           f"{indices.size} selected")
 
     mip = None

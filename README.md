@@ -75,9 +75,11 @@ environment can instead use `python -m pip install -e .`.
 
 ```python
 from automask.utils import profile_run_values
+from automask.shot_selection import Condition, ShotSelection
 
 profile = profile_run_values(475)
-shots = profile.shot_meta()
+selection = ShotSelection(where=(Condition("ai/ch03", "<=", 2.0),))
+event_indices = selection.resolve(profile)
 ```
 
 ## Build and run

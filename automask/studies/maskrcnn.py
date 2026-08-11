@@ -2,7 +2,7 @@
 studies/maskrcnn.py -- can an OFF-THE-SHELF Mask R-CNN mask a detector?
 
 Same contract as `masking.Pipeline`: consume the reductions of one
-`ShotSelection` (the production `_LIT` selection -> `umean`, `ustd`) and emit a
+`ShotSelection` (the production lit selection -> `umean`, `ustd`) and emit a
 boolean mask. Here the masker is torchvision's `maskrcnn_resnet50_fpn_v2` with
 its COCO weights, used **zero-shot** -- no fine-tuning, no labels, nothing
 learned from this experiment. Two runs of ground truth are far too few to train
@@ -181,7 +181,7 @@ def figure(results, path):
         d, best = res["data"], res["best"]
         panels = [
             (res["render"].transpose(1, 2, 0), "rgb",
-             f"run {d.run}: ShotSelection(beam=on, 800 shots) rendered "
+             f"run {d.run}: production ShotSelection (800 shots) rendered "
              f"[{res['best_variant']}]"),
             (d.human, "bin", "human reference mask"),
             (res["prod"], "bin",
