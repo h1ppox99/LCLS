@@ -246,25 +246,21 @@ def load(run: int, k: int = N_FOLDS, selection: ShotSelection = LIT) -> FoldMome
 # ==========================================================================
 #  a Sample restricted to a subset of shots
 # ==========================================================================
-def with_shot_images(base, mean_asm: np.ndarray, std_asm: np.ndarray, scale: float):
-    """Copy of Sample `base` with its shot-derived fields replaced.
+def with_shot_images(base, mean_asm: np.ndarray, std_asm: np.ndarray):
+    """Copy of Sample `base` with its shot-derived reductions replaced.
 
-    Replaced: `mean`, `std` (the reductions the store serves) and `sumimg`
-    (the run-sum image every intensity stat reads, rebuilt as `mean * scale`).
-    Left alone: `human`, `calib`, `pedestals`, `pixel_rms` -- none of those is
-    estimated from this run's shots, so resampling shots must not perturb them.
+    Replaced: `mean` and `std`. Left alone: every calibration constant -- none of
+    those is estimated from this run's shots, so resampling shots must not
+    perturb them.
 
-    `sumimg`'s zero set is forced to match the frozen sum image: `real` is a
-    geometry fact, and letting it flicker with the shot sample would show up as
-    fake instability in the geometry floor, which is not what any of these
-    metrics is trying to measure.
+    `mean`'s zero set is forced to match the full-run mean: `real` is a geometry
+    fact, and letting it flicker with the shot sample would show up as fake
+    instability in the geometry floor, which is not what any of these metrics is
+    trying to measure.
     """
-    sumimg = np.asarray(mean_asm, dtype=np.float64) * float(scale)
-    sumimg[base.sumimg == 0] = 0.0
-    return dataclasses.replace(
-        base, sumimg=sumimg,
-        mean=np.asarray(mean_asm, dtype=np.float64),
-        std=np.asarray(std_asm, dtype=np.float64))
+    mean = np.asarray(mean_asm, dtype=np.float64).copy()
+    mean[base.mean == 0] = 0.0
+    return base.with_arrays(mean=mean, std=np.asarray(std_asm, dtype=np.float64))
 
 
 def fold_sample(base, fm: FoldMoments, folds: Sequence[int], dealt: bool = False):
@@ -272,16 +268,16 @@ def fold_sample(base, fm: FoldMoments, folds: Sequence[int], dealt: bool = False
 
     `dealt` picks the axis, as in `FoldMoments.moments`.
 
-    The `sumimg` scale is the FIXED total shot count rather than the subset's
-    own, so the two sides of a split carry the same overall magnitude: every
-    stat reading it is a robust z and so scale-free anyway, but pinning the scale
-    means a difference between halves can only come from the pixels.
+    Both sides of a split carry the per-shot mean, so they share an overall
+    magnitude: every stat reading it is a robust z and so scale-free anyway, but
+    keeping the units fixed means a difference between halves can only come from
+    the pixels.
     """
     from automask.geometry import panel_to_asm
 
     n, mean, std = fm.moments(folds, dealt=dealt)
     return with_shot_images(base, panel_to_asm(mean, fm.run),
-                            panel_to_asm(std, fm.run), float(fm.n.sum()))
+                            panel_to_asm(std, fm.run))
 
 
 def main(runs: Optional[Sequence[int]] = None, k: int = N_FOLDS):

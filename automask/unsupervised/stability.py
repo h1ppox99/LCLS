@@ -80,17 +80,6 @@ def n_shots(run: int, selection=None, default: int = 800) -> int:
     return int(counts.get("n_used") or counts.get("n_selected") or default)
 
 
-def sum_scale(sample) -> float:
-    """The ratio `sumimg / mean` -- how many shots' worth the frozen sum image
-    is, in the units the mean is served in. Taken as a median over live pixels
-    rather than assumed, because the sum and selected-shot images were frozen by
-    different producers and need not share a shot count."""
-    real = sample.real & (sample.mean != 0)
-    if not real.any():
-        raise ValueError("no pixels with both a sum and a nonzero mean")
-    return float(np.median(sample.sumimg[real] / sample.mean[real]))
-
-
 def noisy_sample(sample, rng, n: Optional[int] = None):
     """`sample` with its shot-derived fields redrawn at their sampling error.
 
@@ -100,16 +89,16 @@ def noisy_sample(sample, rng, n: Optional[int] = None):
     and the reason the fold-based versions exist.
     """
     n = n or n_shots(int(sample.run), sample.selection)
-    if sample.mean is None or sample.std is None:
+    if "mean" not in sample.arrays or "std" not in sample.arrays:
         raise ValueError(
-            "stab_noise needs the 'mean' and 'std' reductions; load_sample was "
-            "called without them")
+            "stab_noise needs the 'mean' and 'std' reductions; they were not in "
+            "the pipeline's needs()")
     sd = np.asarray(sample.std, dtype=np.float64)
     mean = np.asarray(sample.mean, dtype=np.float64)
     mean_p = mean + rng.standard_normal(mean.shape) * sd / np.sqrt(n)
     sd_p = sd * np.maximum(
         1.0 + rng.standard_normal(sd.shape) / np.sqrt(2.0 * (n - 1)), 0.0)
-    return with_shot_images(sample, mean_p, sd_p, sum_scale(sample))
+    return with_shot_images(sample, mean_p, sd_p)
 
 
 # ==========================================================================
@@ -139,7 +128,7 @@ def jitter_params(params, eps: float, rng):
 
 def _jitter_slot(params, eps, rng):
     """Jitter a regularizer params slot, which may be a single object or a list
-    aligned with a list of regularizer names (see masking.Detector._stages)."""
+    aligned with a list of regularizer names (see masking.Channel._stages)."""
     if isinstance(params, (list, tuple)):
         return [jitter_params(p, eps, rng) for p in params]
     return jitter_params(params, eps, rng)
@@ -150,18 +139,17 @@ def jitter_pipeline(pipe, eps: float, rng):
     independently perturbed. Structure (which detectors, which regularizers, the
     combiner) is untouched: this asks whether the recipe is on a plateau, not
     whether a different recipe would do better."""
-    from automask.masking import Detector, Pipeline
+    from automask.masking import Channel, Pipeline
 
-    dets = [Detector(stat=d.stat,
-                     stat_params=jitter_params(d._params(), eps, rng),
-                     field_reg=d.field_reg,
-                     field_reg_params=_jitter_slot(d.field_reg_params, eps, rng),
-                     mask_reg=d.mask_reg,
-                     mask_reg_params=_jitter_slot(d.mask_reg_params, eps, rng))
-            for d in pipe.detectors]
-    return Pipeline(detectors=dets, shot_selection=pipe.shot_selection,
-                    floor_stats=list(pipe.floor_stats),
-                    combiner=pipe.combiner,
+    channels = [Channel(stat=c.stat,
+                        params=jitter_params(c._params(), eps, rng),
+                        field_reg=c.field_reg,
+                        field_reg_params=_jitter_slot(c.field_reg_params, eps, rng),
+                        mask_reg=c.mask_reg,
+                        mask_reg_params=_jitter_slot(c.mask_reg_params, eps, rng),
+                        name=c.name)
+                for c in pipe.channels]
+    return Pipeline(channels=channels, combiner=pipe.combiner,
                     combiner_params=jitter_params(pipe.combiner_params, eps, rng))
 
 

@@ -13,14 +13,14 @@ from automask.run_profile import RunProfile
 from automask.shot_selection import ShotSelection
 
 ROOT = Path(__file__).resolve().parents[1]
-PANEL_SHAPE = (2, 512, 1024)
-ASM_SHAPE = (1064, 1030)
-N_GAIN = 3
 
 Reduction = Literal["mean", "std", "median", "mad"]
 Form = Literal["asm", "panel"]
 
-_REDUCTIONS = frozenset(("mean", "std", "median", "mad"))
+#: Reductions the store computes over selected shots. Anything a statistic needs
+#: that is not one of these is a psana calibration accessor name.
+REDUCTIONS = frozenset(("mean", "std", "median", "mad"))
+
 _FORMS = frozenset(("asm", "panel"))
 
 
@@ -30,12 +30,7 @@ def _content_key(selection: ShotSelection, reduction: Reduction) -> str:
 
 
 def _calibration_content_key(constant: str, gain: int) -> str:
-    payload = {
-        "source": "calib",
-        "constant": constant,
-        "gain": gain,
-        "form": "panel",
-    }
+    payload = {"source": "calib", "constant": constant, "gain": gain}
     return hashlib.sha1(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:12]
 
 
@@ -61,7 +56,8 @@ def _select_line(run: int, selection: ShotSelection, counts: dict) -> str:
 
 
 def _assemble(panel: np.ndarray, ix: np.ndarray, iy: np.ndarray) -> np.ndarray:
-    out = np.zeros(ASM_SHAPE, dtype=panel.dtype)
+    """Scatter panels onto the canvas the run's own index maps require."""
+    out = np.zeros((int(ix.max()) + 1, int(iy.max()) + 1), dtype=panel.dtype)
     out[ix, iy] = panel
     return out
 
@@ -92,20 +88,19 @@ class ImageStore:
     def _validate_reduction(selection, reduction, form) -> None:
         if not isinstance(selection, ShotSelection):
             raise TypeError("selection must be a ShotSelection")
-        if reduction not in _REDUCTIONS:
+        if reduction not in REDUCTIONS:
             raise ValueError(
-                f"reduction must be one of {sorted(_REDUCTIONS)}, got {reduction!r}")
+                f"reduction must be one of {sorted(REDUCTIONS)}, got {reduction!r}")
         if form not in _FORMS:
             raise ValueError(f"form must be one of {sorted(_FORMS)}, got {form!r}")
 
     @staticmethod
-    def _validate_calibration(constant, gain, form) -> None:
+    def _validate_calibration(constant, gain) -> None:
         if not isinstance(constant, str) or not constant:
             raise ValueError("constant must be a non-empty string")
-        if not isinstance(gain, int) or isinstance(gain, bool) or not 0 <= gain < N_GAIN:
-            raise ValueError(f"gain must be an integer in [0, {N_GAIN - 1}], got {gain!r}")
-        if form not in _FORMS:
-            raise ValueError(f"form must be one of {sorted(_FORMS)}, got {form!r}")
+        # How many gain stages a constant has is psana's to say (see detector_calibration).
+        if not isinstance(gain, int) or isinstance(gain, bool) or gain < 0:
+            raise ValueError(f"gain must be a non-negative integer, got {gain!r}")
 
     def _reduction_path(
         self, run: int, selection: ShotSelection, reduction: Reduction, form: Form
@@ -117,8 +112,8 @@ class ImageStore:
     ) -> Path:
         return self.cache_dir / f"{_reduction_stub(run, selection, reduction)}_meta.json"
 
-    def _calibration_path(self, run: int, constant: str, gain: int, form: Form) -> Path:
-        return self.cache_dir / f"{_calibration_stub(run, constant, gain)}_{form}.npy"
+    def _calibration_path(self, run: int, constant: str, gain: int) -> Path:
+        return self.cache_dir / f"{_calibration_stub(run, constant, gain)}_panel.npy"
 
     def reduce(
         self,
@@ -141,16 +136,17 @@ class ImageStore:
                 print(_select_line(run, selection, counts))
         return np.load(target)
 
-    def calibration(
-        self,
-        run: int,
-        constant: str,
-        gain: int = 0,
-        form: Form = "panel",
-    ) -> np.ndarray:
-        """Return one gain stage of a psana detector calibration constant."""
-        self._validate_calibration(constant, gain, form)
-        target = self._calibration_path(run, constant, gain, form)
+    def calibration(self, run: int, constant: str, gain: int = 0) -> np.ndarray:
+        """Return one gain stage of a psana calibration constant, in panel form.
+
+        Panel form only, deliberately: assembling is a scatter onto a zero-filled
+        canvas, which is meaningful for intensities but not for a constant whose
+        zero carries meaning -- ``status_as_mask`` would read as "bad" over every
+        unmapped pixel. A statistic that wants such a constant in assembled space
+        interprets it first, then calls ``geometry.panel_to_asm``.
+        """
+        self._validate_calibration(constant, gain)
+        target = self._calibration_path(run, constant, gain)
         if not target.exists():
             self._materialize_calibration(run, constant, gain)
         return np.load(target)
@@ -169,22 +165,14 @@ class ImageStore:
             return None
 
     def _materialize_calibration(self, run: int, constant: str, gain: int) -> None:
-        from automask.io.read_xtc import detector_calibration, panel_geometry
+        from automask.io.read_xtc import detector_calibration
 
         profile = self._profiles.get(run)
         source = profile.source if profile is not None else None
-        arr = detector_calibration(run, constant, source=source)
-        expected = (N_GAIN,) + PANEL_SHAPE
-        if arr.shape != expected:
-            raise ValueError(
-                f"calib constant {constant!r} for run {run} has shape "
-                f"{arr.shape}, expected {expected}")
-        panel = arr[gain].astype(np.float32)
-        ix, iy = panel_geometry(run, source=source)
+        panel = detector_calibration(run, constant, gain=gain, source=source)
         stub = _calibration_stub(run, constant, gain)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         np.save(self.cache_dir / f"{stub}_panel.npy", panel)
-        np.save(self.cache_dir / f"{stub}_asm.npy", _assemble(panel, ix, iy))
         (self.cache_dir / f"{stub}_meta.json").write_text(json.dumps({
             "source": "calib", "constant": constant, "gain": gain, "run": run,
         }))
@@ -250,16 +238,21 @@ class ImageStore:
         i0 = profile.column(selection.normalization) if normalize else None
 
         with h5py.File(stage_path, "w") as h5:
-            frames = h5.create_dataset(
-                "frames", shape=(indices.size, *PANEL_SHAPE), dtype=np.float32,
-                maxshape=(None, *PANEL_SHAPE), chunks=(1, 2, 64, 1024),
-                compression="gzip", compression_opts=1,
-            )
+            frames = None
             staged = 0
             for event_index, panel in iter_calibrated(
                 run, indices, source=profile.source
             ):
                 frame = panel.astype(np.float32)
+                if frames is None:
+                    # Shaped by the frames psana actually decodes, not by an assumed geometry.
+                    rows = frame.shape[-2]
+                    frames = h5.create_dataset(
+                        "frames", shape=(indices.size, *frame.shape),
+                        dtype=np.float32, maxshape=(None, *frame.shape),
+                        chunks=(1, *frame.shape[:-2], min(64, rows), frame.shape[-1]),
+                        compression="gzip", compression_opts=1,
+                    )
                 if normalize:
                     frame *= np.float32(reference / i0[event_index])
                 frames[staged] = frame
@@ -311,13 +304,15 @@ class ImageStore:
         reference = selection.normalization_reference(profile, indices) if normalize else 1.0
         i0 = profile.column(selection.normalization) if normalize else None
 
-        total = np.zeros(PANEL_SHAPE, dtype=np.float64)
-        squared = np.zeros(PANEL_SHAPE, dtype=np.float64)
+        total = squared = None
         n_used = 0
         for event_index, panel in iter_calibrated(
             run, indices, source=profile.source
         ):
             frame = panel.astype(np.float64)
+            if total is None:
+                # Shaped by the frames psana actually decodes, not by an assumed geometry.
+                total, squared = np.zeros_like(frame), np.zeros_like(frame)
             if normalize:
                 frame *= reference / i0[event_index]
             total += frame

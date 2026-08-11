@@ -74,7 +74,7 @@ def anomaly_field(sample, fm):
     testable = n_ok >= 3
     dof = np.maximum(n_ok - 1, 1)
     return (panel_to_asm(chi2, fm.run), panel_to_asm(dof, fm.run),
-            panel_to_asm(testable, fm.run) & (sample.sumimg != 0))
+            panel_to_asm(testable, fm.run) & sample.real)
 
 
 def _flagged(ctx):

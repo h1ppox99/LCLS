@@ -92,14 +92,14 @@ N_SECTORS = 12
 #  per-pixel frame
 # ==========================================================================
 def pixel_frame(sample):
-    """Per-pixel (q, chi, corrected intensity, validity) for a Sample's sum image.
+    """Per-pixel (q, chi, corrected intensity, validity) for a Sample's image.
 
-    Reads `sample.sumimg` rather than the frozen file so the frame can also be
-    built for a resampled Sample (see `unsupervised.folds`).
+    Reads `sample.mean` so the frame can also be built for a resampled Sample
+    (see `unsupervised.folds`).
     """
     from automask import azimuthal as az
 
-    img = np.asarray(sample.sumimg, dtype=np.float64)
+    img = np.asarray(sample.mean, dtype=np.float64)
     ai = az.integrator(sample.run, img.shape)
     q = ai.array_from_unit(img.shape, "center", "q_A^-1", scale=True)
     chi = ai.chiArray(img.shape)

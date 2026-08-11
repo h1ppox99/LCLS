@@ -1,23 +1,25 @@
 """
-evaluation.py -- per-run Sample context + the evaluation loop.
+evaluation.py -- scoring a pipeline against the hand-drawn reference masks.
 
-`Sample` bundles the arrays a statistic reads for one run. Its selected-shot
-images come from `ImageStore`, which serves a warm `.npy` cache when present and
-otherwise reduces raw XTC frames. `load_sample` materializes only the reductions
-and calibration constants a caller asks for. `evaluate` scores any
-object exposing `.run(sample)`/`.floor(sample)` (a masking.Pipeline) across the
-evaluation runs. `EVAL_RUNS` is the single place the evaluation set grows.
+This is the ONLY place a frozen `.npy` is still read, and deliberately so: a
+human reference mask is a measurement someone made once, not something psana can
+recompute. Everything a pipeline *consumes* now comes from the run itself (see
+`automask.sample.Sample.from_store`); everything it is *judged against* lives
+here.
+
+`evaluate` scores any object exposing `.run(sample)`/`.floor(sample)` (a
+masking.Pipeline) across the evaluation runs. `EVAL_RUNS` is the single place the
+evaluation set grows.
 """
 from __future__ import annotations
 import os
-from dataclasses import dataclass, field
-from functools import cached_property
 from typing import Optional, Sequence, Tuple
 
 import numpy as np
 
-from automask.dataset import load_image, load_mask, score
-from automask.image_store import ImageStore, Reduction
+from automask.dataset import load_mask, score
+from automask.image_store import ImageStore
+from automask.sample import Sample
 from automask.selection_presets import BEAM_ON_SELECTION
 from automask.shot_selection import ShotSelection
 
@@ -26,114 +28,42 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # The evaluation set. Grows here, in one place, as more runs are frozen.
 EVAL_RUNS: Tuple[int, ...] = (389, 475)
 
-# psana pixel_status masks frozen per run into data/masks/.
-_CALIB_MASK_BY_RUN = {389: "statusMask_run0389", 475: "statusMask_run0475"}
-_REDUCTIONS = frozenset(("mean", "std", "median", "mad"))
-_CALIBRATIONS = frozenset(("pedestals", "pixel_rms"))
 
+def reference_mask(run: int) -> np.ndarray:
+    """The hand-drawn target mask for `run` (bool, True == masked).
 
-@dataclass
-class Sample:
-    """Per-run masking context with reductions from one retained selection."""
-    run: int
-    sumimg: np.ndarray                  # calibrated run-sum image (lit), (1064, 1030)
-    human: np.ndarray                   # reference target mask (bool, True == masked)
-    calib: np.ndarray                   # psana pixel_status floor mask (bool)
-    selection: ShotSelection = BEAM_ON_SELECTION
-    mean: Optional[np.ndarray] = None
-    std: Optional[np.ndarray] = None
-    median: Optional[np.ndarray] = None
-    mad: Optional[np.ndarray] = None
-    pedestals: Optional[np.ndarray] = None  # panel form, gain stage 0
-    pixel_rms: Optional[np.ndarray] = None  # psana dark rms, gain stage 0
-
-    @property
-    def real(self) -> np.ndarray:
-        """Pixels carrying a real value (sum != 0)."""
-        return self.sumimg != 0
-
-    @cached_property
-    def center(self) -> Tuple[float, float]:
-        """Frozen beam center in assembled (axis0, axis1) index order."""
-        from automask.geometry import get_center
-        return get_center(self.run)
-
-
-def load_sample(
-    run: int,
-    selection: ShotSelection = BEAM_ON_SELECTION,
-    reductions: Optional[Sequence[Reduction]] = None,
-    calibrations: Optional[Sequence[str]] = None,
-    store: Optional[ImageStore] = None,
-) -> Sample:
-    """Build a :class:`Sample` for `run`.
-
-    Reductions share `selection`; calibration constants are loaded in panel form
-    at gain stage zero. Omitting either requirement list loads all supported
-    values, while evaluation passes a pipeline's exact requirements.
+    Prefers a run-specific mask (the lab recipe re-run on this run) and falls
+    back to the shared run-475 `human_Mask`, so run-389 scores are provisional.
     """
-    if not isinstance(selection, ShotSelection):
-        raise TypeError("selection must be a ShotSelection")
-    store = store or ImageStore()
-    reductions = tuple(
-        ("mean", "std", "median", "mad") if reductions is None else reductions
-    )
-    calibrations = tuple(
-        ("pedestals", "pixel_rms") if calibrations is None else calibrations
-    )
-    unknown_reductions = set(reductions) - _REDUCTIONS
-    unknown_calibrations = set(calibrations) - _CALIBRATIONS
-    if unknown_reductions:
-        raise ValueError(f"unsupported sample reductions: {sorted(unknown_reductions)}")
-    if unknown_calibrations:
-        raise ValueError(
-            f"unsupported sample calibrations: {sorted(unknown_calibrations)}")
-    sumimg = load_image(f"sum_calib_run{run:04d}").astype(np.float64)
-    images = {
-        reduction: store.reduce(run, selection, reduction).astype(np.float64)
-        for reduction in reductions
-    }
-    constants = {
-        constant: store.calibration(run, constant).astype(np.float64)
-        for constant in calibrations
-    }
-    # Prefer a run-specific target (lab recipe re-run on this run); fall back to
-    # the shared 475-built human_Mask.
     per_run = os.path.join(HERE, "data", "masks", f"human_Mask_run{run:04d}_asm.npy")
-    human = (np.load(per_run).astype(bool) if os.path.exists(per_run)
-             else load_mask("human_Mask"))
-    try:
-        calib = load_mask(_CALIB_MASK_BY_RUN[run])
-    except KeyError:
-        raise ValueError(
-            f"no frozen calibration mask for run {run}; only "
-            f"{sorted(_CALIB_MASK_BY_RUN)} are available") from None
-    return Sample(
-        run=run, sumimg=sumimg, human=human, calib=calib, selection=selection,
-        **images, **constants,
-    )
+    if os.path.exists(per_run):
+        return np.load(per_run).astype(bool)
+    return load_mask("human_Mask")
 
 
-def evaluate(pipeline, runs: Optional[Sequence[int]] = None, verbose: bool = False):
-    """Score `pipeline` (any object with `.run`/`.floor`) across `runs`.
+def evaluate(
+    pipeline,
+    runs: Optional[Sequence[int]] = None,
+    selection: ShotSelection = BEAM_ON_SELECTION,
+    store: Optional[ImageStore] = None,
+    verbose: bool = False,
+):
+    """Score `pipeline` (any object with `.run`/`.floor`/`.needs`) across `runs`.
 
     Returns {run: metrics, "mean": metrics}, where each metrics dict carries both
-    the FULL-mask scores (floor | pred vs human) and the RESIDUAL scores (the pick
-    beyond the floor vs human & ~floor -- what the intensity detectors must find).
+    the FULL-mask scores (pred vs reference) and the RESIDUAL scores (the pick
+    beyond the floor vs reference & ~floor -- what the intensity channels must find).
     """
     runs = list(EVAL_RUNS if runs is None else runs)
-    reductions = pipeline.reductions_needed()
-    calibrations = pipeline.calibrations_needed()
+    store = store or ImageStore()
     per_run = {}
     for run in runs:
-        sample = load_sample(
-            run, selection=pipeline.shot_selection, reductions=reductions,
-            calibrations=calibrations,
-        )
+        sample = Sample.from_store(run, selection, pipeline.needs(), store=store)
+        human = reference_mask(run)
         floor = pipeline.floor(sample)
         pred = pipeline.run(sample)
-        target = sample.human & ~floor
-        full = score(pred, sample.human)
+        target = human & ~floor
+        full = score(pred, human)
         resid = score(pred & ~floor, target)
         per_run[run] = {
             "iou": full["iou"], "precision": full["precision"], "recall": full["recall"],
@@ -141,7 +71,7 @@ def evaluate(pipeline, runs: Optional[Sequence[int]] = None, verbose: bool = Fal
             "residual_iou": resid["iou"],
             "residual_precision": resid["precision"],
             "residual_recall": resid["recall"],
-            "floor_iou": score(floor, sample.human)["iou"],
+            "floor_iou": score(floor, human)["iou"],
         }
         if verbose:
             m = per_run[run]
@@ -151,3 +81,57 @@ def evaluate(pipeline, runs: Optional[Sequence[int]] = None, verbose: bool = Fal
     keys = next(iter(per_run.values())).keys()
     mean = {k: float(np.mean([per_run[r][k] for r in runs])) for k in keys}
     return {**per_run, "mean": mean}
+
+
+def report(run: int, selection: ShotSelection = BEAM_ON_SELECTION, store=None):
+    """Per-channel + combined scores for one run, with agreement figures."""
+    from automask import viz
+    from automask.masking import production_pipeline
+
+    pipe = production_pipeline("union")
+    pipe_sum = production_pipeline("weighted_sum")
+    sample = Sample.from_store(run, selection, pipe.needs(), store=store)
+    human = reference_mask(run)
+
+    floor = pipe.floor(sample)
+    target = human & ~floor
+    sf = score(floor, human)
+    print(f"=== floor ({'+'.join(c.label for c in pipe.floor_channels)}), run {run} ===")
+    print(f"  floor vs human : {100*floor.mean():.2f}% masked  IoU {sf['iou']:.3f}  "
+          f"prec {sf['precision']:.3f}  rec {sf['recall']:.3f}")
+    print(f"  residual target = human & ~floor : {int(target.sum())} px to find\n")
+
+    picks = {c.label: c.pick(sample) for c in pipe.evidence_channels}
+    combo, combo_sum = pipe.run(sample), pipe_sum.run(sample)
+
+    print(f"{'channel':16s} | {'added%':>6s} {'T-prec':>6s} {'T-rec':>6s} "
+          f"| {'IoU':>7s} {'prec':>6s} {'rec':>6s}")
+    print("-" * 70)
+    for name, M in {**picks, "combo": combo, "combo_sum": combo_sum}.items():
+        Mo = M & ~floor
+        st, sc = score(Mo, target), score(floor | M, human)
+        print(f"{name:16s} | {100*Mo.mean():5.2f}% {st['precision']:6.3f} "
+              f"{st['recall']:6.3f} | {sc['iou']:7.3f} {sc['precision']:6.3f} "
+              f"{sc['recall']:6.3f}")
+    print(f"\n(reference: floor alone -> IoU {sf['iou']:.3f})")
+
+    out_dir = os.path.join(HERE, "outputs", "figures")
+    os.makedirs(out_dir, exist_ok=True)
+    for name, M in {**picks, "combo": combo, "combo_sum": combo_sum}.items():
+        out = os.path.join(out_dir, f"{name}_run{run:04d}.png")
+        viz.save_agreement(floor | M, floor, human, run, out,
+                           title=f"run {run} — {name}")
+        print(f"[figure] {out}")
+    panels = os.path.join(out_dir, f"panels_run{run:04d}.png")
+    viz.channel_panels(pipe, sample, out=panels)
+    print(f"[figure] {panels}")
+
+
+def main(runs: Optional[Sequence[int]] = None):
+    for run in (EVAL_RUNS if runs is None else runs):
+        report(run)
+        print()
+
+
+if __name__ == "__main__":
+    main()

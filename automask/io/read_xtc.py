@@ -28,11 +28,6 @@ def calib_dir() -> str:
 
 JUNGFRAU_NAME = "jungfrau1M_alcove"       # psana alias; source is XppEndstation.0:Jungfrau.0
 
-CALIBRATION_ACCESSORS = {
-    "pedestals": "pedestals",
-    "pixel_rms": "rms",
-}
-
 
 def local_run_source(run: int = 475) -> Psana1RunSource:
     """Resolve one run from the explicit XTC files in this repository."""
@@ -88,28 +83,46 @@ def iter_calibrated(
 def detector_calibration(
     run: int,
     constant: str,
+    gain: int = 0,
     detname: str = JUNGFRAU_NAME,
     source: Psana1RunSource | None = None,
 ) -> np.ndarray:
-    """Return a detector calibration constant through psana's official API."""
-    try:
-        accessor = CALIBRATION_ACCESSORS[constant]
-    except KeyError as error:
-        supported = ", ".join(sorted(CALIBRATION_ACCESSORS))
-        raise ValueError(
-            f"unsupported calibration constant {constant!r}; expected {supported}"
-        ) from error
+    """Return one psana calibration constant for `run`, in native panel form.
 
+    `constant` is the ``psana.Detector`` accessor name itself -- ``pedestals``,
+    ``rms``, ``status_as_mask``, ``gain`` -- so no vocabulary is translated here
+    and any accessor psana grows is usable immediately. Values are returned
+    exactly as psana gives them; converting to this project's mask convention is
+    the consuming statistic's job.
+    """
     import psana
 
     _data_source = _run_source(run, source).open()
     detector = psana.Detector(detname)
-    values = getattr(detector, accessor)(run)
+    accessor = getattr(detector, constant, None)
+    if not callable(accessor):
+        raise ValueError(
+            f"psana Detector for {detname!r} has no calibration accessor "
+            f"{constant!r}")
+    values = accessor(run)
     if values is None:
         raise RuntimeError(
             f"psana returned no {constant!r} calibration for {detname!r}, run {run}"
         )
-    return np.asarray(values)
+    values = np.asarray(values)
+    panel_shape = tuple(detector.shape(run))
+    # A gain-resolved constant carries one axis more than the panels; `gain` picks the stage.
+    if values.ndim == len(panel_shape) + 1:
+        if not 0 <= gain < values.shape[0]:
+            raise ValueError(
+                f"calibration {constant!r} for run {run} has {values.shape[0]} "
+                f"gain stages; got gain={gain}")
+        values = values[gain]
+    if values.shape != panel_shape:
+        raise ValueError(
+            f"calibration {constant!r} for run {run} has shape {values.shape}, "
+            f"expected the panel shape {panel_shape}")
+    return values
 
 
 def panel_geometry(

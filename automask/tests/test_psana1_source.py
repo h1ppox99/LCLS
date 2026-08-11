@@ -12,11 +12,17 @@ class FakeDetector:
     def __init__(self, name):
         self.name = name
 
+    def shape(self, run):
+        return (2, 2, 2)
+
     def pedestals(self, run):
         return np.full((3, 2, 2, 2), run, dtype=np.float32)
 
     def rms(self, run):
         return np.full((3, 2, 2, 2), run / 10, dtype=np.float32)
+
+    def status_as_mask(self, run):
+        return np.ones((2, 2, 2), dtype=np.uint8)
 
 
 class FakePsana:
@@ -87,14 +93,30 @@ def test_detector_calibration_uses_psana_accessor(tmp_path, monkeypatch):
         "xpptest", 12, [xtc], calib_dir=calibration
     )
 
-    values = detector_calibration(12, "pixel_rms", source=source)
+    values = detector_calibration(12, "rms", gain=1, source=source)
 
-    assert values.shape == (3, 2, 2, 2)
+    # psana's own accessor name, one gain stage, native panel shape.
+    assert values.shape == (2, 2, 2)
     assert np.all(values == np.float32(1.2))
     assert psana.options == [("psana.calib-dir", str(calibration))]
     assert psana.calls == [("serial", (str(xtc),))]
 
 
-def test_detector_calibration_rejects_unknown_constant():
-    with pytest.raises(ValueError, match="unsupported calibration constant"):
-        detector_calibration(12, "pixel_gain")
+def test_detector_calibration_rejects_unknown_accessor(tmp_path, monkeypatch):
+    xtc = tmp_path / "run.xtc"
+    xtc.touch()
+    monkeypatch.setitem(sys.modules, "psana", FakePsana())
+    source = Psana1RunSource.from_files("xpptest", 12, [xtc])
+    with pytest.raises(ValueError, match="no calibration accessor"):
+        detector_calibration(12, "pixel_gain", source=source)
+
+
+def test_gain_stage_is_read_from_the_constant_not_assumed(tmp_path, monkeypatch):
+    """A constant with no gain axis (status_as_mask) is returned whole."""
+    xtc = tmp_path / "run.xtc"
+    xtc.touch()
+    monkeypatch.setitem(sys.modules, "psana", FakePsana())
+    source = Psana1RunSource.from_files("xpptest", 12, [xtc])
+    assert detector_calibration(12, "status_as_mask", source=source).shape == (2, 2, 2)
+    with pytest.raises(ValueError, match="gain stages"):
+        detector_calibration(12, "pedestals", gain=7, source=source)

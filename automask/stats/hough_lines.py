@@ -101,18 +101,19 @@ def hough_segments(binary, threshold=10, line_length=100, line_gap=5, rng=0):
 
 
 def floor_mask(sample, pad=2):
-    """The geometry+calib floor, recomputed from `sample` alone. Duplicates what
+    """The geometry+status floor, recomputed from `sample` alone. Duplicates what
     Pipeline.floor does, because a stat runs beside the floor stats and is not
     handed their output."""
     from automask.stats.geometry import geometry_mask
-    return geometry_mask(sample.real, pad=pad) | sample.calib
+    from automask.stats.status_as_mask import compute as status_mask
+    return geometry_mask(sample.real, pad=pad) | status_mask(sample)
 
 
-def hough_lines_mask(sumimg, real, p: HoughLinesParams, floor=None):
+def hough_lines_mask(image, real, p: HoughLinesParams, floor=None):
     """Boolean mask of the Hough segment pixels. Split out from `compute` so the
     study can drive it with an arbitrary domain."""
     domain = real if floor is None else (real & ~floor)
-    z = blackhat_stat(sumimg, real, radius=p.radius)
+    z = blackhat_stat(image, real, radius=p.radius)
     binary = anomaly_map(z, domain, bin_k=p.bin_k, min_size=p.min_size)
     segments = hough_segments(binary, threshold=p.threshold,
                               line_length=p.line_length, line_gap=p.line_gap)
@@ -122,7 +123,7 @@ def hough_lines_mask(sumimg, real, p: HoughLinesParams, floor=None):
 def compute(sample, params: HoughLinesParams | None = None):
     p = params or HoughLinesParams()
     floor = floor_mask(sample) if p.exclude_floor else None
-    return hough_lines_mask(sample.sumimg, sample.real, p, floor=floor)
+    return hough_lines_mask(sample.mean, sample.real, p, floor=floor)
 
 
 register_stat(StatSpec(
@@ -130,7 +131,7 @@ register_stat(StatSpec(
     compute=compute,
     params=HoughLinesParams,
     kind="pick",
-    needs=("sumimg", "real", "calib"),
+    needs=("mean", "real", "status_as_mask"),
     doc="probabilistic-Hough segments of the black-hat darkness map; "
         "emits a mask (kind='pick'), so field_reg must be None",
 ))

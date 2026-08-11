@@ -14,7 +14,7 @@ import numpy as np
 from automask.image_store import (
     ImageStore, _calibration_content_key, _content_key, _reduction_stub,
 )
-from automask.masking import Detector, Pipeline, production_pipeline
+from automask.masking import Channel, Pipeline, production_pipeline
 from automask.regularization.area_gate import area_gate
 from automask.regularization.blob_scale import blob_scale
 from automask.regularization.fill_holes import fill_holes
@@ -97,49 +97,82 @@ def test_median_polish_keeps_a_compact_anomaly():
     assert res[20:28, 20:28].mean() > 30.0
 
 
-# -- Detector regularizer composition --------------------------------------
+# -- Channel regularizer composition ---------------------------------------
 def test_stages_normalizes_all_accepted_shapes():
-    assert Detector._stages(None, None) == []
-    assert Detector._stages("tv", None) == [("tv", None)]
-    assert Detector._stages(["a", "b"], None) == [("a", None), ("b", None)]
-    assert Detector._stages(["a", "b"], [1, 2]) == [("a", 1), ("b", 2)]
+    assert Channel._stages(None, None) == []
+    assert Channel._stages("tv", None) == [("tv", None)]
+    assert Channel._stages(["a", "b"], None) == [("a", None), ("b", None)]
+    assert Channel._stages(["a", "b"], [1, 2]) == [("a", 1), ("b", 2)]
 
 
 def test_stages_rejects_mismatched_params():
     for names, params in ((["a", "b"], [1]), (["a", "b"], 1)):
         try:
-            Detector._stages(names, params)
+            Channel._stages(names, params)
         except ValueError:
             continue
         raise AssertionError(f"expected ValueError for {names!r}, {params!r}")
 
 
-def test_detector_rejects_wrong_regularizer_kind():
+def test_channel_rejects_wrong_regularizer_kind():
     """A mask regularizer in a field slot would silently mangle the field."""
     try:
-        Detector("variance", field_reg="area_gate")
+        Channel("variance", field_reg="area_gate")
     except ValueError as e:
         assert "kind=" in str(e)
         return
     raise AssertionError("expected ValueError for a mask reg in a field slot")
 
 
-def test_detector_rejects_field_reg_on_a_pick_stat():
+def test_channel_rejects_field_reg_on_a_pick_stat():
     for field_reg in ("tv", ["tv", "blob_scale"]):
         try:
-            Detector("hough_lines", field_reg=field_reg)
+            Channel("hough_lines", field_reg=field_reg)
         except ValueError:
             continue
         raise AssertionError(f"expected ValueError for field_reg={field_reg!r}")
 
 
-def test_pipeline_splits_reduction_and_calibration_requirements():
+def test_pipeline_collects_every_needed_array():
     pipeline = production_pipeline()
-    assert pipeline.reductions_needed() == ("std",)
-    assert pipeline.calibrations_needed() == ("pedestals",)
-    blackhat = Pipeline([Detector("blackhat")])
-    assert blackhat.reductions_needed() == ("mean",)
-    assert blackhat.calibrations_needed() == ()
+    assert pipeline.needs() == ("mean", "pedestals", "real", "status_as_mask", "std")
+    assert [c.label for c in pipeline.floor_channels] == ["geometry", "status_as_mask"]
+    blackhat = Pipeline([Channel("blackhat")])
+    assert blackhat.needs() == ("mean", "real")
+    assert blackhat.floor_channels == []
+
+
+def test_pipeline_rejects_duplicate_channel_labels():
+    """Two channels keyed the same would silently overwrite each other's evidence."""
+    try:
+        Pipeline([Channel("blackhat"), Channel("blackhat")])
+    except ValueError as error:
+        assert "unique" in str(error)
+    else:
+        raise AssertionError("expected a duplicate-label error")
+    named = Pipeline([Channel("blackhat"), Channel("blackhat", name="wide")])
+    assert [c.label for c in named.channels] == ["blackhat", "wide"]
+
+
+def test_floor_channel_is_not_gated_by_real(monkeypatch):
+    """A dead pixel reads zero, so gating the floor by `real` would erase exactly
+    the pixels the floor exists to mask."""
+    import automask.stats.status_as_mask as status_stat
+    from automask.sample import Sample
+    from automask.stats.status_as_mask import StatusAsMaskParams
+
+    monkeypatch.setattr(status_stat, "panel_to_asm", lambda panel, run: panel[0])
+    mean = np.ones((5, 5))
+    mean[2, 2] = 0.0                      # dead pixel: no value, so not `real`
+    status = np.ones((1, 5, 5), dtype=np.uint8)
+    status[0, 2, 2] = 0                   # psana: 0 == bad
+    sample = Sample(run=475, arrays={"mean": mean, "status_as_mask": status})
+
+    assert not sample.real[2, 2]
+    floor = Channel("status_as_mask", StatusAsMaskParams(pad=0),
+                    field_reg=None).pick(sample)
+    assert floor[2, 2]
+    assert floor.sum() == 1
 
 
 # -- shot selection --------------------------------------------------------
@@ -303,12 +336,12 @@ def test_calibration_and_reduction_keys_do_not_collide():
     ))
     keys = {
         _calibration_content_key("pedestals", 0),
-        _calibration_content_key("pixel_rms", 0),
+        _calibration_content_key("rms", 0),
         _content_key(selection, "mean"),
     }
     assert len(keys) == 3
     assert _reduction_stub(475, selection, "mean").startswith("mean_")
-    assert _calibration_content_key("pedestals", 0) == "14b618c9b510"
+    assert _calibration_content_key("pedestals", 0) == "194fcda7cea5"
 
 
 def test_image_store_validates_reduction_form_and_gain(tmp_path):
@@ -319,9 +352,7 @@ def test_image_store_validates_reduction_form_and_gain(tmp_path):
         lambda: store.reduce(1, selection, "mean", form="bad"),
         lambda: store.reduce(1, object(), "mean"),
         lambda: store.calibration(1, "pedestals", gain=-1),
-        lambda: store.calibration(1, "pedestals", gain=3),
         lambda: store.calibration(1, "", gain=0),
-        lambda: store.calibration(1, "pedestals", form="bad"),
     )
     for call in calls:
         try:
@@ -335,8 +366,6 @@ def _small_store(tmp_path, monkeypatch):
     import automask.image_store as image_store
     import automask.io.read_xtc as read_xtc
 
-    monkeypatch.setattr(image_store, "PANEL_SHAPE", (1, 2, 2))
-    monkeypatch.setattr(image_store, "ASM_SHAPE", (2, 2))
     monkeypatch.setattr(
         read_xtc, "panel_geometry",
         lambda run, source=None: (
@@ -390,21 +419,24 @@ def test_median_mad_are_co_computed(tmp_path, monkeypatch):
     assert len(calls) == 1
 
 
-def test_calibration_caches_panel_and_assembled_forms(tmp_path, monkeypatch):
+def test_calibration_is_cached_in_panel_form_only(tmp_path, monkeypatch):
+    """Assembling scatters onto a zero canvas, which would read as "bad" over
+    every unmapped pixel of a status mask -- so the store never assembles one."""
     import automask.io.read_xtc as read_xtc
 
     store = _small_store(tmp_path, monkeypatch)
     calls = []
 
-    def calibration(run, constant, source=None):
-        calls.append((run, constant, source))
-        return np.arange(12).reshape(3, 1, 2, 2)
+    def calibration(run, constant, gain=0, source=None):
+        calls.append((run, constant, gain, source))
+        return np.arange(12).reshape(3, 1, 2, 2)[gain]
 
     monkeypatch.setattr(read_xtc, "detector_calibration", calibration)
     panel = store.calibration(7, "pedestals", gain=1)
-    assembled = store.calibration(7, "pedestals", gain=1, form="asm")
     np.testing.assert_array_equal(panel, np.arange(4, 8).reshape(1, 2, 2))
-    np.testing.assert_array_equal(assembled, [[4, 5], [6, 7]])
+    np.testing.assert_array_equal(store.calibration(7, "pedestals", gain=1), panel)
+    assert len(calls) == 1
+    assert not list(tmp_path.glob("*_asm.npy"))
     assert len(calls) == 1
 
 

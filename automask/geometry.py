@@ -9,11 +9,11 @@ Axis-order gotcha: CLAUDE.md's "(col 1005, row 45)" describes the true
 assembled image (1030 rows x 1064 cols). Every project `_asm` array is built with
 `out[ix, iy] = panel` on an array of shape (1064, 1030) -- i.e. TRANSPOSED:
 axis0 is the ix/"column" index (0..1063), axis1 is the iy/"row" index
-(0..1029). Verified directly: sumimg[1005, 45] equals the raw panel value at
-the pixel nearest (xcen, ycen); sumimg[45, 1005] does not. So for THESE
+(0..1029). Verified directly: image[1005, 45] equals the raw panel value at
+the pixel nearest (xcen, ycen); image[45, 1005] does not. So for THESE
 arrays the center is (1005, 45), not (45, 1005) -- get_center() returns it in
 this axis0/axis1 order so callers can plug it straight into
-`np.indices(sumimg.shape)` without re-deriving the swap.
+`np.indices(image.shape)` without re-deriving the swap.
 """
 from __future__ import annotations
 from functools import lru_cache

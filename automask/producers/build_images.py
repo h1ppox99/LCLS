@@ -8,16 +8,18 @@ from __future__ import annotations
 
 import argparse
 
-from automask.image_store import ImageStore
+from automask.image_store import REDUCTIONS, ImageStore
 from automask.masking import production_pipeline
+from automask.selection_presets import BEAM_ON_SELECTION
 
 RUNS = (389, 475)
 
 
 def main() -> None:
     pipeline = production_pipeline()
-    default_reductions = pipeline.reductions_needed()
-    default_calibrations = pipeline.calibrations_needed()
+    needs = set(pipeline.needs())
+    default_reductions = tuple(sorted(needs & REDUCTIONS))
+    default_calibrations = tuple(sorted(needs - REDUCTIONS - {"real", "center"}))
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -39,14 +41,12 @@ def main() -> None:
     store = ImageStore()
     for run in args.run:
         for reduction in args.reduction:
-            store.reduce(run, pipeline.shot_selection, reduction)
-            path = store._reduction_path(
-                run, pipeline.shot_selection, reduction, "asm"
-            )
+            store.reduce(run, BEAM_ON_SELECTION, reduction)
+            path = store._reduction_path(run, BEAM_ON_SELECTION, reduction, "asm")
             print(f"[prewarm] run {run:04d}: {reduction} -> {path.name}")
         for constant in args.calibration:
             store.calibration(run, constant)
-            path = store._calibration_path(run, constant, 0, "panel")
+            path = store._calibration_path(run, constant, 0)
             print(f"[prewarm] run {run:04d}: {constant} gain 0 -> {path.name}")
     print(f"[done] cache -> {store.cache_dir}")
 

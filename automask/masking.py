@@ -2,33 +2,31 @@
 """
 masking.py -- automated masking pipeline for the xppl1016922 Jungfrau1M detector.
 
-Runs in assembled space (1064, 1030) on the frozen numpy dataset in ./data.
+Runs in assembled space on the arrays a `Sample` carries (see automask/sample.py).
 
 The pipeline is three separable, independently-registered stages, each living in
-its own folder (one file per method), plus an intensity-free floor:
+its own folder (one file per method):
 
-    STATISTICS    (stats/)          raw Sample -> continuous z-field, or a mask
+    STATISTICS    (stats/)          Sample -> continuous z-field, or a mask
                                     directly (kind="pick" shape detectors, and
-                                    the kind="floor" geometry masks)
+                                    the kind="floor" geometry/status masks)
     REGULARIZATION(regularization/) field->field (TV) or mask->mask (pad)
-    COMBINATION   (combine/)        fuse per-detector evidence onto the floor
+    COMBINATION   (combine/)        fuse the evidence channels onto the floor
 
 The three registries below are the catalogue of everything available. Each is a
 dict name -> spec, populated by importing the component packages:
 
     STATS         variance, mad_variance, blackhat, sigma_clipping,
-                  hough_lines (pick), geometry (floor), calib (floor)
+                  hough_lines (pick), geometry (floor), status_as_mask (floor)
     REGULARIZERS  tv (field), frangi (field), pad (mask)
     COMBINERS     union (picks), weighted_sum (fields), mahalanobis (fields)
 
-A Pipeline composes floor stats + a list of Detectors + one combiner. Sweeping is
-done by studies/sweep_hyperparameters.py (Hydra); this module is the library +
-the production `main()`.
-
-Run:  python -m automask.masking
+A Pipeline is ONE list of Channels plus a combiner. Which channels form the
+intensity-free floor is not a second list to keep in step -- it is read from each
+stat's registered `kind`, so a floor channel is configured exactly like any
+other and its knobs are reachable the same way.
 """
 from __future__ import annotations
-import os, sys
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
@@ -42,33 +40,27 @@ from automask import combine  # noqa: F401
 from automask.stats.base import STATS, threshold_stat, robust_z          # noqa: F401
 from automask.regularization.base import REGULARIZERS
 from automask.combine.base import COMBINERS
-from automask.evaluation import Sample, load_sample, evaluate, EVAL_RUNS  # noqa: F401
-from automask.dataset import score
-from automask.selection_presets import BEAM_ON_SELECTION
-from automask.shot_selection import ShotSelection
-
-HERE = os.path.dirname(os.path.abspath(__file__))
-MASK_DIR = os.path.join(HERE, "outputs", "masks")
-os.makedirs(MASK_DIR, exist_ok=True)
+from automask.sample import Sample  # noqa: F401
 
 
 # ==========================================================================
-#  Detector -- one stat + field-reg + threshold + mask-reg -> boolean pick
+#  Channel -- one stat + field-reg + threshold + mask-reg -> boolean pick
 # ==========================================================================
 @dataclass
-class Detector:
-    """A single evidence channel.
+class Channel:
+    """A single evidence channel: one statistic and the stages around it.
 
     For a kind="field" stat the chain is the full one -- statistic ->
-    field-regularizer -> threshold -> mask-regularizer -- and `stat_params`
-    supplies both the stat inputs and the threshold (k, mode).
+    field-regularizer -> threshold -> mask-regularizer -- and `params` supplies
+    both the stat inputs and the threshold (k, mode).
 
-    For a kind="pick" stat (`hough_lines`) the statistic already returns the
-    boolean decision, so only the mask-regularizer applies; `field_reg` must be
-    None and `field()` is an error. Nothing about a pick is silently ignored:
-    setting a field-regularizer on one raises rather than being dropped, because
-    the failure it would cause otherwise is invisible (TV on a 0/1 indicator
-    flattens it below any threshold and the detector quietly returns nothing).
+    A kind="pick" stat (`hough_lines`) and a kind="floor" stat (`geometry`,
+    `status_as_mask`) already return the boolean decision, so only the
+    mask-regularizer applies; `field_reg` must be None and `field()` is an error.
+    Nothing about them is silently ignored: setting a field-regularizer raises
+    rather than being dropped, because the failure it would cause otherwise is
+    invisible (TV on a 0/1 indicator flattens it below any threshold and the
+    channel quietly returns nothing).
 
     Both regularizer slots accept either a single name or a LIST of names, applied
     left to right, with `*_params` given in the same shape (a bare params object
@@ -78,25 +70,25 @@ class Detector:
     a thresholded graded field wants `fill_holes` then `area_gate` after -- and
     keeping each step a registered, separately-parameterised stage is what keeps
     it visible to the sweep driver instead of hard-coded inside a stat.
+
+    `name` labels the channel when one stat appears more than once in a pipeline
+    (two black-hats at different radii); it defaults to the stat name.
     """
     stat: str
-    stat_params: object = None
+    params: object = None
     field_reg: Optional[str | List[str]] = "tv"
     field_reg_params: object = None
     mask_reg: Optional[str | List[str]] = None
     mask_reg_params: object = None
+    name: Optional[str] = None
 
     def __post_init__(self):
         spec = STATS[self.stat]
-        if spec.kind == "pick" and self._stages(self.field_reg, self.field_reg_params):
+        if spec.emits_mask and self._stages(self.field_reg, self.field_reg_params):
             raise ValueError(
-                f"stat '{self.stat}' is kind='pick': it emits a boolean mask, so "
-                f"there is no field for field_reg={self.field_reg!r} to act on. "
-                f"Pass field_reg=None (Hydra: regularization=none).")
-        if spec.kind == "floor":
-            raise ValueError(
-                f"stat '{self.stat}' is a floor stat -- put it in "
-                f"Pipeline.floor_stats, not in a Detector.")
+                f"stat '{self.stat}' is kind='{spec.kind}': it emits a boolean "
+                f"mask, so there is no field for field_reg={self.field_reg!r} to "
+                f"act on. Pass field_reg=None (Hydra: regularization=none).")
         for names, params, kind in ((self.field_reg, self.field_reg_params, "field"),
                                     (self.mask_reg, self.mask_reg_params, "mask")):
             for name, _ in self._stages(names, params):
@@ -130,8 +122,17 @@ class Detector:
                 f"{len(params)} params")
         return list(zip(names, params))
 
+    @property
+    def label(self) -> str:
+        return self.name or self.stat
+
+    @property
+    def is_floor(self) -> bool:
+        """Floor channels are the intensity-free, 100%-precision ones."""
+        return STATS[self.stat].kind == "floor"
+
     def _params(self):
-        return self.stat_params if self.stat_params is not None else STATS[self.stat].params()
+        return self.params if self.params is not None else STATS[self.stat].params()
 
     def field(self, sample) -> np.ndarray:
         """Continuous statistic field, field-regularized (e.g. TV-denoised)."""
@@ -146,16 +147,24 @@ class Detector:
         return z
 
     def pick(self, sample) -> np.ndarray:
-        """Boolean pick, gated by `real` and mask-regularized. A pick stat supplies
-        the mask directly; a field stat is thresholded at (k, mode) to get one."""
+        """Boolean pick, mask-regularized. A pick/floor stat supplies the mask
+        directly; a field stat is thresholded at (k, mode) to get one.
+
+        Evidence channels are gated by `real` -- they measure intensity, and a
+        pixel with no value carries no evidence. Floor channels are NOT: the
+        detector's dead pixels and the unmapped canvas are exactly what they are
+        there to mask, so intersecting them with `real` would erase them.
+        """
         spec, p = STATS[self.stat], self._params()
-        if spec.kind == "pick":
-            m = np.asarray(spec.compute(sample, p), dtype=bool) & sample.real
+        if spec.emits_mask:
+            m = np.asarray(spec.compute(sample, p), dtype=bool)
         else:
             mode = getattr(p, "mode", spec.mode)
-            m = threshold_stat(self.field(sample), p.k, mode) & sample.real
+            m = threshold_stat(self.field(sample), p.k, mode)
+        gate = (lambda mask: mask) if self.is_floor else (lambda mask: mask & sample.real)
+        m = gate(m)
         for name, params in self._stages(self.mask_reg, self.mask_reg_params):
-            m = REGULARIZERS[name].apply(m, params) & sample.real
+            m = gate(REGULARIZERS[name].apply(m, params))
         return m
 
     def defectiveness(self, sample) -> np.ndarray:
@@ -196,65 +205,87 @@ class Detector:
 # ==========================================================================
 @dataclass
 class Pipeline:
-    detectors: List[Detector] = field(default_factory=list)
-    shot_selection: ShotSelection = BEAM_ON_SELECTION
-    floor_stats: List[str] = field(default_factory=lambda: ["geometry", "calib"])
+    """One list of channels plus a combiner.
+
+    The floor is not a separate list: `floor_channels` reads it off each stat's
+    registered `kind`, so adding `Channel("status_as_mask", StatusAsMaskParams(pad=3))`
+    both puts it in the floor and makes its knobs reachable -- the old parallel
+    list of bare names could do neither.
+    """
+    channels: List[Channel] = field(default_factory=list)
     combiner: str = "union"
     combiner_params: object = None
 
-    def _needs(self) -> set[str]:
+    def __post_init__(self):
+        labels = [c.label for c in self.channels]
+        duplicates = sorted({l for l in labels if labels.count(l) > 1})
+        if duplicates:
+            raise ValueError(
+                f"channel labels must be unique, got duplicates {duplicates}; "
+                f"pass Channel(..., name=...) to tell them apart.")
+
+    @property
+    def floor_channels(self) -> List[Channel]:
+        return [c for c in self.channels if c.is_floor]
+
+    @property
+    def evidence_channels(self) -> List[Channel]:
+        return [c for c in self.channels if not c.is_floor]
+
+    def needs(self) -> Tuple[str, ...]:
+        """Every Sample array this pipeline's statistics read, by name.
+
+        These are resolved by `Sample.from_store`: a name that is a reduction is
+        computed over the selected shots, anything else is a psana calibration
+        accessor. Nothing here enumerates which is which.
+        """
         wanted = set()
-        for name in self.floor_stats:
-            wanted |= set(STATS[name].needs)
-        for d in self.detectors:
-            wanted |= set(STATS[d.stat].needs)
-        return wanted
-
-    def reductions_needed(self) -> Tuple[str, ...]:
-        """Selected-shot reductions required by this pipeline's statistics."""
-        return tuple(sorted(self._needs() & {"mean", "std", "median", "mad"}))
-
-    def calibrations_needed(self) -> Tuple[str, ...]:
-        """Detector calibration constants required by this pipeline."""
-        return tuple(sorted(self._needs() & {"pedestals", "pixel_rms"}))
+        for channel in self.channels:
+            wanted |= set(STATS[channel.stat].needs)
+        return tuple(sorted(wanted))
 
     def floor(self, sample) -> np.ndarray:
-        """OR of the intensity-free floor stats (geometry + calib), 100%-precision."""
-        f = np.zeros(sample.sumimg.shape, dtype=bool)
-        for name in self.floor_stats:
-            f = f | STATS[name].compute(sample, None)
-        return f
+        """OR of the intensity-free floor channels; 100%-precision."""
+        floor = np.zeros(sample.real.shape, dtype=bool)
+        for channel in self.floor_channels:
+            floor = floor | channel.pick(sample)
+        return floor
 
     def run(self, sample) -> np.ndarray:
         """Final boolean mask (True == masked)."""
         floor = self.floor(sample)
         cspec = COMBINERS[self.combiner]
+        evidence = self.evidence_channels
         if cspec.consumes == "picks":
-            comps = {d.stat: d.pick(sample) for d in self.detectors}
+            comps = {c.label: c.pick(sample) for c in evidence}
         else:
-            comps = {d.stat: d.defectiveness(sample) for d in self.detectors}
+            comps = {c.label: c.defectiveness(sample) for c in evidence}
         return cspec.combine(floor, comps, sample, self.combiner_params)
 
 
 # ==========================================================================
-#  production pipeline 
+#  production pipeline
 # ==========================================================================
 # z-worth of one hough_lines pixel for the consumes="fields" combiners. Chosen
-# to sit above weighted_sum's k=3.5 so the detector masks on its own there, as it
+# to sit above weighted_sum's k=3.5 so the channel masks on its own there, as it
 # does under union -- the two recipes then differ in HOW evidence is fused, not in
-# which detectors can act. A pick has no measured z-scale, so this is a modelling
+# which channels can act. A pick has no measured z-scale, so this is a modelling
 # choice; it is here, in the recipe, rather than defaulted in the stat.
 _HOUGH_FUSION_Z = 5.0
+
+
+def floor_channels() -> List[Channel]:
+    """The intensity-free floor: unmapped/ASIC geometry + psana pixel status."""
+    return [Channel("geometry", field_reg=None), Channel("status_as_mask", field_reg=None)]
 
 
 def production_pipeline(combiner: str = "union",
                         line_detector: bool = True) -> Pipeline:
     """The default recipe: TV variance + hough_lines + asic_polish on the
-    geometry+calib floor. combiner="union" reproduces `combo`;
+    geometry + pixel-status floor. combiner="union" reproduces `combo`;
     combiner="weighted_sum" reproduces `combo_sum`.
     """
     from automask.stats.variance import VarianceParams
-    from automask.stats.sigma_clipping import SigmaClippingParams
     from automask.stats.hough_lines import HoughLinesParams
     from automask.stats.asic_polish import AsicPolishParams
     from automask.regularization.tv import TVParams
@@ -263,25 +294,22 @@ def production_pipeline(combiner: str = "union",
     from automask.regularization.area_gate import AreaGateParams
     from automask.combine.weighted_sum import WeightedSumParams
 
-    detectors = [
-        Detector("variance", VarianceParams(k=3.5, mode="low"),
-                 field_reg="tv", field_reg_params=TVParams(4.0), mask_reg=None),
-        # Detector("sigma_clipping", SigmaClippingParams(k=5.0, mode="both"),
-        #          field_reg="tv", field_reg_params=TVParams(1.0), mask_reg=None),
-    ]
+    channels = floor_channels()
+    channels.append(Channel("variance", VarianceParams(k=3.5, mode="low"),
+                            field_reg="tv", field_reg_params=TVParams(4.0)))
     if line_detector:
-        detectors.append(Detector(
+        channels.append(Channel(
             "hough_lines", HoughLinesParams(defectiveness_scale=_HOUGH_FUSION_Z),
-            field_reg=None, mask_reg=None))
-    detectors.append(Detector(
+            field_reg=None))
+    channels.append(Channel(
         "asic_polish", AsicPolishParams(asic=256, n_iter=3, k=15.0, mode="high"),
         field_reg=["blob_scale"], field_reg_params=[BlobScaleParams()],
         mask_reg=["fill_holes", "area_gate"],
         mask_reg_params=[FillHolesParams(), AreaGateParams()]))
     if combiner == "weighted_sum":
-        return Pipeline(detectors, combiner="weighted_sum",
+        return Pipeline(channels, combiner="weighted_sum",
                         combiner_params=WeightedSumParams(k=3.5, pad=2))
-    return Pipeline(detectors, combiner=combiner)
+    return Pipeline(channels, combiner=combiner)
 
 
 # ==========================================================================
@@ -290,135 +318,35 @@ def production_pipeline(combiner: str = "union",
 def mask_image(
     image: np.ndarray,
     *,
-    calib: Optional[np.ndarray] = None,
     blackhat_radius: int = 5,
     blackhat_k: float = 6.0,
     blackhat_weight: float = 1.0,
     pad: int = 2,
 ) -> np.ndarray:
-    """Honest single-image subset of the run-level pipeline: invalid pixels and
-    geometry lines form the floor, then a TV+pad black-hat pick is unioned onto
-    it. The variance detector is absent (per-pixel variance needs many frames).
+    """Honest single-image subset of the run-level pipeline: the geometry floor
+    plus a TV+pad black-hat channel unioned onto it. True == masked.
 
-    `calib` is the run's psana pixel-status bad-pixel mask (a boolean array in
-    the same assembled space as `image`, True == masked) -- the single image is
-    built from that run, so its dead pixels apply. Pass e.g.
-    `load_mask("statusMask_run0475_asm")`; when omitted the floor is geometry
-    only. True == masked."""
-    from automask.stats.geometry import geometry_mask
-    from automask.stats.blackhat import blackhat_stat
-    from automask.regularization.tv import tv_denoise
-    from automask.regularization.pad import pad_mask
-    from automask.combine.union import combine_masks
+    This runs the same Pipeline every other entry point runs, on a Sample holding
+    one image -- not a second, hand-inlined copy of the recipe. Two channels of
+    the production recipe are necessarily absent: `variance` needs many frames,
+    and `status_as_mask` is a per-run psana constant a bare image cannot identify.
+    Use `production_pipeline()` on a `Sample.from_store` run for the full floor.
+    """
+    from automask.stats.blackhat import BlackhatParams
+    from automask.regularization.tv import TVParams
+    from automask.regularization.pad import PadParams
 
     image = np.asarray(image)
     if image.ndim != 2:
         raise ValueError(f"mask_image expects a 2-D array, got {image.shape}")
-    work = image.astype(np.float64, copy=False)
-    finite = np.isfinite(work)
-    if not finite.any():
+    work = np.where(np.isfinite(image), image, 0.0).astype(np.float64)
+    if not work.any():
         return np.ones(image.shape, dtype=bool)
 
-    carrying_data = finite & (work != 0)
-    floor = ~finite | geometry_mask(carrying_data, pad=pad)
-    if calib is not None:
-        calib = np.asarray(calib, dtype=bool)
-        if calib.shape != image.shape:
-            raise ValueError(
-                f"calib mask shape {calib.shape} != image shape {image.shape}")
-        floor = floor | calib
-    bh = tv_denoise(blackhat_stat(work, finite, radius=blackhat_radius), blackhat_weight)
-    bh = pad_mask(threshold_stat(bh, blackhat_k, "high") & finite, pad) & finite
-    return combine_masks(floor, {"blackhat": bh}).astype(bool, copy=False)
-
-
-# ==========================================================================
-#  main -- default recipe report, every evaluation run
-# ==========================================================================
-def _check_experiment_config():
-    """Warn if conf/experiment/production.yaml has drifted from the Python recipe.
-
-    The Hydra experiment duplicates `production_pipeline` as data, and the README
-    points users at it -- so a silent divergence means the documented production
-    command runs a different mask than the library does. That had already
-    happened once (the yaml still named sigma_clipping long after main() moved to
-    mad_variance), which is exactly the failure this catches. Compares the stat
-    names only: knob-level drift is the sweep's whole point."""
-    path = os.path.join(HERE, "conf", "experiment", "production.yaml")
-    try:
-        import yaml
-        with open(path) as f:
-            cfg = yaml.safe_load(f)
-        cfg_stats = [d["stat"] for d in cfg.get("detectors", [])]
-    except Exception as e:                      # config is optional at runtime
-        print(f"  [warn] could not read {path}: {e}")
-        return
-    py_stats = [d.stat for d in production_pipeline("union").detectors]
-    if cfg_stats != py_stats:
-        print(f"  [warn] conf/experiment/production.yaml is out of step with "
-              f"production_pipeline(): yaml={cfg_stats} python={py_stats}")
-
-
-def report(RUN: int):
-    """Per-detector + combined scores for one run, with agreement figures."""
-    pipe = production_pipeline("union")
-    pipe_sum = production_pipeline("weighted_sum")
-    sample = load_sample(
-        RUN, selection=pipe.shot_selection, reductions=pipe.reductions_needed(),
-        calibrations=pipe.calibrations_needed(),
-    )
-
-    floor = pipe.floor(sample)
-    human = sample.human
-    target = human & ~floor
-    sf = score(floor, human)
-    print(f"=== geometry + calib floor (run {RUN}) ===")
-    print(f"  floor vs human : {100*floor.mean():.2f}% masked  IoU {sf['iou']:.3f}  "
-          f"prec {sf['precision']:.3f}  rec {sf['recall']:.3f}")
-    print(f"  residual target = human & ~floor : {int(target.sum())} px to find\n")
-
-    picks = {d.stat: d.pick(sample) for d in pipe.detectors}
-    combo = pipe.run(sample)
-    combo_sum = pipe_sum.run(sample)
-
-    print(f"{'detector':16s} | {'added%':>6s} {'T-prec':>6s} {'T-rec':>6s} "
-          f"| {'IoU':>7s} {'prec':>6s} {'rec':>6s}")
-    print("-" * 70)
-    for name, M in {**picks, "combo": combo, "combo_sum": combo_sum}.items():
-        Mo = M & ~floor
-        st, sc = score(Mo, target), score(floor | M, human)
-        print(f"{name:16s} | {100*Mo.mean():5.2f}% {st['precision']:6.3f} "
-              f"{st['recall']:6.3f} | {sc['iou']:7.3f} {sc['precision']:6.3f} "
-              f"{sc['recall']:6.3f}")
-    print(f"\n(reference: floor alone -> IoU {sf['iou']:.3f})")
-
-    np.save(os.path.join(MASK_DIR, f"geometry_mask_run{RUN:04d}.npy"), floor)
-    np.save(os.path.join(MASK_DIR, f"combo_run{RUN:04d}.npy"), combo)
-    np.save(os.path.join(MASK_DIR, f"combo_sum_run{RUN:04d}.npy"), combo_sum)
-
-    # One agreement figure per detector plus the combined masks, so each
-    # channel's contribution is visible rather than only tabulated.
-    from automask import viz
-    fig_dir = os.path.join(HERE, "outputs", "figures")
-    os.makedirs(fig_dir, exist_ok=True)
-    for name, M in {**picks, "combo": combo, "combo_sum": combo_sum}.items():
-        out = os.path.join(fig_dir, f"{name}_run{RUN:04d}.png")
-        viz.save_agreement(floor | M, floor, human, RUN, out,
-                           title=f"run {RUN} — {name}")
-        print(f"[figure] {out}")
-
-    panels = os.path.join(fig_dir, f"panels_run{RUN:04d}.png")
-    viz.detector_panels(pipe, sample, out=panels)
-    print(f"[figure] {panels}")
-
-
-def main(runs=None):
-    """Report the production recipe on every evaluation run."""
-    _check_experiment_config()
-    for run in (EVAL_RUNS if runs is None else runs):
-        report(run)
-        print()
-
-
-if __name__ == "__main__":
-    main()
+    return Pipeline([
+        Channel("geometry", field_reg=None),
+        Channel("blackhat",
+                BlackhatParams(radius=blackhat_radius, k=blackhat_k, mode="high"),
+                field_reg="tv", field_reg_params=TVParams(blackhat_weight),
+                mask_reg="pad", mask_reg_params=PadParams(pad)),
+    ]).run(Sample(run=-1, arrays={"mean": work}))

@@ -108,16 +108,14 @@ def integrate(img, run: int, mask=None, npt: int = NPT, ai=None,
 def plot_run(run: int, npt: int = NPT, out: Optional[str] = None):
     """Integrate run `run` unmasked / floor-only / full production mask, plot."""
     from automask.masking import production_pipeline
-    from automask.evaluation import load_sample
+    from automask.sample import Sample
+    from automask.selection_presets import BEAM_ON_SELECTION
     import matplotlib.pyplot as plt
 
     pipe = production_pipeline("union")
-    sample = load_sample(
-        run, selection=pipe.shot_selection, reductions=pipe.reductions_needed(),
-        calibrations=pipe.calibrations_needed(),
-    )
+    sample = Sample.from_store(run, BEAM_ON_SELECTION, pipe.needs())
     mask = pipe.run(sample)
-    img = load_image(f"sum_calib_run{run:04d}").astype(np.float64)
+    img = sample.mean
 
     q, I, sig = integrate(img, run, mask, npt)
 

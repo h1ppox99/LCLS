@@ -81,13 +81,11 @@ def score_card(
     reductions=("std", "mean"), calibrations=("pedestals",),
 ):
     """Score one pipeline on one run with every label-free metric."""
-    from automask.evaluation import load_sample
+    from automask.sample import Sample
+    from automask.selection_presets import BEAM_ON_SELECTION
     from automask.unsupervised.stability import pipeline_jitter
 
-    sample = load_sample(
-        run, selection=pipeline.shot_selection, reductions=reductions,
-        calibrations=calibrations,
-    )
+    sample = Sample.from_store(run, BEAM_ON_SELECTION, pipeline.needs())
     ctx = MetricContext(sample=sample, seed=seed)
     cand = Candidate("pipeline", pipeline.run, jitter=pipeline_jitter(pipeline))
     row = score_candidate(cand, ctx)

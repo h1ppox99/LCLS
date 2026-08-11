@@ -160,39 +160,39 @@ def show_mask(mask, ax=None, color=(0.85, 0.1, 0.1), title=""):
     return ax
 
 
-def _detector_input(detector, sample):
-    """The image a detector reads, as (field name, assembled array), or None."""
+def _channel_input(channel, sample):
+    """The image a channel reads, as (field name, assembled array), or None."""
     from automask.stats.base import STATS
     from automask.geometry import panel_to_asm
-    for name in STATS[detector.stat].needs:
-        if name in ("real", "center", "calib"):
+    for name in STATS[channel.stat].needs:
+        if name in ("real", "center"):
             continue
-        arr = getattr(sample, name, None)
+        arr = sample.arrays.get(name)
         if not isinstance(arr, np.ndarray):
             continue
         if arr.ndim == 3:
             arr = panel_to_asm(arr, sample.run)
-        if arr.shape == sample.sumimg.shape:
+        if arr.shape == sample.real.shape:
             return name, arr
     return None
 
 
-def detector_panels(pipeline, sample, out=None, floor_row=True, store=None):
+def channel_panels(pipeline, sample, out=None, floor_row=True, store=None):
     """One row per masking channel: its input image left, the mask it gives right."""
     from automask.image_store import ImageStore
 
     base = pipeline.floor(sample)
     rows, skipped = [], []
     if floor_row:
-        rows.append((None, "sumimg", sample.sumimg))
-    for d in pipeline.detectors:
-        got = _detector_input(d, sample)
+        rows.append((None, "mean", sample.mean))
+    for c in pipeline.evidence_channels:
+        got = _channel_input(c, sample)
         if got is None:
-            skipped.append(d.stat)
+            skipped.append(c.label)
             continue
-        rows.append((d, *got))
+        rows.append((c, *got))
     if not rows:
-        raise ValueError("no detector in this pipeline reads an assembled image")
+        raise ValueError("no channel in this pipeline reads an assembled image")
 
     store = store or ImageStore()
     fig, axes = plt.subplots(len(rows), 2, figsize=(11, 5.4 * len(rows)),
@@ -200,14 +200,12 @@ def detector_panels(pipeline, sample, out=None, floor_row=True, store=None):
     for (d, fname, img), (ax_l, ax_r) in zip(rows, axes):
         if fname in ("mean", "std", "median", "mad"):
             label = f"{fname} — {_sel_label(sample.selection, _n_used(store, sample.run, sample.selection, fname))}"
-        elif fname in ("pedestals", "pixel_rms"):
-            label = f"{fname} — calibration constant"
         else:
-            label = f"{fname} — run sum"
+            label = f"{fname} — psana calibration constant"
         if d is None:
-            mask, name = base, "+".join(pipeline.floor_stats) + " floor"
+            mask, name = base, "+".join(c.label for c in pipeline.floor_channels) + " floor"
         else:
-            mask, name = d.pick(sample) & ~base, f"{d.stat} (beyond floor)"
+            mask, name = d.pick(sample) & ~base, f"{d.label} (beyond floor)"
         show(img, ax=ax_l, title=label, cbar=False)
         show_mask(mask, ax=ax_r,
                   title=f"{name} — {100 * mask.mean():.2f}% masked")
