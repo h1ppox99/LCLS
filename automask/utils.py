@@ -199,12 +199,30 @@ def list_experiment_content(
 
 def _short_values(field, value):
     array = np.asarray(value)
+    if (
+        array.ndim > 1
+        or array.size > 64
+        or array.dtype.kind not in "biufcUS"
+    ):
+        raise ValueError("field is not a supported short scalar or vector")
+
+    def scalar(item):
+        item = item.item() if hasattr(item, "item") else item
+        if isinstance(item, bytes):
+            try:
+                item = item.decode("utf-8")
+            except UnicodeDecodeError as exc:
+                raise ValueError("field contains binary data") from exc
+        if isinstance(item, str) and (
+            len(item) > 512 or (item and not item.isprintable())
+        ):
+            raise ValueError("field contains non-displayable text")
+        return item
+
     if array.ndim == 0:
-        return {field: array.item()}
-    if array.ndim != 1 or array.size > 64 or array.dtype.kind not in "biufcUS":
-        raise ValueError("field is not a short numeric vector")
+        return {field: scalar(array)}
     return {
-        f"{field}[{index}]": item.item() if hasattr(item, "item") else item
+        f"{field}[{index}]": scalar(item)
         for index, item in enumerate(array)
     }
 
@@ -219,9 +237,16 @@ def _discover_payload_values(payload):
         if not callable(method):
             continue
         try:
-            values.update(_short_values(accessor, method()))
-        except (AttributeError, IndexError, TypeError, ValueError):
+            value = method()
+        except TypeError:
+            continue
+        except (AttributeError, IndexError, ValueError):
             errors += 1
+            continue
+        try:
+            values.update(_short_values(accessor, value))
+        except (TypeError, ValueError):
+            continue
     return values, errors
 
 
@@ -275,13 +300,21 @@ def _column_summary(values):
         unique, counts = np.unique(observed, return_counts=True)
         coverage = f"{available / values.size:.1%}"
         if unique.size == 1:
-            return coverage, "constant", unique[0]
+            return coverage, "constant", _abbreviate(unique[0])
         changes = int(np.count_nonzero(
             available_mask[1:] & available_mask[:-1]
             & (text_values[1:] != text_values[:-1])
         ))
+        if unique.size > 10:
+            first, last = observed[0], observed[-1]
+            return (
+                coverage,
+                f"{unique.size} values; {changes} changes",
+                f"first={_abbreviate(first)}, last={_abbreviate(last)}",
+            )
         counts_text = ", ".join(
-            f"{value}: {count}" for value, count in zip(unique, counts)
+            f"{_abbreviate(value)}: {count}"
+            for value, count in zip(unique, counts)
         )
         return coverage, f"{unique.size} values; {changes} changes", counts_text
 
@@ -311,10 +344,19 @@ def _column_summary(values):
     )
 
 
+def _abbreviate(value, limit=120):
+    return value if len(value) <= limit else value[:limit - 1] + "…"
+
+
 def profile_run_values(
-    run, source=None, detector_set=None, max_events=None, show=True
+    run, source=None, detector_set=None, max_events=None, show=True,
+    show_constants=False,
 ) -> RunProfile:
-    """Profile one run through smalldata_tools and psana payload discovery."""
+    """Profile one run through smalldata_tools and psana payload discovery.
+
+    Constant per-shot values remain available in the returned profile, but are
+    hidden from the rendered value tables unless ``show_constants`` is true.
+    """
     source = source or local_run_source(run)
     data_source = source.open()
     detector_set = detector_set or Lcls1DetectorAdapters(data_source)
@@ -474,8 +516,14 @@ def profile_run_values(
 
     if show:
         _show_table(f"Raw XTC payloads ({n_events:,} decoded events)", payload_rows)
-        _show_table("Profiled per-shot values", value_rows)
-        _show_table("EPICS process variables", epics_rows)
+        visible_value_rows = value_rows if show_constants else [
+            row for row in value_rows if row["variation"] != "constant"
+        ]
+        visible_epics_rows = epics_rows if show_constants else [
+            row for row in epics_rows if row["variation"] != "constant"
+        ]
+        _show_table("Profiled per-shot values", visible_value_rows)
+        _show_table("EPICS process variables", visible_epics_rows)
     return RunProfile(
         run=int(run),
         events=n_events,
