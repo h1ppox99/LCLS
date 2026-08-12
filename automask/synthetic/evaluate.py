@@ -190,8 +190,8 @@ def _image_context(cfg):
 def _pipeline_context(cfg):
     """mode="pipeline": corrupt a full Sample, run the production Pipeline.
 
-    Supports one run (`run:`) or several (`runs: [389, 475]`) -- each becomes a
-    source, so every run is corrupted with the same artifact suite.
+    Supports one run (`run:`), several (`runs: [389, 475]`), or every local XTC
+    run (`runs: null`) -- each becomes a source with the same artifact suite.
     """
     from automask.masking import production_pipeline
     from automask.evaluation import reference_mask
@@ -199,8 +199,13 @@ def _pipeline_context(cfg):
     from automask.selection_presets import BEAM_ON_SELECTION
     from automask.synthetic.sample_adapter import corrupt_sample, rotate_sample
 
-    runs = cfg.get("runs") or [cfg["run"]]
-    runs = [int(r) for r in runs]
+    from automask.evaluation import ALL_RUNS
+
+    if "runs" in cfg:
+        runs = list(ALL_RUNS if cfg["runs"] is None else cfg["runs"])
+    else:
+        runs = [int(cfg["run"])]
+    runs = [int(run) for run in runs]
     combiner = cfg.get("combiner", "union")
     pipe = cfg.get("_pipeline")                       # a swept Pipeline, if provided
     if pipe is None:

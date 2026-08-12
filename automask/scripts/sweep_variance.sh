@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sweep the variance detector over threshold K x TV weight W on both eval runs.
+# Sweep the variance detector over threshold K x TV weight W on the fit runs.
 # Supersedes studies/tv_variance_sweep.py. Results -> outputs/sweeps/<ts>/results.csv.
 set -euo pipefail
 cd "$(dirname "$0")/../.."

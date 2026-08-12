@@ -1,5 +1,5 @@
 """
-unsupervised/azimuthal.py -- tier 2: the mask must make the physics consistent.
+Azimuthal physical-consistency diagnostics for runtime evaluation.
 
 The first hypothesis in this package that is about the EXPERIMENT rather than
 about estimation. The sample scatters isotropically, so after solid-angle and
@@ -47,7 +47,7 @@ robustly or it inherits them and the subtracted floor swallows the signal; see
 ITS NULL IS NOT ZERO. `V_b` is itself estimated from only S sector means, so it
 scatters around its expectation and the clip at zero makes the residual
 one-sided. Measured on synthetic isotropic rings (12 sectors, 200 px/cell, in
-`tests/test_unsupervised.py`) that sampling floor is ~0.19% of the ring mean,
+`tests/test_evaluation_runtime.py`) that sampling floor is ~0.19% of the ring mean,
 against a raw sector-mean scatter of 0.7% -- the subtraction removes about three
 quarters of the noise, and the rest is the metric's resolution limit. A 5%
 one-sector anomaly reads 1.5%, so the working dynamic range at this cell size is
@@ -70,16 +70,14 @@ TWO SYSTEMATICS, quantified rather than assumed:
     scatter. `gradient_leakage` computes it per ring -- it is the floor below
     which an `excess` value means nothing.
 
-`studies/azimuthal_consistency.py` is the exploratory driver for all of this;
-this module holds the reusable core and registers the metrics.
+The public diagnostic uses repeated size-matched random controls. This module
+contains the numerical primitives and does not register global metrics.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 
 import numpy as np
-
-from automask.unsupervised.base import MetricSpec, register_metric
 
 N_MIN = 30          # minimum pixels for a (ring, sector) cell to be usable
 MIN_SECTORS = 4     # a ring needs this many usable sectors to be scored
@@ -95,7 +93,7 @@ def pixel_frame(sample):
     """Per-pixel (q, chi, corrected intensity, validity) for a Sample's image.
 
     Reads `sample.mean` so the frame can also be built for a resampled Sample
-    (see `unsupervised.folds`).
+    (see `evaluation.resampling`).
     """
     from automask import azimuthal as az
 
@@ -371,52 +369,36 @@ def build_frame(sample, floor, n_sectors: int = N_SECTORS) -> AzimuthalFrame:
                           ref=ref)
 
 
-# ==========================================================================
-#  metrics
-# ==========================================================================
-def _paired(cand, ctx):
-    """(candidate per-ring excess, size-matched random control's)."""
-    fr = ctx.azimuthal_frame()
-    m = cand.mask(ctx)
-    return fr.excess(m), fr.excess(fr.random_control(m, ctx.rng("azim")))
+def azimuthal_diagnostics(
+    frame: AzimuthalFrame,
+    mask: np.ndarray,
+    rng: np.random.Generator,
+    controls: int = 20,
+) -> dict:
+    """Candidate excess and repeated size-matched control comparisons.
 
-
-def azim_excess(cand, ctx) -> float:
-    """Median per-ring excess azimuthal scatter, as a fraction of the ring mean.
-
-    Lower is better -- but read it with `azim_gain`: dropping pixels at random
-    lowers it too."""
-    return float(np.nanmedian(_paired(cand, ctx)[0]))
-
-
-def azim_gain(cand, ctx) -> float:
-    """How much of the scatter reduction is due to WHICH pixels were masked:
-    control excess minus candidate excess, median over rings."""
-    e, ec = _paired(cand, ctx)
-    return float(np.nanmedian(ec) - np.nanmedian(e))
-
-
-def azim_winrate(cand, ctx) -> float:
-    """Fraction of rings where the candidate beats its size-matched random
-    control. The paired form of `azim_gain`: it conditions on each ring's own
-    anisotropy, so the sample's real texture cancels instead of being modelled.
-    Under "the mask is no better than dropping the same pixels at random" each
-    ring is a coin flip, which is what makes 0.5 the meaningful null.
+    ``gain`` and ``win_rate`` contain one observation per independently drawn
+    control, allowing the caller to report Monte Carlo uncertainty rather than
+    treating one random mask as an exact reference.
     """
-    e, ec = _paired(cand, ctx)
-    both = np.isfinite(e) & np.isfinite(ec)
-    n = int(both.sum())
-    if not n:
-        raise ValueError("no ring is scorable for both the mask and its control")
-    return float((e[both] < ec[both]).sum()) / n
+    if controls < 2:
+        raise ValueError("azimuthal evaluation needs at least two controls")
+    candidate = frame.excess(mask)
+    finite_candidate = np.isfinite(candidate)
+    if not finite_candidate.any():
+        raise ValueError("the candidate has no scorable azimuthal ring")
 
-
-register_metric(MetricSpec(
-    name="azim_excess", compute=azim_excess, higher_is_better=False, tier=2,
-    doc="median per-ring azimuthal scatter beyond the noise floor"))
-register_metric(MetricSpec(
-    name="azim_gain", compute=azim_gain, higher_is_better=True, tier=2,
-    doc="scatter reduction versus a size-matched random mask"))
-register_metric(MetricSpec(
-    name="azim_winrate", compute=azim_winrate, higher_is_better=True, tier=2,
-    doc="fraction of rings beating a size-matched random mask (null = 0.5)"))
+    gain = np.empty(controls, dtype=np.float64)
+    win_rate = np.empty(controls, dtype=np.float64)
+    for i in range(controls):
+        control = frame.excess(frame.random_control(mask, rng))
+        valid = finite_candidate & np.isfinite(control)
+        if not valid.any():
+            raise ValueError("a matched control has no ring comparable to the candidate")
+        gain[i] = float(np.median(control[valid] - candidate[valid]))
+        win_rate[i] = float(np.mean(candidate[valid] < control[valid]))
+    return {
+        "excess": float(np.median(candidate[finite_candidate])),
+        "gain": gain,
+        "win_rate": win_rate,
+    }

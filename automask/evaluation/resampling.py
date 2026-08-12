@@ -1,5 +1,4 @@
-"""
-unsupervised/folds.py -- per-pixel moments accumulated in K disjoint shot folds.
+"""Per-pixel moments accumulated in disjoint runtime-evaluation folds.
 
 The reproducibility metrics need to ask "would this mask come out the same from
 a DIFFERENT set of shots?". An ImageStore reduction is keyed by a ShotSelection,
@@ -7,16 +6,13 @@ and the selection has no notion of a sub-sample, so every query returns the same
 800 shots. Rather than widen ShotSelection (which would rekey cached images), this
 module makes one XTC pass that accumulates the same per-pixel moments the store
 does -- n, sum, sum-of-squares -- but keeps them SPLIT over K folds instead of
-pooled. Everything downstream (split-half, bootstrap over folds, the event-axis
-chi2) is then pure numpy on an 80 MB cache.
+pooled. Everything downstream is then pure numpy.
 
 TWO fold axes are accumulated, not one, because the two questions this cache is
 asked need opposite things from a fold.
 
-    TIME BLOCKS  contiguous runs of shots in stream order. `halves()` (early vs
-                 late) and the tier-3 cross-fold chi2 both need chronology: a
-                 stationarity test over folds that each span the whole run is
-                 not a stationarity test.
+    TIME BLOCKS  contiguous runs of shots in stream order. `halves()` uses them
+                 to compare the early and late run.
     DEALT FOLDS  shots handed out round-robin, one to each fold in turn.
                  `alternating()` needs the opposite -- folds that are
                  INTERCHANGEABLE, so that a difference between two of them is
@@ -54,14 +50,13 @@ Cost: two fold axes means two accumulators, so the cache is 2x the size (~340 MB
 per run) and one extra add per frame. The XTC pass, which is what actually
 costs, is still one.
 
-`fold_sample` rebuilds a full :class:`~automask.evaluation.Sample` from a chosen
+`fold_sample` rebuilds a full :class:`~automask.sample.Sample` from a chosen
 subset of folds, so an unmodified Pipeline can be re-run on it.
 
-Run:  python -m automask.unsupervised.folds 475      # build/refresh the cache
+Run:  python -m automask.evaluation.resampling 475
 """
 from __future__ import annotations
 
-import dataclasses
 import os
 from dataclasses import dataclass
 from typing import Optional, Sequence
@@ -72,7 +67,7 @@ from automask.image_store import _content_key
 from automask.selection_presets import BEAM_ON_SELECTION
 from automask.shot_selection import ShotSelection
 
-PKG = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # .../automask
+PKG = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CACHE_DIR = os.path.join(PKG, "outputs", "cache", "folds")
 N_FOLDS = 10
 
@@ -138,11 +133,8 @@ class FoldMoments:
     def fold_means(self):
         """Per-TIME-BLOCK per-pixel mean and its own standard error.
 
-        Chronological on purpose: the event-axis chi2 compares the scatter of
-        these K numbers against their standard errors to ask whether a pixel is
-        stationary over the run. Dealt folds each span the whole run, so the
-        same chi2 computed over them would test overdispersion, not stationarity
-        -- a different hypothesis wearing the same arithmetic.
+        Chronological means and standard errors retained for diagnostics that
+        need the evolution of a pixel across the run.
         """
         n = self.n[:, None, None, None]
         mean = self.s1 / n
@@ -281,8 +273,8 @@ def fold_sample(base, fm: FoldMoments, folds: Sequence[int], dealt: bool = False
 
 
 def main(runs: Optional[Sequence[int]] = None, k: int = N_FOLDS):
-    from automask.evaluation import EVAL_RUNS
-    for run in (EVAL_RUNS if runs is None else runs):
+    from automask.evaluation import ALL_RUNS
+    for run in (ALL_RUNS if runs is None else runs):
         fm = load(run, k)
         n, mean, std = fm.moments(range(fm.k))
         nd, _, _ = fm.moments(range(fm.k), dealt=True)

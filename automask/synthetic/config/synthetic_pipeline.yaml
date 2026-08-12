@@ -13,7 +13,7 @@
 #                  polarity). Kept in the sweep so that limitation is measured, not hidden.
 
 mode: pipeline
-runs: [389, 475]                  # both runs have a per-run ground-truth human mask
+runs: null                        # discover every run represented in local xtc/
 combiner: union
 output_dir: automask/outputs/synthetic_pipeline
 seed: 0

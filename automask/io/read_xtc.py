@@ -7,7 +7,9 @@ geometry, and profiling workflow.
 """
 from __future__ import annotations
 import os
+import re
 from pathlib import Path
+from typing import Tuple
 
 import numpy as np
 
@@ -27,6 +29,23 @@ def calib_dir() -> str:
         "xpp", "xppl1016922", "calib")
 
 JUNGFRAU_NAME = "jungfrau1M_alcove"       # psana alias; source is XppEndstation.0:Jungfrau.0
+
+
+def available_xtc_runs(
+    xtc_dir: str | Path = XTC_DIR,
+    experiment: str = EXPERIMENT,
+) -> Tuple[int, ...]:
+    """Sorted runs represented by at least one local XTC stream."""
+    directory = Path(xtc_dir)
+    pattern = re.compile(
+        rf"^{re.escape(experiment)}-r(?P<run>\d+)-s\d+-c\d+\.xtc$"
+    )
+    runs = set()
+    for path in directory.glob(f"{experiment}-r*-s*-c*.xtc"):
+        match = pattern.match(path.name)
+        if match:
+            runs.add(int(match.group("run")))
+    return tuple(sorted(runs))
 
 
 def local_run_source(run: int = 475) -> Psana1RunSource:

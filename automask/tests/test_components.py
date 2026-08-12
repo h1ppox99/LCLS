@@ -443,6 +443,20 @@ def test_calibration_is_cached_in_panel_form_only(tmp_path, monkeypatch):
     assert len(calls) == 1
 
 
+def test_xtc_run_discovery_uses_the_filesystem(tmp_path):
+    from automask.io.read_xtc import available_xtc_runs
+
+    for name in (
+        "xppl1016922-r0475-s01-c00.xtc",
+        "xppl1016922-r0378-s00-c00.xtc",
+        "xppl1016922-r0475-s00-c00.xtc",
+        "another-r0999-s00-c00.xtc",
+        "xppl1016922-r0396-not-an-xtc-name.xtc",
+    ):
+        (tmp_path / name).touch()
+    assert available_xtc_runs(tmp_path) == (378, 475)
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     failed = 0

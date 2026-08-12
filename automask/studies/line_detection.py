@@ -69,7 +69,7 @@ from skimage.feature import peak_local_max
 from skimage.transform import radon
 
 from automask.dataset import score
-from automask.evaluation import EVAL_RUNS, reference_mask
+from automask.evaluation import FIT_RUNS, reference_mask
 from automask.sample import Sample
 from automask.selection_presets import BEAM_ON_SELECTION
 from automask.masking import production_pipeline
@@ -483,10 +483,10 @@ def main():
         selftest()
         return
     if "--sweep" in sys.argv:
-        for run in EVAL_RUNS:
+        for run in FIT_RUNS:
             sweep_run(run)
         return
-    for run in EVAL_RUNS:
+    for run in FIT_RUNS:
         study_run(run)
 
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Evaluate the live production recipe across all eval runs, both combiners.
-# The regression anchor (matches masking.main() on run 475).
+# Evaluate the selected production recipe. Pass eval.phase=validate only after
+# parameters have been fixed on the fit runs.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 echo "### production union (combo)"

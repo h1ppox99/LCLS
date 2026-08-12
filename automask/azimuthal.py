@@ -23,7 +23,7 @@ experiment-specific because the stored psana z map has the wrong distance.
 Canvas pixels no panel maps onto (the assembly gaps) are never real data, so
 they are folded into the mask regardless of what the pipeline says about them.
 
-Run:  python -m automask.azimuthal             # both EVAL_RUNS
+Run:  python -m automask.azimuthal             # all local XTC runs
       python -m automask.azimuthal 475
 """
 from __future__ import annotations
@@ -140,8 +140,8 @@ def plot_run(run: int, npt: int = NPT, out: Optional[str] = None):
 
 
 def main(runs=None):
-    from automask.evaluation import EVAL_RUNS
-    for run in (EVAL_RUNS if runs is None else runs):
+    from automask.evaluation import ALL_RUNS
+    for run in (ALL_RUNS if runs is None else runs):
         plot_run(run)
 
 

@@ -1,10 +1,10 @@
 """
-Tests for the label-free metric package. Same style as test_components.py --
+Statistical tests for runtime evaluation. Same style as test_components.py --
 plain asserts, tiny synthetic arrays, no frozen dataset and no psana:
 
-    python -m automask.tests.test_unsupervised
+    python -m automask.tests.test_evaluation_runtime
 
-These are not smoke tests. Each unsupervised metric asserts a statistical claim
+These are not smoke tests. Each runtime diagnostic asserts a statistical claim
 ("this is ~0 when the hypothesis holds", "this rejects at the stated rate"), and
 a metric whose null is miscalibrated reports defects that are not there. So the
 important cases here build data where the truth is known BY CONSTRUCTION -- pure
@@ -14,62 +14,19 @@ from __future__ import annotations
 
 import numpy as np
 
-from automask.unsupervised.azimuthal import (
-    cell_moments, excess_scatter, ring_reference,
+from automask.evaluation.azimuthal import (
+    azimuthal_diagnostics, cell_moments, excess_scatter, ring_reference,
 )
-from automask.unsupervised.base import Candidate, iou
-from automask.unsupervised.event_axis import P_ANOM
-from automask.unsupervised.stability import jitter_params
+from automask.evaluation.stability import mask_iou
 
 
 # -- base ------------------------------------------------------------------
 def test_iou_conventions():
     a = np.zeros((8, 8), bool); a[:4] = True
     b = np.zeros((8, 8), bool); b[2:6] = True
-    assert abs(iou(a, b) - 2 / 6) < 1e-12
-    assert iou(np.zeros((4, 4), bool), np.zeros((4, 4), bool)) == 1.0
-    assert iou(a, a) == 1.0
-
-
-def test_candidate_caches_per_run():
-    calls = []
-
-    def make(sample):
-        calls.append(sample.run)
-        return np.zeros((4, 4), bool)
-
-    class S:                       # minimal stand-in for a Sample
-        run = 475
-
-    class Ctx:
-        run = 475
-        sample = S()
-
-    c = Candidate("x", make)
-    c.mask(Ctx()); c.mask(Ctx())
-    assert calls == [475], "the mask must be built once per run, not per metric"
-
-
-# -- tier 1: the knob jitter ----------------------------------------------
-def test_jitter_respects_types_and_fixed_knobs():
-    from automask.stats.asic_polish import AsicPolishParams
-
-    rng = np.random.default_rng(0)
-    p = AsicPolishParams(asic=256, n_iter=3, k=15.0, mode="high")
-    out = [jitter_params(p, 0.2, rng) for _ in range(50)]
-    assert all(o.asic == 256 for o in out), "ASIC size is hardware, never jittered"
-    assert all(o.mode == "high" for o in out), "strings are left alone"
-    assert all(isinstance(o.n_iter, int) and o.n_iter >= 1 for o in out)
-    assert len({o.k for o in out}) > 40, "float knobs must actually move"
-    # lognormal(0, eps) is centred on 1 in the log, so the median is the nominal
-    assert abs(np.median([o.k for o in out]) / 15.0 - 1.0) < 0.15
-
-
-def test_jitter_is_reproducible_from_the_seed():
-    from automask.stats.variance import VarianceParams
-    a = jitter_params(VarianceParams(k=3.5), 0.1, np.random.default_rng(7))
-    b = jitter_params(VarianceParams(k=3.5), 0.1, np.random.default_rng(7))
-    assert a.k == b.k
+    assert abs(mask_iou(a, b) - 2 / 6) < 1e-12
+    assert mask_iou(np.zeros((4, 4), bool), np.zeros((4, 4), bool)) == 1.0
+    assert mask_iou(a, a) == 1.0
 
 
 # -- tier 2: is the azimuthal null calibrated? -----------------------------
@@ -214,6 +171,23 @@ def test_frozen_reference_is_a_no_op_without_a_noise_defect():
     assert abs(a - b) < 1e-4, f"freeze moved the clean case: {a:.6f} vs {b:.6f}"
 
 
+def test_azimuthal_diagnostics_use_repeated_controls():
+    class Frame:
+        @staticmethod
+        def excess(mask):
+            return np.array([1.0, 2.0]) if mask[0] else np.array([3.0, 4.0])
+
+        @staticmethod
+        def random_control(mask, rng):
+            return np.array([False])
+
+    result = azimuthal_diagnostics(
+        Frame(), np.array([True]), np.random.default_rng(0), controls=5)
+    assert result["excess"] == 1.5
+    np.testing.assert_array_equal(result["gain"], np.full(5, 2.0))
+    np.testing.assert_array_equal(result["win_rate"], np.ones(5))
+
+
 # -- the two fold axes ------------------------------------------------------
 def test_dealt_folds_balance_a_clustered_condition():
     """The reason `folds.py` deals shots instead of interleaving blocks.
@@ -223,7 +197,7 @@ def test_dealt_folds_balance_a_clustered_condition():
     and dealt folds with the same one. Built here as a two-state condition in
     long runs, so the answer is known by construction.
     """
-    from automask.unsupervised.folds import assign_folds
+    from automask.evaluation.resampling import assign_folds
 
     n, k, block = 800, 10, 200
     cond = (np.arange(n) // block) % 2          # long runs, period 2*block
@@ -236,7 +210,7 @@ def test_dealt_folds_balance_a_clustered_condition():
 
 
 def test_alternating_is_shot_parity_and_halves_stay_chronological():
-    from automask.unsupervised.folds import FoldMoments, assign_folds
+    from automask.evaluation.resampling import FoldMoments, assign_folds
 
     n, k = 800, 10
     blocks, dealt = assign_folds(n, k)
@@ -257,10 +231,10 @@ def test_moments_axes_partition_the_same_shots():
     assert total_block == total_deal, "both axes must cover every shot once"
 
 
-# -- tier 3: is the stationarity chi2 calibrated? --------------------------
+# -- synthetic fold moments ------------------------------------------------
 def _fold_moments(rng, k=10, n_pix=20000, per_fold=80, mu=5.0, gains=None):
     """Synthetic FoldMoments-shaped arrays: Poisson-ish pixels, k folds."""
-    from automask.unsupervised.folds import FoldMoments
+    from automask.evaluation.resampling import FoldMoments
 
     gains = np.ones(k) if gains is None else np.asarray(gains)
     shape = (2, 100, n_pix // 200)
@@ -277,103 +251,6 @@ def _fold_moments(rng, k=10, n_pix=20000, per_fold=80, mu=5.0, gains=None):
                        block_of_shot=np.repeat(np.arange(k), per_fold),
                        dn=n.copy(), ds1=s1.copy(), ds2=s2.copy(),
                        fold_of_shot=np.tile(np.arange(k), per_fold))
-
-
-def _chi2_flags(fm, run_geometry):
-    """Run `anomaly_field`'s statistic without the assembled-space projection."""
-    from scipy import stats as st
-
-    mean, se = fm.fold_means()
-    ref = mean.mean(axis=0)
-    live = ref > 0
-    gain = np.array([np.median(mean[i][live] / ref[live]) for i in range(mean.shape[0])])
-    m = mean / gain[:, None, None, None]
-    s = se / gain[:, None, None, None]
-    w = np.where(s > 0, 1.0 / np.maximum(s, 1e-12) ** 2, 0.0)
-    mbar = (w * m).sum(axis=0) / np.maximum(w.sum(axis=0), 1e-300)
-    chi2 = (w * (m - mbar) ** 2).sum(axis=0)
-    dof = np.maximum((s > 0).sum(axis=0) - 1, 1)
-    return st.chi2.sf(chi2, dof), live
-
-
-def test_stationarity_false_positive_rate_is_near_nominal():
-    """The metric reports "fraction of surviving pixels that are anomalous" and
-    compares it against the test's own false-positive rate, so that rate has to
-    be what it claims. Stationary Poisson pixels, no defects: the rejection rate
-    at p < 1e-3 must land within a factor of a few of 1e-3."""
-    rng = np.random.default_rng(3)
-    fm = _fold_moments(rng)
-    p, live = _chi2_flags(fm, None)
-    rate = float((p[live] < P_ANOM).mean())
-    assert rate < 10 * P_ANOM, f"false-positive rate {rate:.2e} >> nominal {P_ANOM:.0e}"
-
-
-def test_stationarity_is_blind_to_global_beam_drift():
-    """A run whose intensity wanders by 30% must NOT make every pixel anomalous:
-    that is what dividing by the per-fold gain is for. Without it this rate goes
-    to ~1 and the metric measures the machine instead of the detector."""
-    rng = np.random.default_rng(4)
-    gains = 1.0 + 0.3 * np.linspace(-1, 1, 10)
-    fm = _fold_moments(rng, gains=gains)
-    p, live = _chi2_flags(fm, None)
-    rate = float((p[live] < P_ANOM).mean())
-    assert rate < 10 * P_ANOM, f"beam drift leaked into the statistic ({rate:.2e})"
-
-
-def test_stationarity_flags_a_pixel_that_changes_mid_run():
-    """A pixel whose level jumps halfway through the run must be rejected, even
-    though its run-averaged mean and variance are unremarkable."""
-    rng = np.random.default_rng(5)
-    fm = _fold_moments(rng)
-    # double the rate in the second half of the run for one pixel
-    fm.s1[5:, 0, 0, 0] *= 2.0
-    fm.s2[5:, 0, 0, 0] *= 4.0
-    p, _ = _chi2_flags(fm, None)
-    assert p[0, 0, 0] < P_ANOM, f"mid-run jump not detected (p = {p[0, 0, 0]:.2e})"
-
-
-# -- tier 0 ----------------------------------------------------------------
-def test_compactness_separates_blobs_from_speckle():
-    from automask.unsupervised import parsimony
-
-    class Ctx:
-        run = 475
-        sample = None
-        def __init__(self, floor): self._floor = floor
-        def floor(self): return self._floor
-
-    shape = (60, 60)
-    floor = np.zeros(shape, bool); floor[0] = True
-    rng = np.random.default_rng(6)
-    speckle = floor.copy()
-    idx = rng.choice(np.arange(59 * 60), size=100, replace=False)
-    flat = speckle[1:].ravel(); flat[idx] = True
-    speckle[1:] = flat.reshape(59, 60)
-    blob = floor.copy(); blob[20:30, 20:30] = True
-
-    c_speck = Candidate("speckle", lambda s: speckle)
-    c_blob = Candidate("blob", lambda s: blob)
-    assert parsimony.compactness(c_blob, Ctx(floor)) == 1.0
-    assert parsimony.compactness(c_speck, Ctx(floor)) < 0.5
-
-
-def test_plausible_frac_penalises_both_extremes():
-    from automask.unsupervised import parsimony
-
-    class Ctx:
-        run = 475
-        sample = None
-        def floor(self): return np.zeros((100, 100), bool)
-
-    def cand(frac):
-        m = np.zeros((100, 100), bool)
-        m.ravel()[:int(frac * 10000)] = True
-        return Candidate(f"f{frac}", lambda s, m=m: m)
-
-    ctx = Ctx()
-    assert parsimony.plausible_frac(cand(0.10), ctx) == 1.0
-    assert parsimony.plausible_frac(cand(0.001), ctx) < 0.5
-    assert parsimony.plausible_frac(cand(0.90), ctx) < 0.5
 
 
 def main():

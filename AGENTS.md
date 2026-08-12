@@ -26,11 +26,11 @@ sitting alongside the data mirror. There is no `src/` wrapper. Import project co
 
 | path | role |
 |------|------|
-| **`automask/`** | **Main working area.** The auto-masking project, an installable package. Core: `masking.py` (STATS/REGULARIZERS/COMBINERS registries + `Channel`/`Pipeline`), `stats/` `regularization/` `combine/` (one file per method), `sample.py` (`Sample`, the per-run arrays a pipeline reads), `image_store.py` (selected-shot reductions + psana calibration constants, content-hashed cache), `run_profile.py` + `utils.py` (one XTC pass -> per-shot field table), `shot_selection.py` (field-native `Condition`/`ShotSelection`), `evaluation.py` (`evaluate`/`report` against the hand masks), `dataset.py` (loaders/score). Sweeps via Hydra: `conf/` + `studies/sweep_hyperparameters.py` + `scripts/*.sh`. `io/` are the psana readers, `producers/` prewarm the cache, `studies/` are exploratory, `data/masks/` holds the human reference masks, `outputs/` is generated and **gitignored**. Start here. |
-| `automask/unsupervised/` | **Label-free mask metrics** — how a mask is scored when no human reference exists (production). Four tiers of increasing assumption: `parsimony.py` (size, floor containment, blob coherence), `stability.py` (reproducibility under shot resampling, input noise and knob jitter), `azimuthal.py` (excess azimuthal scatter vs a size-matched random control), `event_axis.py` (per-pixel cross-fold stationarity χ²). `folds.py` caches per-pixel moments in 10 disjoint shot folds (one XTC pass) so all resampling is numpy-only afterwards. Validated against the human mask by `studies/metric_validation.py`; see `docs/METRICS.md`. |
+| **`automask/`** | **Main working area.** The auto-masking project, an installable package. Core: `masking.py` (STATS/REGULARIZERS/COMBINERS registries + `Channel`/`Pipeline`), `stats/` `regularization/` `combine/` (one file per method), `sample.py` (`Sample`, the per-run arrays a pipeline reads), `image_store.py` (selected-shot reductions + psana calibration constants, content-hashed cache), `run_profile.py` + `utils.py` (one XTC pass -> per-shot field table), `shot_selection.py` (field-native `Condition`/`ShotSelection`), `evaluation/` (all development and runtime evaluation), and `dataset.py` (loaders/score). Sweeps use Hydra through `conf/` + `studies/sweep_hyperparameters.py` + `scripts/*.sh`. `io/` are psana readers, `producers/` prewarm the cache, `studies/` contains only temporary research awaiting migration, `data/masks/` holds human references, and `outputs/` is generated and **gitignored**. Start here. |
+| `automask/evaluation/` | **All evaluation code.** `labelled.py` scores against reference masks, `runtime.py` evaluates a new run without labels, `resampling.py` builds real-shot folds, `stability.py` measures sampling/time stability, and `azimuthal.py` performs the physical-consistency comparison against repeated matched controls. See `docs/EVALUATION.md` and `docs/RUNTIME_EVALUATION.md`. |
 | `xpp_sharing/` | **The lab's current production method** (CO2 delay-scan notebooks + `utils.py`). Reference/baseline to improve on — manual mask, diode normalization, delay binning. Read-only. |
 | `automask/io/` | psana readers (import as `automask.io.<name>`): `psana1.py` (`Psana1RunSource` — the local↔SLAC seam: `from_files` opens explicit streams, `from_experiment` uses the standard resolver), `read_xtc.py` (calibrated frames, calibration constants, panel index maps), `lcls1_adapters.py` (official `smalldata_tools` detector adapters for profiling). |
-| `docs/`, `psana_env.sh` | `DATA_OVERVIEW.md` (layout) + `PSANA_XTC.md` (how to open XTC) + `DATA.md` (what a single shot records) + `METRICS.md` (label-free mask scoring); and the env-activation script (repo root). |
+| `docs/`, `psana_env.sh` | `DATA_OVERVIEW.md` (layout) + `PSANA_XTC.md` (how to open XTC) + `DATA.md` (what a single shot records) + `EVALUATION.md` and `RUNTIME_EVALUATION.md`; and the env-activation script (repo root). |
 | `xtc/` | Raw per-event detector data (psana XTC format). |
 | `hdf5/smalldata/` | Reduced per-event HDF5 summaries. **Start data analysis here** — no psana needed. |
 | `calib/` | psana detector calibration constants. |
@@ -103,8 +103,8 @@ One run in, one boolean mask out (`True == masked`). Four stages, in order:
    channels read; `Sample.from_store(run, selection, needs)` materializes exactly those — a name
    in `image_store.REDUCTIONS` is reduced over the selected shots, anything else is passed
    straight to `psana.Detector` as a calibration accessor (`pedestals`, `rms`, `status_as_mask`).
-4. **Score** — label-free via `unsupervised/` (production), or against the hand masks via
-   `evaluation.evaluate` (runs 389/475 only).
+4. **Score** — `evaluation.evaluate` uses references during development;
+   `evaluation.evaluate_runtime` uses folds and physics diagnostics without labels.
 
 Conventions that bite if ignored:
 

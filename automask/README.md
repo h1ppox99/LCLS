@@ -46,17 +46,18 @@ selectable by name everywhere (`Pipeline`, the registries, and the sweep driver)
 ## Sweeping hyperparameters
 
 ```
-# one detector, swept over K x TV weight (writes results.csv):
+# Fit one detector on the tuning runs (writes results.csv):
 python -m automask.studies.sweep_hyperparameters -m stat=variance \
-    stat.params.k=2,2.5,3,3.5 regularization.params.weight=5,10,15 \
-    eval.synthetic=false
+    stat.params.k=2,2.5,3,3.5 regularization.params.weight=5,10,15
 
-# the live production recipe (regression anchor):
-python -m automask.studies.sweep_hyperparameters experiment=production            # union combo
-python -m automask.studies.sweep_hyperparameters experiment=production combine=weighted_sum
+# Validate the chosen configuration once, without a sweep:
+python -m automask.studies.sweep_hyperparameters experiment=production \
+    eval.phase=validate
 ```
 
 `scripts/*.sh` are thin wrappers over the driver reproducing the old per-method sweeps.
+Synthetic injection is a separate stress test, not the parameter-selection target.
+The complete evaluation contract is in `docs/EVALUATION.md`.
 
 ## Data (frozen, numpy-only)
 
