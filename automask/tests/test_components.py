@@ -422,7 +422,7 @@ def test_median_mad_are_co_computed(tmp_path, monkeypatch):
     assert len(calls) == 1
 
 
-def test_image_store_caches_fixed_folds_and_halves(tmp_path, monkeypatch):
+def test_image_store_caches_round_robin_and_chronological_folds(tmp_path, monkeypatch):
     import automask.io.read_xtc as read_xtc
 
     profile = RunProfile(7, 20, [], {}, {}, [], source=object())
@@ -443,14 +443,17 @@ def test_image_store_caches_fixed_folds_and_halves(tmp_path, monkeypatch):
     )
     selection = ShotSelection()
     folds = store.folds(7, selection, "mean", n_folds=4)
-    halves = store.halves(7, selection, "std", n_folds=4)
+    chronological = store.folds(
+        7, selection, "std", n_folds=4, strategy="chronological")
 
     assert len(folds) == 4
     np.testing.assert_allclose([fold[0, 0] for fold in folds], np.arange(4) + 8)
-    np.testing.assert_allclose([half[0, 0] for half in halves], np.sqrt(8.25))
+    np.testing.assert_allclose(
+        [fold[0, 0] for fold in chronological], np.sqrt(2.0))
     np.testing.assert_allclose(store.reduce(7, selection, "mean"), 9.5)
-    assert any("fold-03-of-04" in path.name for path in tmp_path.iterdir())
-    assert calls == [7]
+    assert any("round_robin_fold-03-of-04" in path.name for path in tmp_path.iterdir())
+    assert any("chronological_fold-03-of-04" in path.name for path in tmp_path.iterdir())
+    assert calls == [7, 7]
 
 
 def test_image_store_builds_robust_fold_reductions(tmp_path, monkeypatch):
@@ -471,10 +474,11 @@ def test_image_store_builds_robust_fold_reductions(tmp_path, monkeypatch):
         ),
     )
     folds = store.folds(7, ShotSelection(), "median", n_folds=5)
-    halves = store.halves(7, ShotSelection(), "mad", n_folds=5)
+    chronological = store.folds(
+        7, ShotSelection(), "mad", n_folds=5, strategy="chronological")
 
     np.testing.assert_allclose([fold[0, 0] for fold in folds], np.arange(5) + 7.5)
-    np.testing.assert_allclose([half[0, 0] for half in halves], 1.4826 * 2.5)
+    np.testing.assert_allclose([fold[0, 0] for fold in chronological], 1.4826)
 
 
 def test_calibration_is_cached_in_panel_form_only(tmp_path, monkeypatch):

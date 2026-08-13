@@ -33,7 +33,7 @@ Production cannot use reference-mask IoU. Call
 
 - all pairwise agreements between the requested number of real-shot folds;
 - each fold's agreement with the full-shot mask;
-- stability between chronological halves of the run;
+- the same diagnostics for round-robin and chronological folds;
 
 These are diagnostics, not a substitute ground truth or a scalar score. See
 `CONSISTENCY.md` for the fixed procedure. Physical diagnostics remain separate

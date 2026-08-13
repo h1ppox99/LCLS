@@ -67,22 +67,21 @@ def test_consistency_uses_fixed_folds_and_excludes_the_floor():
     late[2, 2] = 1
 
     class Store:
-        fold_data = tuple(full.copy() for _ in range(10))
-        half_data = (full.copy(), late)
+        round_robin_data = tuple(full.copy() for _ in range(4))
+        chronological_data = (
+            full.copy(), full.copy(), late.copy(), late.copy())
 
         def reduce(self, run, selection, reduction):
-            return self.fold_data[0]
+            return self.round_robin_data[0]
 
-        def folds(self, run, selection, reduction, n_folds):
-            return self.fold_data
-
-        def halves(self, run, selection, reduction, n_folds):
-            return self.half_data
+        def folds(self, run, selection, reduction, n_folds, strategy):
+            return (self.round_robin_data if strategy == "round_robin"
+                    else self.chronological_data)
 
     result = evaluation.evaluate_consistency(
         Pipeline(), 999, store=Store(), n_folds=4)
     assert result["n_folds"] == 4
-    assert result["fold_iou"].shape == (6,)
-    assert result["fold_iou_mean"] == 1.0
-    assert result["fold_vs_full_iou_mean"] == 1.0
-    assert result["chronological_iou"] == 0.0
+    assert result["round_robin"]["fold_iou"].shape == (6,)
+    assert result["round_robin"]["fold_iou_mean"] == 1.0
+    assert result["round_robin"]["fold_vs_full_iou_mean"] == 1.0
+    assert result["chronological"]["fold_iou_mean"] == 1 / 3

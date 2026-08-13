@@ -58,7 +58,7 @@ class Sample:
 
         Used by consistency evaluation, which redraws shot-derived reductions
         while leaving calibration constants alone -- those are not estimated from
-        this run's shots, so consistency splits must not perturb them.
+        this run's shots, so consistency folds must not perturb them.
         """
         return Sample(run=self.run, arrays={**self.arrays, **arrays},
                       selection=self.selection)
