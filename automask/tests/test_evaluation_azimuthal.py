@@ -1,15 +1,4 @@
-"""
-Statistical tests for runtime evaluation. Same style as test_components.py --
-plain asserts, tiny synthetic arrays, no frozen dataset and no psana:
-
-    python -m automask.tests.test_evaluation_runtime
-
-These are not smoke tests. Each runtime diagnostic asserts a statistical claim
-("this is ~0 when the hypothesis holds", "this rejects at the stated rate"), and
-a metric whose null is miscalibrated reports defects that are not there. So the
-important cases here build data where the truth is known BY CONSTRUCTION -- pure
-noise, or noise plus one injected anomaly -- and check the statistic against it.
-"""
+"""Statistical tests for the azimuthal physical diagnostic."""
 from __future__ import annotations
 
 import numpy as np
@@ -17,16 +6,6 @@ import numpy as np
 from automask.evaluation.azimuthal import (
     azimuthal_diagnostics, cell_moments, excess_scatter, ring_reference,
 )
-from automask.evaluation.stability import mask_iou
-
-
-# -- base ------------------------------------------------------------------
-def test_iou_conventions():
-    a = np.zeros((8, 8), bool); a[:4] = True
-    b = np.zeros((8, 8), bool); b[2:6] = True
-    assert abs(mask_iou(a, b) - 2 / 6) < 1e-12
-    assert mask_iou(np.zeros((4, 4), bool), np.zeros((4, 4), bool)) == 1.0
-    assert mask_iou(a, a) == 1.0
 
 
 # -- tier 2: is the azimuthal null calibrated? -----------------------------
@@ -186,71 +165,6 @@ def test_azimuthal_diagnostics_use_repeated_controls():
     assert result["excess"] == 1.5
     np.testing.assert_array_equal(result["gain"], np.full(5, 2.0))
     np.testing.assert_array_equal(result["win_rate"], np.ones(5))
-
-
-# -- the two fold axes ------------------------------------------------------
-def test_dealt_folds_balance_a_clustered_condition():
-    """The reason `folds.py` deals shots instead of interleaving blocks.
-
-    A condition that clusters -- as the CC/VCC branch does, in runs of a
-    thousand-odd shots -- leaves contiguous blocks with wildly different mixes
-    and dealt folds with the same one. Built here as a two-state condition in
-    long runs, so the answer is known by construction.
-    """
-    from automask.evaluation.resampling import assign_folds
-
-    n, k, block = 800, 10, 200
-    cond = (np.arange(n) // block) % 2          # long runs, period 2*block
-    blocks, dealt = assign_folds(n, k)
-    by_block = np.array([cond[blocks == i].mean() for i in range(k)])
-    by_deal = np.array([cond[dealt == i].mean() for i in range(k)])
-    assert np.ptp(by_block) > 0.9, "the test condition must actually cluster"
-    assert np.ptp(by_deal) < 0.05, (
-        f"dealt folds must see the same mix, spread was {np.ptp(by_deal):.3f}")
-
-
-def test_alternating_is_shot_parity_and_halves_stay_chronological():
-    from automask.evaluation.resampling import FoldMoments, assign_folds
-
-    n, k = 800, 10
-    blocks, dealt = assign_folds(n, k)
-    even, odd = FoldMoments.alternating(type("F", (), {"k": k, "n": np.zeros(k)})())
-    assert set(dealt[np.isin(dealt, even)] % 2) == {0}, (
-        "even dealt folds must be exactly the even-numbered shots")
-    # halves() indexes the chronological axis, so it must split the run in time
-    first, second = FoldMoments.halves(type("F", (), {"k": k, "n": np.zeros(k)})())
-    shots_first = np.flatnonzero(np.isin(blocks, first))
-    assert shots_first.max() < np.flatnonzero(np.isin(blocks, second)).min()
-
-
-def test_moments_axes_partition_the_same_shots():
-    rng = np.random.default_rng(0)
-    fm = _fold_moments(rng, k=4, n_pix=800, per_fold=20)
-    total_block = fm.moments(range(fm.k))[0]
-    total_deal = fm.moments(range(fm.k), dealt=True)[0]
-    assert total_block == total_deal, "both axes must cover every shot once"
-
-
-# -- synthetic fold moments ------------------------------------------------
-def _fold_moments(rng, k=10, n_pix=20000, per_fold=80, mu=5.0, gains=None):
-    """Synthetic FoldMoments-shaped arrays: Poisson-ish pixels, k folds."""
-    from automask.evaluation.resampling import FoldMoments
-
-    gains = np.ones(k) if gains is None else np.asarray(gains)
-    shape = (2, 100, n_pix // 200)
-    n = np.full(k, float(per_fold))
-    s1 = np.empty((k, *shape)); s2 = np.empty((k, *shape))
-    for i in range(k):
-        x = rng.poisson(mu * gains[i], size=(per_fold, *shape)).astype(float)
-        s1[i] = x.sum(axis=0)
-        s2[i] = (x ** 2).sum(axis=0)
-    # Tier 3 reads the chronological axis only; the dealt arrays are carried so
-    # the object is well formed, and a per-fold gain does not survive a deal.
-    return FoldMoments(run=0, n=n, s1=s1, s2=s2,
-                       indices=np.arange(k * per_fold),
-                       block_of_shot=np.repeat(np.arange(k), per_fold),
-                       dn=n.copy(), ds1=s1.copy(), ds2=s2.copy(),
-                       fold_of_shot=np.tile(np.arange(k), per_fold))
 
 
 def main():

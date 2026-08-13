@@ -38,6 +38,18 @@ def _reduction_stub(run: int, selection: ShotSelection, reduction: Reduction) ->
     return f"{reduction}_{_content_key(selection, reduction)}_run{run:04d}"
 
 
+def _split_stub(
+    run: int,
+    selection: ShotSelection,
+    reduction: Reduction,
+    split: str,
+    index: int,
+    n_folds: int,
+) -> str:
+    total = n_folds if split == "fold" else 2
+    return f"{_reduction_stub(run, selection, reduction)}_{split}-{index:02d}-of-{total:02d}"
+
+
 def _calibration_stub(run: int, constant: str, gain: int) -> str:
     key = _calibration_content_key(constant, gain)
     return f"{constant}g{gain}_{key}_run{run:04d}"
@@ -115,6 +127,19 @@ class ImageStore:
     def _calibration_path(self, run: int, constant: str, gain: int) -> Path:
         return self.cache_dir / f"{_calibration_stub(run, constant, gain)}_panel.npy"
 
+    def _split_path(
+        self,
+        run: int,
+        selection: ShotSelection,
+        reduction: Reduction,
+        split: str,
+        index: int,
+        n_folds: int,
+        form: Form,
+    ) -> Path:
+        stub = _split_stub(run, selection, reduction, split, index, n_folds)
+        return self.cache_dir / f"{stub}_{form}.npy"
+
     def reduce(
         self,
         run: int,
@@ -135,6 +160,49 @@ class ImageStore:
             if counts is not None:
                 print(_select_line(run, selection, counts))
         return np.load(target)
+
+    def folds(
+        self,
+        run: int,
+        selection: ShotSelection,
+        reduction: Reduction,
+        form: Form = "asm",
+        *,
+        n_folds: int = 10,
+    ) -> tuple[np.ndarray, ...]:
+        """Return reductions over ``n_folds`` round-robin shot folds."""
+        return self._split_reductions(
+            run, selection, reduction, "fold", n_folds, form)
+
+    def halves(
+        self,
+        run: int,
+        selection: ShotSelection,
+        reduction: Reduction,
+        form: Form = "asm",
+        *,
+        n_folds: int = 10,
+    ) -> tuple[np.ndarray, ...]:
+        """Return reductions over the fixed chronological halves."""
+        return self._split_reductions(
+            run, selection, reduction, "half", n_folds, form)
+
+    def _split_reductions(
+        self, run, selection, reduction, split, n_folds, form
+    ):
+        self._validate_reduction(selection, reduction, form)
+        if not isinstance(n_folds, int) or isinstance(n_folds, bool) or n_folds < 2:
+            raise ValueError(f"n_folds must be an integer >= 2, got {n_folds!r}")
+        total = n_folds if split == "fold" else 2
+        paths = [self._split_path(
+            run, selection, reduction, split, i, n_folds, form)
+                 for i in range(total)]
+        if not all(path.exists() for path in paths):
+            if reduction in ("mean", "std"):
+                self._materialize_split_mean_std(run, selection, n_folds)
+            else:
+                self._materialize_split_median_mad(run, selection, n_folds)
+        return tuple(np.load(path) for path in paths)
 
     def calibration(self, run: int, constant: str, gain: int = 0) -> np.ndarray:
         """Return one gain stage of a psana calibration constant, in panel form.
@@ -196,6 +264,24 @@ class ImageStore:
             np.save(self.cache_dir / f"{stub}_asm.npy", _assemble(panel, ix, iy))
             (self.cache_dir / f"{stub}_meta.json").write_text(metadata)
 
+    def _save_splits(
+        self, run, selection, pairs, ix, iy, counts, n_folds
+    ) -> None:
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        for reduction, full, folds, halves in pairs:
+            self._save_pair(run, selection, ((reduction, full),), ix, iy, counts)
+            for split, values in (("fold", folds), ("half", halves)):
+                for index, panel in enumerate(values):
+                    panel = panel.astype(np.float32)
+                    stub = _split_stub(
+                        run, selection, reduction, split, index, n_folds)
+                    np.save(self.cache_dir / f"{stub}_panel.npy", panel)
+                    np.save(self.cache_dir / f"{stub}_asm.npy", _assemble(panel, ix, iy))
+                    metadata = {**counts, "split": split, "split_index": index,
+                                "n_used": counts[f"{split}_counts"][index]}
+                    (self.cache_dir / f"{stub}_meta.json").write_text(
+                        json.dumps(metadata))
+
     def _materialize_mean_std(self, run: int, selection: ShotSelection) -> None:
         from automask.io.read_xtc import panel_geometry
 
@@ -222,8 +308,43 @@ class ImageStore:
             (("median", median_panel), ("mad", mad_panel)), ix, iy, counts,
         )
 
+    def _materialize_split_mean_std(self, run, selection, n_folds) -> None:
+        from automask.io.read_xtc import panel_geometry
+
+        full, folds, halves, counts = self._accumulate_splits(
+            run, selection, n_folds)
+        ix, iy = panel_geometry(run, source=self.profile(run).source)
+        self._save_splits(run, selection, (
+            ("mean", full[0], folds[0], halves[0]),
+            ("std", full[1], folds[1], halves[1]),
+        ), ix, iy, counts, n_folds)
+
+    def _materialize_split_median_mad(self, run, selection, n_folds) -> None:
+        from automask.io.read_xtc import panel_geometry
+
+        stub = _reduction_stub(run, selection, "median")
+        stage_path = self.cache_dir / f"{stub}_split_frames.h5"
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            counts = self._stage_frames(
+                run, selection, stage_path, split=True, n_folds=n_folds)
+            full, folds, halves = self._robust_reduce_splits(
+                stage_path, n_folds)
+        finally:
+            stage_path.unlink(missing_ok=True)
+        ix, iy = panel_geometry(run, source=self.profile(run).source)
+        self._save_splits(run, selection, (
+            ("median", full[0], folds[0], halves[0]),
+            ("mad", full[1], folds[1], halves[1]),
+        ), ix, iy, counts, n_folds)
+
     def _stage_frames(
-        self, run: int, selection: ShotSelection, stage_path: Path
+        self,
+        run: int,
+        selection: ShotSelection,
+        stage_path: Path,
+        split: bool = False,
+        n_folds: int | None = None,
     ) -> dict:
         import h5py
 
@@ -231,11 +352,20 @@ class ImageStore:
 
         profile = self.profile(run)
         indices = selection.resolve(profile)
+        if split and n_folds is None:
+            raise ValueError("n_folds is required when staging split frames")
+        if split and indices.size < 2 * n_folds:
+            raise RuntimeError(f"run {run}: consistency evaluation needs at least "
+                               f"{2 * n_folds} selected shots for {n_folds} folds")
         counts = selection.describe(profile)
         print(_select_line(run, selection, counts))
         normalize = selection.normalization is not None
         reference = selection.normalization_reference(profile, indices) if normalize else 1.0
         i0 = profile.column(selection.normalization) if normalize else None
+        position = {int(event): i for i, event in enumerate(indices)}
+        if split:
+            fold_counts = np.zeros(n_folds, dtype=int)
+            half_counts = np.zeros(2, dtype=int)
 
         with h5py.File(stage_path, "w") as h5:
             frames = None
@@ -253,9 +383,20 @@ class ImageStore:
                         chunks=(1, *frame.shape[:-2], min(64, rows), frame.shape[-1]),
                         compression="gzip", compression_opts=1,
                     )
+                    if split:
+                        folds = h5.create_dataset(
+                            "fold", shape=(indices.size,), dtype=np.int32)
+                        halves = h5.create_dataset("half", shape=(indices.size,), dtype=np.int8)
                 if normalize:
                     frame *= np.float32(reference / i0[event_index])
                 frames[staged] = frame
+                if split:
+                    pos = position[int(event_index)]
+                    fold = pos % n_folds
+                    half = min(2 * pos // indices.size, 1)
+                    folds[staged], halves[staged] = fold, half
+                    fold_counts[fold] += 1
+                    half_counts[half] += 1
                 staged += 1
                 if staged % 50 == 0:
                     print(
@@ -266,7 +407,13 @@ class ImageStore:
                 raise RuntimeError(f"run {run}: selection {selection} yielded no frames")
             if staged != indices.size:
                 frames.resize(staged, axis=0)
+                if split:
+                    folds.resize(staged, axis=0)
+                    halves.resize(staged, axis=0)
         counts["n_used"] = int(staged)
+        if split:
+            counts["fold_counts"] = fold_counts.tolist()
+            counts["half_counts"] = half_counts.tolist()
         return counts
 
     @staticmethod
@@ -290,6 +437,41 @@ class ImageStore:
                 )
                 print(f"[images] rows {row0}:{row1}/{rows}", flush=True)
         return median, mad
+
+    @staticmethod
+    def _robust_reduce_splits(
+        stage_path: Path, n_folds: int, row_block: int = 32
+    ):
+        import h5py
+
+        with h5py.File(stage_path, "r") as h5:
+            frames = h5["frames"]
+            groups = np.concatenate((np.asarray(h5["fold"]),
+                                     n_folds + np.asarray(h5["half"])))
+            rows_by_group = [np.flatnonzero(groups == i) % frames.shape[0]
+                             for i in range(n_folds + 2)]
+            if any(rows.size < 2 for rows in rows_by_group):
+                raise RuntimeError("consistency evaluation needs at least two shots per fold")
+            shape = (n_folds + 2, *frames.shape[1:])
+            median = np.empty(shape, dtype=np.float32)
+            mad = np.empty_like(median)
+            full_median = np.empty(frames.shape[1:], dtype=np.float32)
+            full_mad = np.empty_like(full_median)
+            for row0 in range(0, frames.shape[-2], row_block):
+                row1 = min(row0 + row_block, frames.shape[-2])
+                block = frames[:, :, row0:row1, :].astype(np.float32)
+                med = np.median(block, axis=0)
+                full_median[:, row0:row1] = med
+                full_mad[:, row0:row1] = 1.4826 * np.median(np.abs(block - med), axis=0)
+                for group, rows in enumerate(rows_by_group):
+                    block = frames[rows, :, row0:row1, :].astype(np.float32)
+                    med = np.median(block, axis=0)
+                    median[group, :, row0:row1] = med
+                    mad[group, :, row0:row1] = 1.4826 * np.median(
+                        np.abs(block - med), axis=0)
+        return ((full_median, full_mad),
+                (median[:n_folds], mad[:n_folds]),
+                (median[n_folds:], mad[n_folds:]))
 
     def _accumulate(
         self, run: int, selection: ShotSelection
@@ -329,3 +511,47 @@ class ImageStore:
         std = np.sqrt(np.maximum(squared / n_used - mean * mean, 0.0))
         counts["n_used"] = int(n_used)
         return mean, std, counts
+
+    def _accumulate_splits(self, run, selection, n_folds):
+        from automask.io.read_xtc import iter_calibrated
+
+        profile = self.profile(run)
+        indices = selection.resolve(profile)
+        if indices.size < 2 * n_folds:
+            raise RuntimeError(f"run {run}: consistency evaluation needs at least "
+                               f"{2 * n_folds} selected shots for {n_folds} folds")
+        counts = selection.describe(profile)
+        print(_select_line(run, selection, counts))
+        normalize = selection.normalization is not None
+        reference = selection.normalization_reference(profile, indices) if normalize else 1.0
+        i0 = profile.column(selection.normalization) if normalize else None
+        position = {int(event): i for i, event in enumerate(indices)}
+
+        n = np.zeros(n_folds + 2, dtype=np.int64)
+        total = squared = None
+        for event_index, panel in iter_calibrated(run, indices, source=profile.source):
+            frame = panel.astype(np.float64)
+            if normalize:
+                frame *= reference / i0[event_index]
+            if total is None:
+                shape = (n_folds + 2, *frame.shape)
+                total, squared = np.zeros(shape), np.zeros(shape)
+            pos = position[int(event_index)]
+            groups = (pos % n_folds, n_folds + min(2 * pos // indices.size, 1))
+            for group in groups:
+                n[group] += 1
+                total[group] += frame
+                squared[group] += frame * frame
+        if total is None or (n < 2).any():
+            raise RuntimeError(f"run {run}: consistency split counts {n.tolist()}")
+        mean = total / n.reshape((-1,) + (1,) * (total.ndim - 1))
+        var = squared / n.reshape((-1,) + (1,) * (total.ndim - 1)) - mean * mean
+        std = np.sqrt(np.maximum(var, 0.0))
+        full_n = int(n[:n_folds].sum())
+        full_mean = total[:n_folds].sum(axis=0) / full_n
+        full_var = squared[:n_folds].sum(axis=0) / full_n - full_mean * full_mean
+        counts.update(n_used=full_n, fold_counts=n[:n_folds].tolist(),
+                      half_counts=n[n_folds:].tolist())
+        return ((full_mean, np.sqrt(np.maximum(full_var, 0.0))),
+                (mean[:n_folds], std[:n_folds]),
+                (mean[n_folds:], std[n_folds:]), counts)

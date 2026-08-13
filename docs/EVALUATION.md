@@ -28,18 +28,16 @@ explicit runs it evaluates on the held-out validation set.
 
 ## 2. Check a new mask without labels
 
-Production cannot use IoU. Call
-`automask.evaluation.evaluate_runtime(pipeline, run)` instead. It reports:
+Production cannot use reference-mask IoU. Call
+`automask.evaluation.evaluate_consistency(pipeline, run, selection, store)` to report:
 
-- a distribution of stability across complementary real-shot folds;
+- all pairwise agreements between the requested number of real-shot folds;
+- each fold's agreement with the full-shot mask;
 - stability between chronological halves of the run;
-- azimuthal consistency against repeated size-matched random controls;
-- masked fraction and floor containment as structural outputs.
 
-These are diagnostics and gates, not a substitute ground truth or a scalar score.
-They tell the agent whether a mask is unstable, violates the masking contract,
-or fails to improve a relevant physical consistency check. See
-`RUNTIME_EVALUATION.md` for assumptions and statistical definitions.
+These are diagnostics, not a substitute ground truth or a scalar score. See
+`CONSISTENCY.md` for the fixed procedure. Physical diagnostics remain separate
+because their scientific assumptions differ from reproducibility.
 
 Synthetic artifact injection remains an auxiliary stress test under
 `automask.synthetic`. It is not used to choose production defaults or to claim

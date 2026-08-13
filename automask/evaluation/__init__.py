@@ -1,4 +1,5 @@
-"""Labelled development evaluation and label-free runtime evaluation."""
+"""Labelled evaluation and ground-truth-free consistency diagnostics."""
+from automask.evaluation.consistency import evaluate_consistency
 from automask.evaluation.labelled import (
     ALL_RUNS,
     FIT_RUNS,
@@ -6,16 +7,12 @@ from automask.evaluation.labelled import (
     evaluate,
     reference_mask,
 )
-from automask.evaluation.runtime import evaluate_runtime
-from automask.evaluation.schemas import Estimate, RuntimeEvaluation
 
 __all__ = [
     "ALL_RUNS",
     "FIT_RUNS",
     "VALIDATION_RUNS",
-    "Estimate",
-    "RuntimeEvaluation",
     "evaluate",
-    "evaluate_runtime",
+    "evaluate_consistency",
     "reference_mask",
 ]

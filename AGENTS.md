@@ -27,10 +27,10 @@ sitting alongside the data mirror. There is no `src/` wrapper. Import project co
 | path | role |
 |------|------|
 | **`automask/`** | **Main working area.** The auto-masking project, an installable package. Core: `masking.py` (STATS/REGULARIZERS/COMBINERS registries + `Channel`/`Pipeline`), `stats/` `regularization/` `combine/` (one file per method), `sample.py` (`Sample`, the per-run arrays a pipeline reads), `image_store.py` (selected-shot reductions + psana calibration constants, content-hashed cache), `run_profile.py` + `utils.py` (one XTC pass -> per-shot field table), `shot_selection.py` (field-native `Condition`/`ShotSelection`), `evaluation/` (all development and runtime evaluation), and `dataset.py` (loaders/score). Sweeps use Hydra through `conf/` + `studies/sweep_hyperparameters.py` + `scripts/*.sh`. `io/` are psana readers, `producers/` prewarm the cache, `studies/` contains only temporary research awaiting migration, `data/masks/` holds human references, and `outputs/` is generated and **gitignored**. Start here. |
-| `automask/evaluation/` | **All evaluation code.** `labelled.py` scores against reference masks, `runtime.py` evaluates a new run without labels, `resampling.py` builds real-shot folds, `stability.py` measures sampling/time stability, and `azimuthal.py` performs the physical-consistency comparison against repeated matched controls. See `docs/EVALUATION.md` and `docs/RUNTIME_EVALUATION.md`. |
+| `automask/evaluation/` | **All evaluation code.** `labelled.py` scores against reference masks, `consistency.py` measures reproducibility on round-robin real-shot folds, and `azimuthal.py` contains the separate physical-consistency diagnostic. Fold reductions use `ImageStore`; see `docs/EVALUATION.md` and `docs/CONSISTENCY.md`. |
 | `xpp_sharing/` | **The lab's current production method** (CO2 delay-scan notebooks + `utils.py`). Reference/baseline to improve on — manual mask, diode normalization, delay binning. Read-only. |
 | `automask/io/` | psana readers (import as `automask.io.<name>`): `psana1.py` (`Psana1RunSource` — the local↔SLAC seam: `from_files` opens explicit streams, `from_experiment` uses the standard resolver), `read_xtc.py` (calibrated frames, calibration constants, panel index maps), `lcls1_adapters.py` (official `smalldata_tools` detector adapters for profiling). |
-| `docs/`, `psana_env.sh` | `DATA_OVERVIEW.md` (layout) + `PSANA_XTC.md` (how to open XTC) + `DATA.md` (what a single shot records) + `EVALUATION.md` and `RUNTIME_EVALUATION.md`; and the env-activation script (repo root). |
+| `docs/`, `psana_env.sh` | `DATA_OVERVIEW.md` (layout) + `PSANA_XTC.md` (how to open XTC) + `DATA.md` (what a single shot records) + `EVALUATION.md` and `CONSISTENCY.md`; and the env-activation script (repo root). |
 | `xtc/` | Raw per-event detector data (psana XTC format). |
 | `hdf5/smalldata/` | Reduced per-event HDF5 summaries. **Start data analysis here** — no psana needed. |
 | `calib/` | psana detector calibration constants. |
@@ -104,7 +104,7 @@ One run in, one boolean mask out (`True == masked`). Four stages, in order:
    in `image_store.REDUCTIONS` is reduced over the selected shots, anything else is passed
    straight to `psana.Detector` as a calibration accessor (`pedestals`, `rms`, `status_as_mask`).
 4. **Score** — `evaluation.evaluate` uses references during development;
-   `evaluation.evaluate_runtime` uses folds and physics diagnostics without labels.
+   `evaluation.evaluate_consistency` measures shot/fold reproducibility without labels.
 
 Conventions that bite if ignored:
 

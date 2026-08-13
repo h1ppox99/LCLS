@@ -45,44 +45,44 @@ def test_labelled_evaluation_defaults_to_validation_runs(monkeypatch):
     assert result["mean"]["residual_iou"] == 1.0
 
 
-def test_runtime_evaluation_is_label_free(monkeypatch):
-    import automask.evaluation.runtime as runtime
-
+def test_consistency_uses_fixed_folds_and_excludes_the_floor():
     class Pipeline:
         @staticmethod
         def needs():
-            return ()
+            return ("mean",)
 
         @staticmethod
         def floor(sample):
-            return np.array([[True, False], [False, False]])
+            floor = np.zeros((3, 3), dtype=bool)
+            floor[0, 0] = True
+            return floor
 
         @staticmethod
         def run(sample):
-            return np.array([[True, False], [False, False]])
+            return Pipeline.floor(sample) | (sample.mean > 0)
 
-    sample = type("Sample", (), {"run": 999})()
-    monkeypatch.setattr(
-        runtime.Sample, "from_store",
-        lambda run, selection, needs, store=None: sample,
-    )
-    monkeypatch.setattr(runtime.resampling, "load", lambda run, selection: object())
-    monkeypatch.setattr(runtime, "sampling_stability", lambda *args: np.array([0.9, 1.0]))
-    monkeypatch.setattr(runtime, "temporal_stability", lambda *args: 0.8)
-    monkeypatch.setattr(runtime, "build_frame", lambda sample, floor: object())
-    monkeypatch.setattr(
-        runtime, "azimuthal_diagnostics",
-        lambda frame, mask, rng, controls: {
-            "excess": 0.2,
-            "gain": np.array([0.1, 0.2]),
-            "win_rate": np.array([0.6, 0.7]),
-        },
-    )
-    monkeypatch.setattr(
-        evaluation, "reference_mask",
-        lambda run: (_ for _ in ()).throw(AssertionError("ground truth was read")),
-    )
-    result = evaluation.evaluate_runtime(Pipeline(), 999, resamples=2, controls=2)
-    assert result.run == 999
-    assert result.floor_contained
-    assert result.sampling_stability.value == 0.95
+    full = np.zeros((3, 3))
+    full[1, 1] = 1
+    late = np.zeros((3, 3))
+    late[2, 2] = 1
+
+    class Store:
+        fold_data = tuple(full.copy() for _ in range(10))
+        half_data = (full.copy(), late)
+
+        def reduce(self, run, selection, reduction):
+            return self.fold_data[0]
+
+        def folds(self, run, selection, reduction, n_folds):
+            return self.fold_data
+
+        def halves(self, run, selection, reduction, n_folds):
+            return self.half_data
+
+    result = evaluation.evaluate_consistency(
+        Pipeline(), 999, store=Store(), n_folds=4)
+    assert result["n_folds"] == 4
+    assert result["fold_iou"].shape == (6,)
+    assert result["fold_iou_mean"] == 1.0
+    assert result["fold_vs_full_iou_mean"] == 1.0
+    assert result["chronological_iou"] == 0.0

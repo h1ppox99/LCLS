@@ -47,7 +47,7 @@ robustly or it inherits them and the subtracted floor swallows the signal; see
 ITS NULL IS NOT ZERO. `V_b` is itself estimated from only S sector means, so it
 scatters around its expectation and the clip at zero makes the residual
 one-sided. Measured on synthetic isotropic rings (12 sectors, 200 px/cell, in
-`tests/test_evaluation_runtime.py`) that sampling floor is ~0.19% of the ring mean,
+`tests/test_evaluation_azimuthal.py`) that sampling floor is ~0.19% of the ring mean,
 against a raw sector-mean scatter of 0.7% -- the subtraction removes about three
 quarters of the noise, and the rest is the metric's resolution limit. A 5%
 one-sector anomaly reads 1.5%, so the working dynamic range at this cell size is
@@ -92,8 +92,7 @@ N_SECTORS = 12
 def pixel_frame(sample):
     """Per-pixel (q, chi, corrected intensity, validity) for a Sample's image.
 
-    Reads `sample.mean` so the frame can also be built for a resampled Sample
-    (see `evaluation.resampling`).
+    Reads `sample.mean` so it uses the same selected-shot image as masking.
     """
     from automask import azimuthal as az
 

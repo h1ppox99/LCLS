@@ -422,6 +422,61 @@ def test_median_mad_are_co_computed(tmp_path, monkeypatch):
     assert len(calls) == 1
 
 
+def test_image_store_caches_fixed_folds_and_halves(tmp_path, monkeypatch):
+    import automask.io.read_xtc as read_xtc
+
+    profile = RunProfile(7, 20, [], {}, {}, [], source=object())
+    store = ImageStore(cache_dir=tmp_path, run_profile=profile)
+    calls = []
+
+    def frames(run, indices, source=None):
+        calls.append(run)
+        for index in indices:
+            yield int(index), np.full((1, 2, 2), float(index))
+
+    monkeypatch.setattr(read_xtc, "iter_calibrated", frames)
+    monkeypatch.setattr(
+        read_xtc, "panel_geometry",
+        lambda run, source=None: (
+            np.array([[[0, 0], [1, 1]]]), np.array([[[0, 1], [0, 1]]])
+        ),
+    )
+    selection = ShotSelection()
+    folds = store.folds(7, selection, "mean", n_folds=4)
+    halves = store.halves(7, selection, "std", n_folds=4)
+
+    assert len(folds) == 4
+    np.testing.assert_allclose([fold[0, 0] for fold in folds], np.arange(4) + 8)
+    np.testing.assert_allclose([half[0, 0] for half in halves], np.sqrt(8.25))
+    np.testing.assert_allclose(store.reduce(7, selection, "mean"), 9.5)
+    assert any("fold-03-of-04" in path.name for path in tmp_path.iterdir())
+    assert calls == [7]
+
+
+def test_image_store_builds_robust_fold_reductions(tmp_path, monkeypatch):
+    import automask.io.read_xtc as read_xtc
+
+    profile = RunProfile(7, 20, [], {}, {}, [], source=object())
+    store = ImageStore(cache_dir=tmp_path, run_profile=profile)
+
+    def frames(run, indices, source=None):
+        for index in indices:
+            yield int(index), np.full((1, 2, 2), float(index))
+
+    monkeypatch.setattr(read_xtc, "iter_calibrated", frames)
+    monkeypatch.setattr(
+        read_xtc, "panel_geometry",
+        lambda run, source=None: (
+            np.array([[[0, 0], [1, 1]]]), np.array([[[0, 1], [0, 1]]])
+        ),
+    )
+    folds = store.folds(7, ShotSelection(), "median", n_folds=5)
+    halves = store.halves(7, ShotSelection(), "mad", n_folds=5)
+
+    np.testing.assert_allclose([fold[0, 0] for fold in folds], np.arange(5) + 7.5)
+    np.testing.assert_allclose([half[0, 0] for half in halves], 1.4826 * 2.5)
+
+
 def test_calibration_is_cached_in_panel_form_only(tmp_path, monkeypatch):
     """Assembling scatters onto a zero canvas, which would read as "bad" over
     every unmapped pixel of a status mask -- so the store never assembles one."""

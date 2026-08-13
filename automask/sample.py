@@ -56,9 +56,9 @@ class Sample:
     def with_arrays(self, **arrays: np.ndarray) -> "Sample":
         """Copy of this sample with some arrays replaced, the rest shared.
 
-        Used by the resampling metrics, which redraw the shot-derived reductions
+        Used by consistency evaluation, which redraws shot-derived reductions
         while leaving calibration constants alone -- those are not estimated from
-        this run's shots, so resampling must not perturb them.
+        this run's shots, so consistency splits must not perturb them.
         """
         return Sample(run=self.run, arrays={**self.arrays, **arrays},
                       selection=self.selection)
