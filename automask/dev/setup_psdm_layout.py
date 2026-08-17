@@ -27,8 +27,8 @@ Run once:
 
 then (in the psana env):
 
-    export SIT_PSDM_DATA=/Data/hippolyte.wallaert/psdm
-    python -m automask.producers.build_images --run 475
+    export SIT_PSDM_DATA=/home/groups/darve/hippowal/psdm
+    python -m automask.producers.build_images --run ${RUN}
 
 Re-running is safe (idempotent): it rebuilds the links.
 """
@@ -40,7 +40,8 @@ COLON = chr(0xF022)                       # the on-disk stand-in for ':'
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 INSTRUMENT = "xpp"
 EXPERIMENT = "xppl1016922"
-# Where to build the psana-style tree.  On /Data (lots of free space), NOT home.
+# Where to build the psana-style tree. Prefer writable group storage, not home.
+# psana_env.sh sets SIT_PSDM_DATA from PSANA_PSDM in psana_env.local.
 PSDM = os.environ.get("SIT_PSDM_DATA",
                       os.path.join(os.path.dirname(ROOT), "psdm"))
 
@@ -116,7 +117,7 @@ def build():
 
     print(f"\nSIT_PSDM_DATA layout ready at: {PSDM}")
     print(f"  export SIT_PSDM_DATA={PSDM}")
-    print(f"  dataset string:  exp={EXPERIMENT}:run=475:dir={os.path.join(exp_dir,'xtc')}")
+    print(f"  dataset string:  exp={EXPERIMENT}:run=<RUN>:dir={os.path.join(exp_dir,'xtc')}")
     return PSDM
 
 

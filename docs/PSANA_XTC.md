@@ -27,7 +27,7 @@ command -v mamba || conda install -y -n base -c conda-forge mamba
 #    segfaults rather than import errors. `mamba` here only to get a faster
 #    solve and a readable conflict report -- it does not change the result.
 mamba create -y -p "$SW/envs/ana-4.0.62" -c lcls-i -c conda-forge \
-    psana=4.0.62 python=3.9 \
+    psana=4.0.62 python=3.9 libtiff=4.4 \
     numpy h5py scipy scikit-image matplotlib pyfai hydra-core tifffile
 
 # 3. the package itself, without letting pip touch the compiled stack
@@ -38,7 +38,8 @@ pip install -e . --no-deps
 # 4. official SLAC detector adapters used by run profiling
 mkdir -p "$SW/src"
 git clone https://github.com/slac-lcls/smalldata_tools.git "$SW/src/smalldata_tools"
-git -C "$SW/src/smalldata_tools" checkout 5cf5c0ab7830f93bbc6213f7480b7a59322008bf
+cd "$SW/src/smalldata_tools"
+git checkout 5cf5c0ab7830f93bbc6213f7480b7a59322008bf
 ```
 
 `mamba` and `conda` are interchangeable for `create`/`install` — same channels,
@@ -67,17 +68,26 @@ EOF
 writable. `PSANA_CONDA_SH` matters because a batch job starts without `conda`
 on `PATH`.
 
-Finally, verify from a compute node — this builds the `$SIT_PSDM_DATA` layout
-psana requires and then pulls one calibrated frame to prove it works:
+Finally, verify from a compute node. Source the environment first so
+`SIT_PSDM_DATA` resolves to group storage; the setup helper then builds the
+layout psana requires and pulls one calibrated frame to prove it works:
 
 ```bash
-sbatch --time=00:20:00 --mem=8G automask/scripts/identification.sbatch setup 475
+source psana_env.sh
+python -m automask.dev.setup_psdm_layout
+# When a complete local run is present:
+python -m automask.dev.setup_psdm_layout --check --run <RUN>
 ```
 
 A mis-wired calib directory makes psana return `None` or uncalibrated data
 **without raising**, so that stage checks an actual frame rather than the
 existence of a directory. If it prints `det.calib() -> shape (2, 512, 1024)`,
 the environment is good and the study stages can run.
+
+At the time of writing, this machine's shared `xtc/` contains only one stream
+each for runs 378, 389, and 396; run 475 is not present. Environment activation,
+imports, and the PSDM/calibration link farm can still be verified, but the
+frame-level check requires a locally available run that psana can decode.
 
 
 Raw XTC is the production source for profiling and selected-shot reductions.
