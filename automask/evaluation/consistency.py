@@ -7,6 +7,7 @@ from typing import Optional
 import numpy as np
 
 from automask.image_store import REDUCTIONS, ImageStore
+from automask.masking import Pipeline
 from automask.sample import DERIVED, Sample
 from automask.selection_presets import BEAM_ON_SELECTION
 from automask.shot_selection import ShotSelection
@@ -17,9 +18,11 @@ def _iou(a, b) -> float:
     return float((a & b).sum()) / union if union else 1.0
 
 
-def _evidence_mask(pipeline, sample, shape):
-    mask = np.asarray(pipeline.run(sample))
-    floor = np.asarray(pipeline.floor(sample))
+def _evidence_mask(pipeline, sample, shape, floor=None):
+    floor = np.asarray(pipeline.floor(sample) if floor is None else floor)
+    mask = np.asarray(
+        pipeline.run(sample, floor=floor)
+        if isinstance(pipeline, Pipeline) else pipeline.run(sample))
     if mask.dtype != np.bool_ or floor.dtype != np.bool_:
         raise TypeError("a pipeline mask and floor must be boolean")
     if mask.shape != shape or floor.shape != shape:
@@ -73,7 +76,7 @@ def evaluate_consistency(
         masks = [
             _evidence_mask(pipeline, sample.with_arrays(**{
                 name: reductions_by_fold[name][i] for name in reductions
-            }), floor.shape)
+            }), floor.shape, floor=floor)
             for i in range(n_folds)
         ]
         metrics[strategy] = _fold_metrics(masks, full)

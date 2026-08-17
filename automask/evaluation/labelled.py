@@ -14,10 +14,14 @@ from automask.shot_selection import ShotSelection
 
 PACKAGE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+def _partition_runs(runs: Sequence[int]) -> Tuple[Tuple[int, ...], Tuple[int, ...]]:
+    runs = tuple(runs)
+    split = len(runs) // 2
+    return runs[:split], runs[split:]
+
+
 ALL_RUNS: Tuple[int, ...] = available_xtc_runs()
-_SPLIT = len(ALL_RUNS) // 2
-FIT_RUNS: Tuple[int, ...] = ALL_RUNS[:_SPLIT]
-VALIDATION_RUNS: Tuple[int, ...] = ALL_RUNS[_SPLIT:]
+FIT_RUNS, VALIDATION_RUNS = _partition_runs(ALL_RUNS)
 
 
 def reference_mask(run: int) -> np.ndarray:

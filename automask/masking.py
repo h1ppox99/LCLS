@@ -251,9 +251,18 @@ class Pipeline:
             floor = floor | channel.pick(sample)
         return floor
 
-    def run(self, sample) -> np.ndarray:
-        """Final boolean mask (True == masked)."""
-        floor = self.floor(sample)
+    def run(self, sample, floor=None) -> np.ndarray:
+        """Final boolean mask (True == masked).
+
+        ``floor`` may supply a fixed boolean floor for perturbation studies.
+        Normal masking leaves it unset and computes the floor from ``sample``.
+        """
+        floor = self.floor(sample) if floor is None else np.asarray(floor)
+        if floor.dtype != np.bool_:
+            raise TypeError("a pipeline floor must be boolean")
+        if floor.shape != sample.real.shape:
+            raise ValueError(
+                f"pipeline floor shape {floor.shape} != sample shape {sample.real.shape}")
         cspec = COMBINERS[self.combiner]
         evidence = self.evidence_channels
         if cspec.consumes == "picks":

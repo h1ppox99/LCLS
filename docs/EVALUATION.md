@@ -1,8 +1,51 @@
 # Evaluation
 
-There are two evaluation workflows and they answer different questions.
+There are three evaluation workflows and they answer different questions.
 
-## 1. Choose default parameters with labels
+## 1. Validate one unlabelled run under perturbations
+
+`validate_mask` keeps the full-run geometry/calibration floor fixed and separates
+three descriptive checks: shot-fold perturbations, declared parameter
+perturbations, and their interaction. It also reports leave-one-channel-out
+effects and removes a channel only when its removal changes none of the evaluated
+masks.
+
+```python
+from automask.evaluation import (
+    MaskValidationDesign, ParameterSweep, validate_mask,
+)
+
+design = MaskValidationDesign(
+    sweeps=(
+        ParameterSweep(
+            "variance.params.k", (3.25, 3.75),
+            "Check the declared +/-0.25 threshold tolerance",
+        ),
+        ParameterSweep(
+            "variance.field_reg.tv.weight", (3.0, 5.0),
+            "Check nearby smoothing strengths",
+        ),
+    ),
+    n_folds=10,
+)
+report = validate_mask(pipeline, run, selection, design, store=store)
+report.display()
+pipeline = report.recommended_pipeline
+# report.save("automask/outputs/validation/run0475")
+```
+
+Supported paths are `<channel>.params.<field>`,
+`<channel>.field_reg.<regularizer>.<field>`,
+`<channel>.mask_reg.<regularizer>.<field>`, and `combiner.params.<field>`.
+Values and the one-line reason are explicit; validation does not infer what a
+scientifically reasonable perturbation is.
+
+The report contains Markdown, baseline/channel/instability figures, structured
+metrics, and optional JSON/NumPy/PNG persistence. It is deliberately descriptive:
+stability is not ground truth, and v1 applies no confidence intervals or numeric
+pass/fail thresholds.
+
+## 2. Choose default parameters with labels
 
 The XTC runs are split chronologically:
 
@@ -26,9 +69,9 @@ python -m automask.studies.sweep_hyperparameters \
 The labelled API is `automask.evaluation.evaluate(pipeline, runs)`. With no
 explicit runs it evaluates on the held-out validation set.
 
-## 2. Check a new mask without labels
+## 3. Check fold consistency only
 
-Production cannot use reference-mask IoU. Call
+For the smaller legacy dictionary API, call
 `automask.evaluation.evaluate_consistency(pipeline, run, selection, store)` to report:
 
 - all pairwise agreements between the requested number of real-shot folds;

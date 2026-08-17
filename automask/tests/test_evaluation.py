@@ -5,10 +5,12 @@ import numpy as np
 import automask.evaluation as evaluation
 
 
-def test_xtc_runs_are_partitioned_between_fit_and_validation():
-    assert evaluation.FIT_RUNS + evaluation.VALIDATION_RUNS == evaluation.ALL_RUNS
-    assert set(evaluation.FIT_RUNS).isdisjoint(evaluation.VALIDATION_RUNS)
-    assert evaluation.FIT_RUNS and evaluation.VALIDATION_RUNS
+def test_run_partition_is_deterministic_without_mounted_xtc():
+    from automask.evaluation.labelled import _partition_runs
+
+    fit, validation = _partition_runs((378, 389, 396, 475))
+    assert fit == (378, 389)
+    assert validation == (396, 475)
 
 
 def test_labelled_evaluation_defaults_to_validation_runs(monkeypatch):
@@ -39,9 +41,10 @@ def test_labelled_evaluation_defaults_to_validation_runs(monkeypatch):
         labelled, "reference_mask",
         lambda run: np.array([[True, False], [False, False]]),
     )
+    monkeypatch.setattr(labelled, "VALIDATION_RUNS", (396, 475))
 
     result = evaluation.evaluate(Pipeline())
-    assert tuple(key for key in result if isinstance(key, int)) == evaluation.VALIDATION_RUNS
+    assert tuple(key for key in result if isinstance(key, int)) == (396, 475)
     assert result["mean"]["residual_iou"] == 1.0
 
 
