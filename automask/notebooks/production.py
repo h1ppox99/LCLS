@@ -68,7 +68,7 @@ from automask.io.read_xtc import JUNGFRAU_NAME
 from automask.run_inspection import inspect_run
 
 EXPERIMENT_NAME = "xppl1016922"
-RUN = 396
+RUN = 475
 DETECTOR_NAME = JUNGFRAU_NAME
 DETECTOR_SOURCE = "XppEndstation.0:Jungfrau.0"
 DETECTOR_CALIB_TYPE = "Jungfrau::CalibV1"
