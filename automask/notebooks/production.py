@@ -157,7 +157,7 @@ for name, image in selected_images.items():
 # %% [markdown]
 # ### Practitioner-defined masking recipe
 #
-# A `Pipeline` is one list of `Channel`s and a combiner. A channel is one statistic plus the stages around it, and whether it belongs to the intensity-free floor is read from the statistic's registered kind — not declared a second time. So `geometry` and `status_as_mask` are configured exactly like `blackhat`, and their knobs are reachable the same way.
+# A `Pipeline` is one list of `Channel`s, unioned onto the floor. A channel is one statistic plus the stages around it, and whether it belongs to the intensity-free floor is read from the statistic's registered kind — not declared a second time. So `geometry` and `status_as_mask` are configured exactly like `blackhat`, and their knobs are reachable the same way.
 #
 # `status_as_mask` is psana's per-run pixel status, read through `psana.Detector` at the run being masked. Nothing here loads a frozen array.
 #
@@ -191,7 +191,6 @@ MASKING_PIPELINE = Pipeline(
             mask_reg_params=[FillHolesParams(), AreaGateParams()],
         ),
     ],
-    combiner="union",
 )
 
 print("needs:", MASKING_PIPELINE.needs())

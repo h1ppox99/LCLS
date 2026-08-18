@@ -9,7 +9,6 @@ defaults:
   - stat: variance
   - regularization: tv
   - mask_reg: none
-  - combine: union
   - eval: default
   - _self_
   - optional experiment: null

@@ -4,27 +4,29 @@ masking.py -- automated masking pipeline for the xppl1016922 Jungfrau1M detector
 
 Runs in assembled space on the arrays a `Sample` carries (see automask/sample.py).
 
-The pipeline is three separable, independently-registered stages, each living in
-its own folder (one file per method):
+The pipeline is three separable stages, each living in its own folder (one file
+per method); the first two are independently registered, the last is a fixed OR:
 
     STATISTICS    (stats/)          Sample -> continuous z-field, or a mask
                                     directly (kind="pick" shape detectors, and
                                     the kind="floor" geometry/status masks)
     REGULARIZATION(regularization/) field->field (TV) or mask->mask (pad)
-    COMBINATION   (combine/)        fuse the evidence channels onto the floor
+    COMBINATION   (combine/)        union the evidence channels onto the floor
 
-The three registries below are the catalogue of everything available. Each is a
+The two registries below are the catalogue of everything available. Each is a
 dict name -> spec, populated by importing the component packages:
 
     STATS         variance, mad_variance, blackhat, sigma_clipping,
                   hough_lines (pick), geometry (floor), status_as_mask (floor)
     REGULARIZERS  tv (field), frangi (field), pad (mask)
-    COMBINERS     union (picks), weighted_sum (fields), mahalanobis (fields)
 
-A Pipeline is ONE list of Channels plus a combiner. Which channels form the
-intensity-free floor is not a second list to keep in step -- it is read from each
-stat's registered `kind`, so a floor channel is configured exactly like any
-other and its knobs are reachable the same way.
+Combination is a single fixed step -- `combine_masks` ORs every thresholded pick
+onto the floor -- so there is no combiner registry to configure.
+
+A Pipeline is ONE list of Channels. Which channels form the intensity-free floor
+is not a second list to keep in step -- it is read from each stat's registered
+`kind`, so a floor channel is configured exactly like any other and its knobs are
+reachable the same way.
 """
 
 from __future__ import annotations
@@ -34,13 +36,12 @@ from typing import List, Optional, Tuple
 import numpy as np
 
 
-# Importing the component packages registers every method into the three dicts.
+# Importing the component packages registers every method into the two dicts.
 from automask import stats  # noqa: F401
 from automask import regularization  # noqa: F401
-from automask import combine  # noqa: F401
 from automask.stats.base import STATS, threshold_stat, robust_z  # noqa: F401
 from automask.regularization.base import REGULARIZERS
-from automask.combine.base import COMBINERS
+from automask.combine import combine_masks
 from automask.sample import Sample  # noqa: F401
 
 
@@ -178,46 +179,13 @@ class Channel:
             m = gate(REGULARIZERS[name].apply(m, params))
         return m
 
-    def defectiveness(self, sample) -> np.ndarray:
-        """Sign-aligned DEFECTIVENESS field (large > 0 == wants masking), 0 outside
-        `real`. Folds low/both stats so every field points the same way for the
-        continuous-fusion combiners (weighted_sum, mahalanobis).
-
-        A pick stat has no z-scale of its own -- its mask is a decision, not a
-        measurement -- so fusing it means choosing what one masked pixel is worth
-        on the other detectors' robust-z scale. That choice is required to be
-        explicit (`defectiveness_scale` on the stat's params), because the default
-        of 1.0 an indicator would imply is silently below every sensible fusion
-        threshold: `weighted_sum` cuts at k=3.5, so an unscaled pick could never
-        carry a pixel and the detector would vanish from the mask with no error."""
-        spec, p = STATS[self.stat], self._params()
-        if spec.kind == "pick":
-            scale = getattr(p, "defectiveness_scale", None)
-            if scale is None:
-                raise ValueError(
-                    f"stat '{self.stat}' is kind='pick' and carries no robust-z "
-                    f"scale, so it cannot be fused by a consumes='fields' "
-                    f"combiner. Use combiner='union', or set "
-                    f"{type(p).__name__}.defectiveness_scale to the z-value one "
-                    f"picked pixel should be worth (must exceed the combiner's k "
-                    f"to mask on its own)."
-                )
-            d = np.where(self.pick(sample), float(scale), 0.0)
-        else:
-            mode = getattr(p, "mode", spec.mode)
-            z = self.field(sample)
-            d = -z if mode == "low" else (np.abs(z) if mode == "both" else z)
-        d = np.array(d, dtype=np.float64, copy=True)
-        d[~sample.real] = 0.0
-        return d
-
 
 # ==========================================================================
-#  Pipeline -- floor stats + detectors + combiner -> final mask
+#  Pipeline -- floor stats + detectors -> final mask
 # ==========================================================================
 @dataclass
 class Pipeline:
-    """One list of channels plus a combiner.
+    """One list of channels, unioned onto the floor.
 
     The floor is not a separate list: `floor_channels` reads it off each stat's
     registered `kind`, so adding `Channel("status_as_mask", StatusAsMaskParams(pad=3))`
@@ -226,8 +194,6 @@ class Pipeline:
     """
 
     channels: List[Channel] = field(default_factory=list)
-    combiner: str = "union"
-    combiner_params: object = None
 
     def __post_init__(self):
         labels = [c.label for c in self.channels]
@@ -278,26 +244,13 @@ class Pipeline:
             raise ValueError(
                 f"pipeline floor shape {floor.shape} != sample shape {sample.real.shape}"
             )
-        cspec = COMBINERS[self.combiner]
-        evidence = self.evidence_channels
-        if cspec.consumes == "picks":
-            comps = {c.label: c.pick(sample) for c in evidence}
-        else:
-            comps = {c.label: c.defectiveness(sample) for c in evidence}
-        return cspec.combine(floor, comps, sample, self.combiner_params)
+        picks = {c.label: c.pick(sample) for c in self.evidence_channels}
+        return combine_masks(floor, picks)
 
 
 # ==========================================================================
 #  production pipeline
 # ==========================================================================
-# z-worth of one hough_lines pixel for the consumes="fields" combiners. Chosen
-# to sit above weighted_sum's k=3.5 so the channel masks on its own there, as it
-# does under union -- the two recipes then differ in HOW evidence is fused, not in
-# which channels can act. A pick has no measured z-scale, so this is a modelling
-# choice; it is here, in the recipe, rather than defaulted in the stat.
-_HOUGH_FUSION_Z = 5.0
-
-
 def floor_channels() -> List[Channel]:
     """The intensity-free floor: unmapped/ASIC geometry + psana pixel status."""
     return [
@@ -306,12 +259,9 @@ def floor_channels() -> List[Channel]:
     ]
 
 
-def production_pipeline(
-    combiner: str = "union", line_detector: bool = True
-) -> Pipeline:
+def production_pipeline(line_detector: bool = True) -> Pipeline:
     """The default recipe: TV variance + hough_lines + asic_polish on the
-    geometry + pixel-status floor. combiner="union" reproduces `combo`;
-    combiner="weighted_sum" reproduces `combo_sum`.
+    geometry + pixel-status floor, unioned together.
     """
     from automask.stats.variance import VarianceParams
     from automask.stats.hough_lines import HoughLinesParams
@@ -320,7 +270,6 @@ def production_pipeline(
     from automask.regularization.blob_scale import BlobScaleParams
     from automask.regularization.fill_holes import FillHolesParams
     from automask.regularization.area_gate import AreaGateParams
-    from automask.combine.weighted_sum import WeightedSumParams
 
     channels = floor_channels()
     channels.append(
@@ -332,13 +281,7 @@ def production_pipeline(
         )
     )
     if line_detector:
-        channels.append(
-            Channel(
-                "hough_lines",
-                HoughLinesParams(defectiveness_scale=_HOUGH_FUSION_Z),
-                field_reg=None,
-            )
-        )
+        channels.append(Channel("hough_lines", HoughLinesParams(), field_reg=None))
     channels.append(
         Channel(
             "asic_polish",
@@ -349,13 +292,7 @@ def production_pipeline(
             mask_reg_params=[FillHolesParams(), AreaGateParams()],
         )
     )
-    if combiner == "weighted_sum":
-        return Pipeline(
-            channels,
-            combiner="weighted_sum",
-            combiner_params=WeightedSumParams(k=3.5, pad=2),
-        )
-    return Pipeline(channels, combiner=combiner)
+    return Pipeline(channels)
 
 
 # ==========================================================================

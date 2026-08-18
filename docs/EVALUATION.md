@@ -39,8 +39,8 @@ pipeline = report.recommended_pipeline
 ```
 
 Supported paths are `<channel>.params.<field>`,
-`<channel>.field_reg.<regularizer>.<field>`,
-`<channel>.mask_reg.<regularizer>.<field>`, and `combiner.params.<field>`.
+`<channel>.field_reg.<regularizer>.<field>`, and
+`<channel>.mask_reg.<regularizer>.<field>`.
 Values and the one-line reason are explicit; validation does not infer what a
 scientifically reasonable perturbation is.
 
@@ -56,7 +56,7 @@ The XTC runs are split chronologically:
 - fit: runs 378 and 389;
 - validation: runs 396 and 475.
 
-Sweep channels, regularizers, combiners, and their parameters only on the fit
+Sweep channels, regularizers, and their parameters only on the fit
 runs. Rank candidates primarily by residual IoU, which measures the pixels added
 beyond the shared geometry/calibration floor. After choosing one configuration,
 run it once on validation with `eval.phase=validate`. Validation performance is

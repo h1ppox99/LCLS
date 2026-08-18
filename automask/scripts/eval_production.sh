@@ -4,6 +4,4 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 echo "### production union (combo)"
-python -m automask.studies.sweep_hyperparameters experiment=production combine=union "$@"
-echo "### production weighted-sum (combo_sum)"
-python -m automask.studies.sweep_hyperparameters experiment=production combine=weighted_sum "$@"
+python -m automask.studies.sweep_hyperparameters experiment=production "$@"

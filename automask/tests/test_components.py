@@ -561,7 +561,7 @@ def test_hydra_production_experiment_matches_the_python_recipe():
     with initialize_config_dir(config_dir=conf_dir, version_base=None):
         cfg = compose(config_name="config", overrides=["experiment=production"])
         from_yaml = build_pipeline(cfg)
-    from_python = production_pipeline("union")
+    from_python = production_pipeline()
 
     assert [c.label for c in from_yaml.channels] == [
         c.label for c in from_python.channels

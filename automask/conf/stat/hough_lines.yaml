@@ -10,4 +10,3 @@ params:
   line_gap: 5
   width: 1
   exclude_floor: true
-  defectiveness_scale: null

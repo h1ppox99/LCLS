@@ -278,7 +278,7 @@ def context(run: int, p: Params):
     # line_detector=False: the baseline is production WITHOUT the line detector
     # this study exists to justify -- otherwise `prod` already contains the Hough
     # pixels and every "added" column reads zero.
-    pipe = production_pipeline("union", line_detector=False)
+    pipe = production_pipeline(line_detector=False)
     sample = Sample.from_store(run, BEAM_ON_SELECTION, pipe.needs())
     prod = pipe.run(sample)  # per-pixel production baseline
     domain = sample.real & ~prod  # only NEW pixels count

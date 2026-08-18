@@ -269,6 +269,12 @@ def test_payload_discovery_skips_unsupported_values_without_read_errors():
         def broken(self):
             raise ValueError("cannot read")
 
+        def filenames(self):
+            raise AssertionError("psana bookkeeping accessor should be vetoed")
+
+        def getFileNames(self):
+            raise AssertionError("psana bookkeeping accessor should be vetoed")
+
     values, errors = utils._discover_payload_values(Payload())
 
     assert values == {"useful": 3}

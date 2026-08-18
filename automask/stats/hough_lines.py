@@ -28,12 +28,6 @@ there is no per-pixel score for a threshold to act on, and the decisive knobs
 `k` / `mode` here, and `Detector` skips its field-regularizer and threshold
 stages (setting a `field_reg` on this stat raises; see `Detector.__post_init__`).
 
-`defectiveness_scale` is the opt-in for the fusion combiners (`weighted_sum`,
-`mahalanobis`), which sum robust-z fields a pick has no equivalent of. It is the
-z-value one picked pixel is worth; leave it None and fusion raises rather than
-silently contributing a value below the combiner's threshold. To let this
-detector mask on its own under `weighted_sum` (k=3.5), set it above that.
-
 `exclude_floor` (default True) hides the geometry+calib floor from step 2. Those
 regions are already masked and are the darkest, straightest things on the chip;
 left in, they dominate the accumulator and Hough spends its segments
@@ -69,9 +63,6 @@ class HoughLinesParams:
     line_gap: int = 5  # gap tolerated inside one segment, px
     width: int = 1  # dilation radius applied to rasterized segments, px
     exclude_floor: bool = True  # hide geometry+calib from the accumulator
-    # z-worth of one picked pixel, for consumes="fields" combiners only.
-    # None (default) => fusing this detector is an error rather than a silent no-op.
-    defectiveness_scale: float | None = None
 
 
 def anomaly_map(field, domain, bin_k=4.0, min_size=4):

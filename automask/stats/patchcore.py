@@ -88,7 +88,7 @@ def known_mask(sample, source: str) -> np.ndarray:
         return reference_mask(sample.run)
     from automask.masking import production_pipeline
 
-    pipe = production_pipeline("union")
+    pipe = production_pipeline()
     if source == "floor":
         return pipe.floor(sample)
     if source == "production":

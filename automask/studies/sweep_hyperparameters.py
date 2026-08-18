@@ -9,7 +9,6 @@ import os
 import hydra
 from omegaconf import DictConfig, ListConfig, OmegaConf
 
-from automask.combine.base import COMBINERS
 from automask.evaluation import FIT_RUNS, VALIDATION_RUNS, evaluate, reference_mask
 from automask.masking import Channel, Pipeline, floor_channels
 from automask.sample import Sample
@@ -83,8 +82,6 @@ def build_pipeline(cfg: DictConfig) -> Pipeline:
     The conf lists evidence channels only; the floor is always the same and is
     not swept, so it is added here rather than repeated in every experiment file.
     """
-    combiner = cfg.combine.name
-    combiner_params = _params(COMBINERS, combiner, cfg.combine.get("params"))
     if cfg.get("channels"):
         evidence = [
             _channel_from_dict(OmegaConf.to_container(c, resolve=True))
@@ -105,9 +102,7 @@ def build_pipeline(cfg: DictConfig) -> Pipeline:
                 mask_reg_params=_reg_params(mask_reg, cfg.mask_reg.get("params")),
             )
         ]
-    return Pipeline(
-        floor_channels() + evidence, combiner=combiner, combiner_params=combiner_params
-    )
+    return Pipeline(floor_channels() + evidence)
 
 
 def _runs_for_phase(eval_cfg):
@@ -123,7 +118,7 @@ def _runs_for_phase(eval_cfg):
 def main(cfg: DictConfig):
     pipe = build_pipeline(cfg)
     phase, runs = _runs_for_phase(cfg.eval)
-    label = ",".join(c.label for c in pipe.evidence_channels) + f" | {cfg.combine.name}"
+    label = ",".join(c.label for c in pipe.evidence_channels)
     print(f"=== {phase}: {label}  (runs {runs}) ===")
 
     metrics = evaluate(pipe, runs, verbose=True)
@@ -138,7 +133,6 @@ def main(cfg: DictConfig):
         "phase": phase,
         "runs": ",".join(str(run) for run in runs),
         "channels": label,
-        "combine": cfg.combine.name,
         "mean_iou": mean["iou"],
         "mean_precision": mean["precision"],
         "mean_recall": mean["recall"],
@@ -149,10 +143,6 @@ def main(cfg: DictConfig):
         if p:
             for pk, pv in OmegaConf.to_container(p, resolve=True).items():
                 row[f"{k}.{pk}"] = pv
-    cp = cfg.combine.get("params")
-    if cp:
-        for pk, pv in OmegaConf.to_container(cp, resolve=True).items():
-            row[f"combine.{pk}"] = pv
 
     # Append into the multirun sweep dir when sweeping, else the run dir. Both are
     # relative to Hydra's ORIGINAL cwd, but jobs chdir into their per-job subdir,

@@ -9,9 +9,8 @@ masking.py and the sweep driver can look them up by name.
 Three kinds:
   * kind="field"  -- compute(sample, params) -> float field. By convention the
     sign follows the RAW detector (e.g. variance flags LOW z); `mode` on the spec
-    says which side is defect-like so the pipeline can threshold and sign-fold it.
-    Field stats are expected to emit a robust-z scale, which is what lets the
-    fusion combiners sum them with equal weights.
+    says which side is defect-like so the pipeline can threshold it. A robust-z
+    scale is the convention so a single `k` reads the same across stats.
   * kind="pick"   -- compute(sample, params) -> bool mask (True == masked), for
     detectors whose decision is not per-pixel and so has no meaningful graded
     field: `hough_lines` votes on SEGMENTS, and a pixel is on one or it is not.
@@ -21,10 +20,6 @@ Three kinds:
     pick has hyperparameters and is not 100%-precision.
   * kind="floor"  -- compute(sample, params) -> bool mask (True == masked). These
     are the 100%-precision geometry/calibration masks; they carry no sweep space.
-
-The pick/field split is the reason `Detector.defectiveness` is not total: a pick
-has no z-scale to fuse, so it is usable with the "picks" combiners (union) and
-must be given an explicit scale to take part in the "fields" ones.
 """
 
 from __future__ import annotations

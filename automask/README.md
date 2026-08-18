@@ -38,7 +38,7 @@ parameterised — exactly like every other one.
 
 ## Adding a method
 
-Drop one file in `stats/`, `regularization/`, or `combine/` that defines a compute
+Drop one file in `stats/` or `regularization/` that defines a compute
 function, a `Params` dataclass, and a `register_*` call; add it to that package's
 `__init__.py` import line and a matching `conf/<group>/<name>.yaml`. A stat's
 `needs` names the Sample arrays it reads — reductions (`mean`/`std`/`median`/`mad`)

@@ -3,7 +3,6 @@
 # EVIDENCE channels only -- the geometry + pixel-status floor is not swept and is
 # added by sweep_hyperparameters.build_pipeline. Mirrors
 # masking.production_pipeline(); keep the two in step when either changes.
-# Use combine=weighted_sum to reproduce combo_sum instead.
 channels:
   - stat: variance
     params: {k: 3.5, mode: low}
@@ -12,7 +11,6 @@ channels:
     mask_reg: null
   # kind="pick": emits a mask, so field_reg MUST be null (a field_reg here raises).
   - stat: hough_lines
-    params: {defectiveness_scale: 5.0}
     field_reg: null
     mask_reg: null
   - stat: asic_polish

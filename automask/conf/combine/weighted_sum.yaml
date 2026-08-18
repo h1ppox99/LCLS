@@ -1,5 +1,0 @@
-name: weighted_sum
-params:
-  k: 3.5
-  pad: 2
-  weights: null

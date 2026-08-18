@@ -225,11 +225,10 @@ def _pipeline_context(cfg):
     else:
         runs = [int(cfg["run"])]
     runs = [int(run) for run in runs]
-    combiner = cfg.get("combiner", "union")
     pipe = cfg.get("_pipeline")  # a swept Pipeline, if provided
     if pipe is None:
-        pipe = production_pipeline(combiner)
-        model = f"production_pipeline(combiner={combiner})"
+        pipe = production_pipeline()
+        model = "production_pipeline()"
     else:
         model = (
             "swept_pipeline(" + ",".join(c.label for c in pipe.evidence_channels) + ")"

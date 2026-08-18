@@ -1,4 +1,3 @@
-"""combine package -- importing it registers every combiner."""
+"""combine package -- boolean-union of the evidence channels onto the floor."""
 
-from automask.combine.base import COMBINERS, CombineSpec, register_combine  # noqa: F401
-from automask.combine import union, weighted_sum, mahalanobis  # noqa: F401  (registration side effect)
+from automask.combine.union import combine_masks  # noqa: F401

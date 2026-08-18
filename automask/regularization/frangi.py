@@ -14,7 +14,7 @@ Knob (FrangiParams):
     beta         blob-vs-ridge sensitivity (Frangi's b; smaller = stricter ridge).
     gamma        structure-ness cutoff; None -> skimage's per-scale auto value.
     black_ridges False (default) enhances BRIGHT ridges -- the sign the pipeline's
-                 defectiveness fields use (large == wants masking); True for dark.
+                 evidence fields use (large == wants masking); True for dark.
 """
 
 from __future__ import annotations

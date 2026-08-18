@@ -9,7 +9,6 @@ from typing import Any, Optional, Tuple
 
 import numpy as np
 
-from automask.combine.base import COMBINERS
 from automask.evaluation.metrics import compare_masks, instability
 from automask.evaluation.report import (
     CaseDelta,
@@ -142,11 +141,6 @@ def _stage_params(channel: Channel, kind: str, stage_name: str):
 
 def _get_parameter(pipeline: Pipeline, path: str):
     parts = path.split(".")
-    if parts[:2] == ["combiner", "params"] and len(parts) == 3:
-        params = pipeline.combiner_params or COMBINERS[pipeline.combiner].params()
-        if parts[2] not in {field.name for field in fields(params)}:
-            raise ValueError(f"combiner params have no parameter {parts[2]!r}")
-        return getattr(params, parts[2])
     if len(parts) < 3:
         raise ValueError(f"invalid parameter path {path!r}")
     channel = _channel(pipeline, parts[0])
@@ -168,15 +162,6 @@ def _get_parameter(pipeline: Pipeline, path: str):
 
 def _set_parameter(pipeline: Pipeline, path: str, value) -> Pipeline:
     parts = path.split(".")
-    if parts[:2] == ["combiner", "params"] and len(parts) == 3:
-        params = _replace_field(
-            pipeline.combiner_params,
-            COMBINERS[pipeline.combiner].params,
-            parts[2],
-            value,
-        )
-        return replace(pipeline, combiner_params=params)
-
     channel = _channel(pipeline, parts[0] if parts else "")
     if channel.is_floor:
         raise ValueError("the validation floor is fixed and cannot be swept")
@@ -454,11 +439,7 @@ def validate_mask(
         ]
         interaction[strategy] = _ensemble(cases, ensemble_masks)
 
-    swept_channels = {
-        sweep.path.split(".", 1)[0]
-        for sweep in design.sweeps
-        if not sweep.path.startswith("combiner.")
-    }
+    swept_channels = {sweep.path.split(".", 1)[0] for sweep in design.sweeps}
     channels, removed = _channel_results(
         pipeline,
         variants,

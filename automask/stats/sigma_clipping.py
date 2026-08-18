@@ -25,7 +25,7 @@ z-score's own denominator, and caps what the statistic can see. On a synthetic
 isotropic ring stack with a -20% shadow at q = 1.54 it costs the detection
 outright: <z> = -4.1 with 7% of the patch over k=5, against <z> = -20 and all of
 it once corrected. It also leaves a two-lobed pattern in the evidence field
-(corr(z, cos 2chi) = +0.96) that the combiners read as real. It is applied on the
+(corr(z, cos 2chi) = +0.96) that the pipeline reads as real. It is applied on the
 way in and re-applied on the way out, so `model`/`std` come back in `image`'s
 raw units. Solid angle needs no such care -- a function of 2theta alone
 (within-ring spread 1.2e-3), so the ring model absorbs it.

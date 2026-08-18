@@ -86,16 +86,14 @@ def test_parameter_paths_clone_without_mutating_pipeline(test_stat):
         _set_parameter(pipeline, "primary.params.unknown", 1.0)
 
 
-def test_regularizer_and_combiner_parameter_paths():
+def test_regularizer_parameter_paths():
     from automask.masking import production_pipeline
 
-    pipeline = production_pipeline("weighted_sum")
+    pipeline = production_pipeline()
     changed = _set_parameter(pipeline, "variance.field_reg.tv.weight", 3.0)
     changed = _set_parameter(changed, "asic_polish.mask_reg.area_gate.min_area", 250)
-    changed = _set_parameter(changed, "combiner.params.k", 4.0)
     assert _get_parameter(changed, "variance.field_reg.tv.weight") == 3.0
     assert _get_parameter(changed, "asic_polish.mask_reg.area_gate.min_area") == 250
-    assert _get_parameter(changed, "combiner.params.k") == 4.0
     assert _get_parameter(pipeline, "variance.field_reg.tv.weight") == 4.0
 
 
