@@ -268,7 +268,7 @@ class MaskValidationReport:
         )
         image = None
         for ax, (label, values) in zip(axes[0], maps):
-            image = ax.imshow(values, cmap="inferno", vmin=0.0, vmax=0.5)
+            image = ax.imshow(values, cmap="viridis", vmin=0.0, vmax=0.5)
             ax.set_title(label)
             ax.axis("off")
         if image is not None:

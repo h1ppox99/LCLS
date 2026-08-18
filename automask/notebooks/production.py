@@ -243,48 +243,30 @@ plt.show()
 
 # %% [markdown]
 # ## 4. Validation
-
+#
 # %%
-from automask.evaluation import evaluate_consistency
+from automask.evaluation import MaskValidationDesign, ParameterSweep, validate_mask
 
-consistency = evaluate_consistency(
-    MASKING_PIPELINE, RUN, selection=LIT_SELECTION, store=store, n_folds=10
+validation_report = validate_mask(
+    MASKING_PIPELINE,
+    RUN,
+    selection=LIT_SELECTION,
+    store=store,
+    design=MaskValidationDesign(
+        sweeps=(
+            ParameterSweep(
+                "variance.params.k",
+                (3.0, 4.0),
+                "Check the declared +/-0.5 threshold tolerance",
+            ),
+            ParameterSweep(
+                "variance.field_reg.tv.weight",
+                (2.0, 8.0),
+                "Check nearby smoothing strengths",
+            ),
+        ),
+        n_folds=10,
+    ),
 )
-round_robin = consistency["round_robin"]
-chronological = consistency["chronological"]
-print(
-    f"round-robin fold IoU: {round_robin['fold_iou_mean']:.3f} ± "
-    f"{round_robin['fold_iou_std']:.3f}; chronological fold IoU: "
-    f"{chronological['fold_iou_mean']:.3f} ± {chronological['fold_iou_std']:.3f}"
-)
-
-# %%
-import matplotlib.pyplot as plt
-import numpy as np
-from automask.image_store import REDUCTIONS
-from automask.sample import DERIVED
-from automask.viz import show_mask
-
-n_folds = consistency["n_folds"]
-reductions = sorted(({"mean", *MASKING_PIPELINE.needs()} - set(DERIVED)) & REDUCTIONS)
-folds = {
-    name: store.folds(RUN, LIT_SELECTION, name, n_folds=n_folds) for name in reductions
-}
-
-base = Sample.from_store(RUN, LIT_SELECTION, MASKING_PIPELINE.needs(), store=store)
-floor = np.asarray(MASKING_PIPELINE.floor(base))
-masks = [
-    np.asarray(
-        MASKING_PIPELINE.run(
-            base.with_arrays(**{name: folds[name][i] for name in reductions})
-        )
-    )
-    for i in range(n_folds)
-]
-
-fig, axes = plt.subplots(2, 5, figsize=(15, 6))
-for i, (ax, mask) in enumerate(zip(axes.flat, masks)):
-    show_mask(mask & ~floor, ax=ax, title=f"Fold {i + 1}")  # evidence only
-fig.tight_layout()
-save_figure(fig, f"run_{RUN:04d}_consistency_folds.png")
-plt.show()
+validation_report.display()
+MASKING_PIPELINE = validation_report.recommended_pipeline
