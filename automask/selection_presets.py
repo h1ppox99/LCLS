@@ -1,4 +1,5 @@
 """Experiment-specific shot selections for xppl1016922."""
+
 from __future__ import annotations
 
 from automask.shot_selection import Condition, PercentileTrim, ShotSelection

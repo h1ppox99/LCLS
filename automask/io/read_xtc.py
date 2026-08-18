@@ -5,6 +5,7 @@ Production psana access to calibrated xppl1016922 XTC data.
 uses the standard experiment resolver. Both feed the same frame, calibration,
 geometry, and profiling workflow.
 """
+
 from __future__ import annotations
 import os
 import re
@@ -16,19 +17,24 @@ import numpy as np
 from automask.io.psana1 import Psana1RunSource
 
 # --- local data locations --------------------------------------------------
-ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))   # .../LCLS (automask/io/ -> LCLS)
+ROOT = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)  # .../LCLS (automask/io/ -> LCLS)
 XTC_DIR = os.path.join(ROOT, "xtc")
 EXPERIMENT = "xppl1016922"
 
 
 def calib_dir() -> str:
-    """Resolve the experiment calib tree from ``SIT_PSDM_DATA`` *at call time*.
-    """
+    """Resolve the experiment calib tree from ``SIT_PSDM_DATA`` *at call time*."""
     return os.path.join(
         os.environ.get("SIT_PSDM_DATA", os.path.join(os.path.dirname(ROOT), "psdm")),
-        "xpp", "xppl1016922", "calib")
+        "xpp",
+        "xppl1016922",
+        "calib",
+    )
 
-JUNGFRAU_NAME = "jungfrau1M_alcove"       # psana alias; source is XppEndstation.0:Jungfrau.0
+
+JUNGFRAU_NAME = "jungfrau1M_alcove"  # psana alias; source is XppEndstation.0:Jungfrau.0
 
 
 def available_xtc_runs(
@@ -37,9 +43,7 @@ def available_xtc_runs(
 ) -> Tuple[int, ...]:
     """Sorted runs represented by at least one local XTC stream."""
     directory = Path(xtc_dir)
-    pattern = re.compile(
-        rf"^{re.escape(experiment)}-r(?P<run>\d+)-s\d+-c\d+\.xtc$"
-    )
+    pattern = re.compile(rf"^{re.escape(experiment)}-r(?P<run>\d+)-s\d+-c\d+\.xtc$")
     runs = set()
     for path in directory.glob(f"{experiment}-r*-s*-c*.xtc"):
         match = pattern.match(path.name)
@@ -64,7 +68,9 @@ def slac_run_source(run: int, *, mpi: bool = False) -> Psana1RunSource:
 def _run_source(run: int, source: Psana1RunSource | None) -> Psana1RunSource:
     resolved = source or local_run_source(run)
     if resolved.run != run:
-        raise ValueError(f"requested run {run}, but source describes run {resolved.run}")
+        raise ValueError(
+            f"requested run {run}, but source describes run {resolved.run}"
+        )
     return resolved
 
 
@@ -121,8 +127,8 @@ def detector_calibration(
     accessor = getattr(detector, constant, None)
     if not callable(accessor):
         raise ValueError(
-            f"psana Detector for {detname!r} has no calibration accessor "
-            f"{constant!r}")
+            f"psana Detector for {detname!r} has no calibration accessor {constant!r}"
+        )
     values = accessor(run)
     if values is None:
         raise RuntimeError(
@@ -135,12 +141,14 @@ def detector_calibration(
         if not 0 <= gain < values.shape[0]:
             raise ValueError(
                 f"calibration {constant!r} for run {run} has {values.shape[0]} "
-                f"gain stages; got gain={gain}")
+                f"gain stages; got gain={gain}"
+            )
         values = values[gain]
     if values.shape != panel_shape:
         raise ValueError(
             f"calibration {constant!r} for run {run} has shape {values.shape}, "
-            f"expected the panel shape {panel_shape}")
+            f"expected the panel shape {panel_shape}"
+        )
     return values
 
 
@@ -154,7 +162,7 @@ def panel_geometry(
 
     ds = _run_source(run, source).open()
     det = psana.Detector(detname)
-    next(ds.events())                     # psana needs one event before geometry
+    next(ds.events())  # psana needs one event before geometry
     ix = np.asarray(det.indexes_x(run), dtype=np.int64)
     iy = np.asarray(det.indexes_y(run), dtype=np.int64)
     return ix, iy

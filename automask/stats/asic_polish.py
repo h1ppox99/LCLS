@@ -18,6 +18,7 @@ evidence to make it separable.
 Runs in native panel space (assembly scrambles ASIC boundaries) and projects
 back to assembled space via the frozen index maps, so it stays numpy-only.
 """
+
 from __future__ import annotations
 from dataclasses import dataclass
 
@@ -30,10 +31,10 @@ MAD_TO_SIGMA = 1.4826
 
 @dataclass
 class AsicPolishParams:
-    asic: int = 256         # ASIC tile size (Jungfrau: 256x256)
-    n_iter: int = 3         # median-polish sweeps (row+column per sweep)
-    k: float = 15.0         # threshold, in post-aggregation sigma (see blob_scale)
-    mode: str = "high"      # flag pixels ABOVE the local pedestal (hot/leaky)
+    asic: int = 256  # ASIC tile size (Jungfrau: 256x256)
+    n_iter: int = 3  # median-polish sweeps (row+column per sweep)
+    k: float = 15.0  # threshold, in post-aggregation sigma (see blob_scale)
+    mode: str = "high"  # flag pixels ABOVE the local pedestal (hot/leaky)
 
 
 def median_polish(block, n_iter=3):
@@ -62,9 +63,9 @@ def asic_polish_stat(panel, run, asic=256, n_iter=3):
     for p in range(panel.shape[0]):
         for r0 in range(0, panel.shape[1], asic):
             for c0 in range(0, panel.shape[2], asic):
-                res = median_polish(panel[p, r0:r0+asic, c0:c0+asic], n_iter)
+                res = median_polish(panel[p, r0 : r0 + asic, c0 : c0 + asic], n_iter)
                 sigma = MAD_TO_SIGMA * np.median(np.abs(res - np.median(res)))
-                z[p, r0:r0+asic, c0:c0+asic] = res / (sigma + 1e-12)
+                z[p, r0 : r0 + asic, c0 : c0 + asic] = res / (sigma + 1e-12)
     return panel_to_asm(z, run)
 
 
@@ -74,12 +75,14 @@ def compute(sample, params: AsicPolishParams | None = None):
     return asic_polish_stat(sample.pedestals, sample.run, p.asic, p.n_iter)
 
 
-register_stat(StatSpec(
-    name="asic_polish",
-    compute=compute,
-    params=AsicPolishParams,
-    kind="field",
-    mode="high",
-    needs=("pedestals",),
-    doc="per-ASIC median-polish z of the pedestal constants; pair with blob_scale",
-))
+register_stat(
+    StatSpec(
+        name="asic_polish",
+        compute=compute,
+        params=AsicPolishParams,
+        kind="field",
+        mode="high",
+        needs=("pedestals",),
+        doc="per-ASIC median-polish z of the pedestal constants; pair with blob_scale",
+    )
+)

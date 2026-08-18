@@ -14,20 +14,33 @@ Every function takes an optional ``ax`` and returns its artist/figure, so the
 same code works inline (Jupyter/IDE) and headless -- the Agg guard below picks a
 non-interactive backend when there is no display.
 """
+
 from __future__ import annotations
 import os
 
 import numpy as np
 import matplotlib
+
 if not os.environ.get("MPLBACKEND") and not (
-        os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+    os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
+):
     matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 
 # ── 1. primitive ──────────────────────────────────────────────────────────────
-def show(img, ax=None, *, mask=None, robust=True, vmin=None, vmax=None,
-         cmap="magma", cbar=True, title=""):
+def show(
+    img,
+    ax=None,
+    *,
+    mask=None,
+    robust=True,
+    vmin=None,
+    vmax=None,
+    cmap="magma",
+    cbar=True,
+    title="",
+):
     """Render one assembled detector array ``(1064, 1030)`` with sane defaults.
 
     Dead/zero and non-finite pixels are shown neutral (never counted in the
@@ -84,9 +97,7 @@ def _n_used(store, run, selection, reduction):
     return c.get("n_used") if c else None
 
 
-def show_image(
-    run, selection, reduction="mean", ax=None, store=None, out=None, **kw
-):
+def show_image(run, selection, reduction="mean", ax=None, store=None, out=None, **kw):
     """Render one selected-shot reduction, computing it on a cache miss."""
     from automask.image_store import ImageStore
 
@@ -100,8 +111,9 @@ def show_image(
     return im
 
 
-def compare_selections(run, selections, reduction="mean", store=None,
-                       shared_scale=True, out=None, **kw):
+def compare_selections(
+    run, selections, reduction="mean", store=None, shared_scale=True, out=None, **kw
+):
     """Grid of one reduction per ShotSelection.
 
     With ``shared_scale`` all panels share one 1–99th-percentile colour scale
@@ -128,11 +140,16 @@ def compare_selections(run, selections, reduction="mean", store=None,
     axes = axes[0]
     im = None
     for ax, selection, img in zip(axes, selections, imgs):
-        im = show(img, ax=ax, robust=not shared_scale, vmin=vmin, vmax=vmax,
-                  cbar=False,
-                  title=_sel_label(
-                      selection, _n_used(store, run, selection, reduction)
-                  ), **kw)
+        im = show(
+            img,
+            ax=ax,
+            robust=not shared_scale,
+            vmin=vmin,
+            vmax=vmax,
+            cbar=False,
+            title=_sel_label(selection, _n_used(store, run, selection, reduction)),
+            **kw,
+        )
     if shared_scale and im is not None:
         fig.colorbar(im, ax=list(axes), fraction=0.025, pad=0.02)
     fig.suptitle(f"run {run:04d} — {reduction}", fontsize=13)
@@ -149,7 +166,8 @@ def show_mask(mask, ax=None, color=(0.85, 0.1, 0.1), title=""):
     if ax is None:
         _, ax = plt.subplots(figsize=(6, 6.2))
     ax.imshow(rgb)
-    ax.set_xticks([]); ax.set_yticks([])
+    ax.set_xticks([])
+    ax.set_yticks([])
     # Off-white rather than white, with a frame: a sparse mask on a white page is
     # indistinguishable from an empty panel (hough_lines beyond the floor is 0.00%
     # on run 475 -- that has to read as "found nothing", not as a broken figure).
@@ -164,6 +182,7 @@ def _channel_input(channel, sample):
     """The image a channel reads, as (field name, assembled array), or None."""
     from automask.stats.base import STATS
     from automask.geometry import panel_to_asm
+
     for name in STATS[channel.stat].needs:
         if name in ("real", "center"):
             continue
@@ -195,24 +214,26 @@ def channel_panels(pipeline, sample, out=None, floor_row=True, store=None):
         raise ValueError("no channel in this pipeline reads an assembled image")
 
     store = store or ImageStore()
-    fig, axes = plt.subplots(len(rows), 2, figsize=(11, 5.4 * len(rows)),
-                             squeeze=False)
+    fig, axes = plt.subplots(len(rows), 2, figsize=(11, 5.4 * len(rows)), squeeze=False)
     for (d, fname, img), (ax_l, ax_r) in zip(rows, axes):
         if fname in ("mean", "std", "median", "mad"):
             label = f"{fname} — {_sel_label(sample.selection, _n_used(store, sample.run, sample.selection, fname))}"
         else:
             label = f"{fname} — psana calibration constant"
         if d is None:
-            mask, name = base, "+".join(c.label for c in pipeline.floor_channels) + " floor"
+            mask, name = (
+                base,
+                "+".join(c.label for c in pipeline.floor_channels) + " floor",
+            )
         else:
             mask, name = d.pick(sample) & ~base, f"{d.label} (beyond floor)"
         show(img, ax=ax_l, title=label, cbar=False)
-        show_mask(mask, ax=ax_r,
-                  title=f"{name} — {100 * mask.mean():.2f}% masked")
+        show_mask(mask, ax=ax_r, title=f"{name} — {100 * mask.mean():.2f}% masked")
 
-    note = f"   (skipped: {', '.join(skipped)} — non-assembled input)" if skipped else ""
-    fig.suptitle(f"run {sample.run:04d} — pipeline inputs and masks{note}",
-                 fontsize=13)
+    note = (
+        f"   (skipped: {', '.join(skipped)} — non-assembled input)" if skipped else ""
+    )
+    fig.suptitle(f"run {sample.run:04d} — pipeline inputs and masks{note}", fontsize=13)
     fig.tight_layout(rect=[0, 0, 1, 0.97])
     if out:
         fig.savefig(out, dpi=110, bbox_inches="tight")
@@ -233,21 +254,31 @@ def agree_rgb(pred, truth):
 def save_agreement(pred, floor, human, run, out, title=""):
     """Two-panel residual figure: pick-vs-residual-target error map + full mask."""
     from automask.dataset import score
+
     target = human & ~floor
     resid = score(pred & ~floor, target)
     full = score(pred, human)
 
     fig, ax = plt.subplots(1, 2, figsize=(11, 5.4))
-    ax[0].imshow(agree_rgb(pred & ~floor, target)); ax[0].axis("off")
-    ax[0].set_title(f"residual (green=TP red=FP blue=FN)\n"
-                    f"T-IoU={resid['iou']:.3f} p={resid['precision']:.2f} "
-                    f"r={resid['recall']:.2f}", fontsize=11)
-    ax[1].imshow(agree_rgb(pred, human)); ax[1].axis("off")
-    ax[1].set_title(f"full mask vs human\nIoU={full['iou']:.3f} "
-                    f"p={full['precision']:.2f} r={full['recall']:.2f}", fontsize=11)
+    ax[0].imshow(agree_rgb(pred & ~floor, target))
+    ax[0].axis("off")
+    ax[0].set_title(
+        f"residual (green=TP red=FP blue=FN)\n"
+        f"T-IoU={resid['iou']:.3f} p={resid['precision']:.2f} "
+        f"r={resid['recall']:.2f}",
+        fontsize=11,
+    )
+    ax[1].imshow(agree_rgb(pred, human))
+    ax[1].axis("off")
+    ax[1].set_title(
+        f"full mask vs human\nIoU={full['iou']:.3f} "
+        f"p={full['precision']:.2f} r={full['recall']:.2f}",
+        fontsize=11,
+    )
     fig.suptitle(title or f"run {run} — masking result", fontsize=13)
     fig.tight_layout(rect=[0, 0, 1, 0.94])
-    fig.savefig(out, dpi=100, bbox_inches="tight"); plt.close(fig)
+    fig.savefig(out, dpi=100, bbox_inches="tight")
+    plt.close(fig)
     return out
 
 
@@ -255,6 +286,7 @@ def save_agreement(pred, floor, human, run, out, title=""):
 def plot_results_heatmap(csv_path, xcol, ycol, out, metric="mean_iou"):
     """2-D `metric` heatmap over two swept columns from a sweep results.csv."""
     import csv
+
     rows = list(csv.DictReader(open(csv_path)))
     if not rows:
         raise ValueError(f"empty results csv: {csv_path}")
@@ -262,18 +294,37 @@ def plot_results_heatmap(csv_path, xcol, ycol, out, metric="mean_iou"):
     ys = sorted({float(r[ycol]) for r in rows})
     H = np.full((len(ys), len(xs)), np.nan)
     for r in rows:
-        i = ys.index(float(r[ycol])); j = xs.index(float(r[xcol]))
+        i = ys.index(float(r[ycol]))
+        j = xs.index(float(r[xcol]))
         H[i, j] = float(r[metric])
     fig, ax = plt.subplots(figsize=(1.6 + 1.1 * len(xs), 1.6 + 1.0 * len(ys)))
-    im = ax.imshow(H, origin="lower", aspect="auto", cmap="viridis",
-                   extent=[0, len(xs), 0, len(ys)])
+    im = ax.imshow(
+        H,
+        origin="lower",
+        aspect="auto",
+        cmap="viridis",
+        extent=[0, len(xs), 0, len(ys)],
+    )
     bi, bj = np.unravel_index(np.nanargmax(H), H.shape)
-    ax.scatter([bj + 0.5], [bi + 0.5], marker="*", s=220, color="red", edgecolor="w",
-               label=f"best {metric}={H[bi,bj]:.3f}")
-    ax.set_xticks(np.arange(len(xs)) + 0.5); ax.set_xticklabels([f"{x:g}" for x in xs])
-    ax.set_yticks(np.arange(len(ys)) + 0.5); ax.set_yticklabels([f"{y:g}" for y in ys])
-    ax.set_xlabel(xcol); ax.set_ylabel(ycol); ax.legend(loc="lower right", fontsize=9)
+    ax.scatter(
+        [bj + 0.5],
+        [bi + 0.5],
+        marker="*",
+        s=220,
+        color="red",
+        edgecolor="w",
+        label=f"best {metric}={H[bi, bj]:.3f}",
+    )
+    ax.set_xticks(np.arange(len(xs)) + 0.5)
+    ax.set_xticklabels([f"{x:g}" for x in xs])
+    ax.set_yticks(np.arange(len(ys)) + 0.5)
+    ax.set_yticklabels([f"{y:g}" for y in ys])
+    ax.set_xlabel(xcol)
+    ax.set_ylabel(ycol)
+    ax.legend(loc="lower right", fontsize=9)
     ax.set_title(f"{metric} over ({xcol}, {ycol})")
     fig.colorbar(im, ax=ax, fraction=0.046, label=metric)
-    fig.tight_layout(); fig.savefig(out, dpi=110, bbox_inches="tight"); plt.close(fig)
+    fig.tight_layout()
+    fig.savefig(out, dpi=110, bbox_inches="tight")
+    plt.close(fig)
     return out

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Hydra sweep driver for the recovered masking pipeline."""
+
 from __future__ import annotations
 
 import csv
@@ -47,8 +48,10 @@ def _reg_params(names, cfg_params):
     if raw is None:
         raw = [None] * len(names)
     if len(raw) != len(names):
-        raise ValueError(f"regularizer list {names} has {len(names)} entries but "
-                         f"{len(raw)} params entries")
+        raise ValueError(
+            f"regularizer list {names} has {len(names)} entries but "
+            f"{len(raw)} params entries"
+        )
     return [REGULARIZERS[n].params(**(r or {})) for n, r in zip(names, raw)]
 
 
@@ -64,7 +67,8 @@ def _channel_from_dict(channel: dict) -> Channel:
     field_reg = _reg_names(channel.get("field_reg"))
     mask_reg = _reg_names(channel.get("mask_reg"))
     return Channel(
-        stat, STATS[stat].params(**(channel.get("params") or {})),
+        stat,
+        STATS[stat].params(**(channel.get("params") or {})),
         field_reg=field_reg,
         field_reg_params=_reg_params(field_reg, channel.get("field_reg_params")),
         mask_reg=mask_reg,
@@ -82,20 +86,28 @@ def build_pipeline(cfg: DictConfig) -> Pipeline:
     combiner = cfg.combine.name
     combiner_params = _params(COMBINERS, combiner, cfg.combine.get("params"))
     if cfg.get("channels"):
-        evidence = [_channel_from_dict(OmegaConf.to_container(c, resolve=True))
-                    for c in cfg.channels]
+        evidence = [
+            _channel_from_dict(OmegaConf.to_container(c, resolve=True))
+            for c in cfg.channels
+        ]
     else:
         field_reg = _reg_names(cfg.regularization.name)
         mask_reg = _reg_names(cfg.mask_reg.name)
-        evidence = [Channel(
-            cfg.stat.name, _params(STATS, cfg.stat.name, cfg.stat.get("params")),
-            field_reg=field_reg,
-            field_reg_params=_reg_params(field_reg, cfg.regularization.get("params")),
-            mask_reg=mask_reg,
-            mask_reg_params=_reg_params(mask_reg, cfg.mask_reg.get("params")),
-        )]
-    return Pipeline(floor_channels() + evidence, combiner=combiner,
-                    combiner_params=combiner_params)
+        evidence = [
+            Channel(
+                cfg.stat.name,
+                _params(STATS, cfg.stat.name, cfg.stat.get("params")),
+                field_reg=field_reg,
+                field_reg_params=_reg_params(
+                    field_reg, cfg.regularization.get("params")
+                ),
+                mask_reg=mask_reg,
+                mask_reg_params=_reg_params(mask_reg, cfg.mask_reg.get("params")),
+            )
+        ]
+    return Pipeline(
+        floor_channels() + evidence, combiner=combiner, combiner_params=combiner_params
+    )
 
 
 def _runs_for_phase(eval_cfg):
@@ -111,21 +123,27 @@ def _runs_for_phase(eval_cfg):
 def main(cfg: DictConfig):
     pipe = build_pipeline(cfg)
     phase, runs = _runs_for_phase(cfg.eval)
-    label = (",".join(c.label for c in pipe.evidence_channels)
-             + f" | {cfg.combine.name}")
+    label = ",".join(c.label for c in pipe.evidence_channels) + f" | {cfg.combine.name}"
     print(f"=== {phase}: {label}  (runs {runs}) ===")
 
     metrics = evaluate(pipe, runs, verbose=True)
     mean = metrics["mean"]
-    print(f"  MEAN: IoU {mean['iou']:.3f}  prec {mean['precision']:.3f}  "
-          f"rec {mean['recall']:.3f}  (residual IoU {mean['residual_iou']:.3f})")
+    print(
+        f"  MEAN: IoU {mean['iou']:.3f}  prec {mean['precision']:.3f}  "
+        f"rec {mean['recall']:.3f}  (residual IoU {mean['residual_iou']:.3f})"
+    )
 
     # Flatten the swept overrides for the results row.
-    row = {"phase": phase, "runs": ",".join(str(run) for run in runs),
-           "channels": label, "combine": cfg.combine.name,
-           "mean_iou": mean["iou"], "mean_precision": mean["precision"],
-           "mean_recall": mean["recall"],
-           "mean_residual_iou": mean["residual_iou"]}
+    row = {
+        "phase": phase,
+        "runs": ",".join(str(run) for run in runs),
+        "channels": label,
+        "combine": cfg.combine.name,
+        "mean_iou": mean["iou"],
+        "mean_precision": mean["precision"],
+        "mean_recall": mean["recall"],
+        "mean_residual_iou": mean["residual_iou"],
+    }
     for k in ("stat", "regularization", "mask_reg"):
         p = cfg.get(k, {}).get("params") if cfg.get(k) else None
         if p:
@@ -141,6 +159,7 @@ def main(cfg: DictConfig):
     # so resolve to an absolute path first.
     try:
         from hydra.core.hydra_config import HydraConfig
+
         hc = HydraConfig.get()
         base = hc.sweep.dir if hc.mode.name == "MULTIRUN" else hc.run.dir
         if not os.path.isabs(base):
@@ -159,16 +178,24 @@ def main(cfg: DictConfig):
 
     if cfg.figures:
         from automask import viz
+
         figure_dir = os.path.join(AUTOMASK, "outputs", "figures")
         os.makedirs(figure_dir, exist_ok=True)
         for run in runs:
             sample = Sample.from_store(run, BEAM_ON_SELECTION, pipe.needs())
             out = os.path.join(figure_dir, f"sweep_{cfg.stat.name}_run{run:04d}.png")
-            viz.save_agreement(pipe.run(sample), pipe.floor(sample),
-                               reference_mask(run), run, out,
-                               title=f"{label} — run {run}")
+            viz.save_agreement(
+                pipe.run(sample),
+                pipe.floor(sample),
+                reference_mask(run),
+                run,
+                out,
+                title=f"{label} — run {run}",
+            )
             print(f"  [saved] {out}")
-            panels = os.path.join(figure_dir, f"panels_{cfg.stat.name}_run{run:04d}.png")
+            panels = os.path.join(
+                figure_dir, f"panels_{cfg.stat.name}_run{run:04d}.png"
+            )
             viz.channel_panels(pipe, sample, out=panels)
             print(f"  [saved] {panels}")
     return mean["residual_iou"]

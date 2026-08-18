@@ -1,6 +1,7 @@
 """
 stats/blackhat.py -- black-hat (dark-speck) statistic.
 """
+
 from __future__ import annotations
 from dataclasses import dataclass
 
@@ -12,9 +13,9 @@ from automask.stats.base import StatSpec, register_stat, robust_z
 
 @dataclass
 class BlackhatParams:
-    radius: int = 5         # structuring-element radius
-    k: float = 6.0          # robust-MAD threshold
-    mode: str = "high"      # black-hat responds one-sided (R >= 0)
+    radius: int = 5  # structuring-element radius
+    k: float = 6.0  # robust-MAD threshold
+    mode: str = "high"  # black-hat responds one-sided (R >= 0)
 
 
 def blackhat_stat(lit, real, radius=5):
@@ -31,12 +32,14 @@ def compute(sample, params: BlackhatParams | None = None):
     return blackhat_stat(sample.mean, sample.real, radius=radius)
 
 
-register_stat(StatSpec(
-    name="blackhat",
-    compute=compute,
-    params=BlackhatParams,
-    kind="field",
-    mode="high",
-    needs=("mean", "real"),
-    doc="grey black-hat response z-score; needs the selected-shot mean",
-))
+register_stat(
+    StatSpec(
+        name="blackhat",
+        compute=compute,
+        params=BlackhatParams,
+        kind="field",
+        mode="high",
+        needs=("mean", "real"),
+        doc="grey black-hat response z-score; needs the selected-shot mean",
+    )
+)

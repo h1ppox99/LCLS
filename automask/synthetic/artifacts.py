@@ -21,6 +21,7 @@ generators stay resolution-agnostic; widths/radii/lengths are in pixels.
 
 Mask convention matches the rest of automask: True == masked/invalid.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -35,7 +36,7 @@ def _robust_stats(values: np.ndarray) -> tuple[float, float]:
     med = float(np.median(values))
     mad = float(np.median(np.abs(values - med)))
     std = 1.4826 * mad
-    if std == 0.0:                       # near-constant region -> fall back
+    if std == 0.0:  # near-constant region -> fall back
         std = float(np.std(values)) or 1.0
     return med, std
 
@@ -54,8 +55,9 @@ def _random_center(rng, shape) -> tuple[float, float]:
 # --------------------------------------------------------------------------
 # 1. straight streak
 # --------------------------------------------------------------------------
-def streak_profile(shape, rng, *, center=None, angle_deg=None, width=2.0,
-                   length=None, band_sigmas=1.0):
+def streak_profile(
+    shape, rng, *, center=None, angle_deg=None, width=2.0, length=None, band_sigmas=1.0
+):
     """Geometry of a straight streak, independent of any intensity array.
 
     Returns ``(profile_unit, band)``: a UNIT-amplitude Gaussian line (times the
@@ -69,14 +71,14 @@ def streak_profile(shape, rng, *, center=None, angle_deg=None, width=2.0,
     if angle_deg is None:
         angle_deg = float(rng.uniform(0.0, 180.0))
     if length is None:
-        length = float(np.hypot(h, w))              # cross the whole frame
+        length = float(np.hypot(h, w))  # cross the whole frame
 
     th = np.deg2rad(angle_deg)
-    s, t = np.sin(th), np.cos(th)                   # unit direction (row, col)
+    s, t = np.sin(th), np.cos(th)  # unit direction (row, col)
     rr, cc = np.mgrid[0:h, 0:w]
     dr, dc = rr - r0, cc - c0
-    perp = dr * t - dc * s                          # perpendicular distance
-    along = dr * s + dc * t                         # distance along the line
+    perp = dr * t - dc * s  # perpendicular distance
+    along = dr * s + dc * t  # distance along the line
 
     on_segment = np.abs(along) <= length / 2.0
     profile_unit = np.exp(-0.5 * (perp / width) ** 2) * on_segment
@@ -84,9 +86,18 @@ def streak_profile(shape, rng, *, center=None, angle_deg=None, width=2.0,
     return profile_unit, band
 
 
-def straight_streak(image, valid, rng, *, center=None, angle_deg=None,
-                    width=2.0, amplitude_sigma=8.0, length=None,
-                    band_sigmas=1.0):
+def straight_streak(
+    image,
+    valid,
+    rng,
+    *,
+    center=None,
+    angle_deg=None,
+    width=2.0,
+    amplitude_sigma=8.0,
+    length=None,
+    band_sigmas=1.0,
+):
     """Add a Gaussian-profile straight line (a scattering streak / zinger track).
 
     ``amplitude`` is set to ``amplitude_sigma`` robust std of the source, so the
@@ -96,10 +107,16 @@ def straight_streak(image, valid, rng, *, center=None, angle_deg=None,
     """
     out = np.array(image, dtype=np.float64, copy=True)
     profile_unit, band = streak_profile(
-        image.shape, rng, center=center, angle_deg=angle_deg, width=width,
-        length=length, band_sigmas=band_sigmas)
+        image.shape,
+        rng,
+        center=center,
+        angle_deg=angle_deg,
+        width=width,
+        length=length,
+        band_sigmas=band_sigmas,
+    )
     _, sd = _robust_stats(out[valid])
-    out[valid] += amplitude_sigma * sd * profile_unit[valid]   # invalid untouched
+    out[valid] += amplitude_sigma * sd * profile_unit[valid]  # invalid untouched
     injected = band & valid
     return out, injected
 
@@ -107,8 +124,17 @@ def straight_streak(image, valid, rng, *, center=None, angle_deg=None,
 # --------------------------------------------------------------------------
 # 2. beam-stop-like shadow (elliptical or rectangular)
 # --------------------------------------------------------------------------
-def beamstop_factor(shape, rng, *, center=None, radius=60.0, axis_ratio=1.0,
-                    transmission=0.15, softness=0.15, shape_kind="random"):
+def beamstop_factor(
+    shape,
+    rng,
+    *,
+    center=None,
+    radius=60.0,
+    axis_ratio=1.0,
+    transmission=0.15,
+    softness=0.15,
+    shape_kind="random",
+):
     """Geometry of a beam-stop shadow, independent of any intensity array.
 
     Returns ``(factor, core)``: a multiplicative field (``transmission`` in the
@@ -128,7 +154,7 @@ def beamstop_factor(shape, rng, *, center=None, radius=60.0, axis_ratio=1.0,
     if shape_kind == "ellipse":
         norm = np.sqrt((dr / a) ** 2 + (dc / b) ** 2)
     elif shape_kind == "rect":
-        norm = np.maximum(dr / a, dc / b)           # L-inf -> axis-aligned box
+        norm = np.maximum(dr / a, dc / b)  # L-inf -> axis-aligned box
     else:
         raise ValueError(f"shape must be ellipse/rect/random, got {shape_kind!r}")
 
@@ -137,22 +163,38 @@ def beamstop_factor(shape, rng, *, center=None, radius=60.0, axis_ratio=1.0,
     factor[core] = transmission
     if softness > 0:
         ramp = (norm > 1.0) & (norm <= 1.0 + softness)
-        frac = (norm[ramp] - 1.0) / softness        # 0 at core edge -> 1
+        frac = (norm[ramp] - 1.0) / softness  # 0 at core edge -> 1
         factor[ramp] = transmission + frac * (1.0 - transmission)
     return factor, core
 
 
-def beamstop_shadow(image, valid, rng, *, center=None, radius=60.0,
-                    axis_ratio=1.0, transmission=0.15, softness=0.15,
-                    shape="random"):
+def beamstop_shadow(
+    image,
+    valid,
+    rng,
+    *,
+    center=None,
+    radius=60.0,
+    axis_ratio=1.0,
+    transmission=0.15,
+    softness=0.15,
+    shape="random",
+):
     """Multiply intensities inside an elliptical or rectangular region by
     ``transmission`` in (0, 1), with an optional soft boundary. The injected
     footprint is the fully-shadowed core (normalised distance <= 1)."""
     out = np.array(image, dtype=np.float64, copy=True)
     factor, core = beamstop_factor(
-        image.shape, rng, center=center, radius=radius, axis_ratio=axis_ratio,
-        transmission=transmission, softness=softness, shape_kind=shape)
-    out[valid] = out[valid] * factor[valid]         # invalid pixels untouched
+        image.shape,
+        rng,
+        center=center,
+        radius=radius,
+        axis_ratio=axis_ratio,
+        transmission=transmission,
+        softness=softness,
+        shape_kind=shape,
+    )
+    out[valid] = out[valid] * factor[valid]  # invalid pixels untouched
     injected = core & valid
     return out, injected
 
@@ -160,8 +202,18 @@ def beamstop_shadow(image, valid, rng, *, center=None, radius=60.0,
 # --------------------------------------------------------------------------
 # 3. hot patch -- additive bright compact region (dark-current / pedestal defect)
 # --------------------------------------------------------------------------
-def hot_patch(image, valid, rng, *, center=None, radius=20.0, axis_ratio=1.0,
-              amplitude_sigma=8.0, softness=0.15, shape="random"):
+def hot_patch(
+    image,
+    valid,
+    rng,
+    *,
+    center=None,
+    radius=20.0,
+    axis_ratio=1.0,
+    amplitude_sigma=8.0,
+    softness=0.15,
+    shape="random",
+):
     """Add a compact bright region: the polarity of a leaky / high-dark-current
     patch of sensor, as seen in the pedestal constants.
 
@@ -178,21 +230,42 @@ def hot_patch(image, valid, rng, *, center=None, radius=20.0, axis_ratio=1.0,
     """
     out = np.array(image, dtype=np.float64, copy=True)
     profile, core = hot_patch_profile(
-        image.shape, rng, center=center, radius=radius, axis_ratio=axis_ratio,
-        softness=softness, shape_kind=shape)
+        image.shape,
+        rng,
+        center=center,
+        radius=radius,
+        axis_ratio=axis_ratio,
+        softness=softness,
+        shape_kind=shape,
+    )
     _, sd = _robust_stats(out[valid])
-    out[valid] += amplitude_sigma * sd * profile[valid]      # invalid untouched
+    out[valid] += amplitude_sigma * sd * profile[valid]  # invalid untouched
     return out, core & valid
 
 
-def hot_patch_profile(shape, rng, *, center=None, radius=20.0, axis_ratio=1.0,
-                      softness=0.15, shape_kind="random"):
+def hot_patch_profile(
+    shape,
+    rng,
+    *,
+    center=None,
+    radius=20.0,
+    axis_ratio=1.0,
+    softness=0.15,
+    shape_kind="random",
+):
     """Unit-amplitude additive profile for a hot patch: 1 in the core, ramping to
     0 through the soft boundary. Derived from ``beamstop_factor`` (transmission 0)
     so both artifacts draw identical geometry from the same rng state."""
     factor, core = beamstop_factor(
-        shape, rng, center=center, radius=radius, axis_ratio=axis_ratio,
-        transmission=0.0, softness=softness, shape_kind=shape_kind)
+        shape,
+        rng,
+        center=center,
+        radius=radius,
+        axis_ratio=axis_ratio,
+        transmission=0.0,
+        softness=softness,
+        shape_kind=shape_kind,
+    )
     return 1.0 - factor, core
 
 

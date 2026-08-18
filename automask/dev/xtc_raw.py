@@ -49,6 +49,7 @@ decode are mutually consistent.
 Run:  python -m automask.dev.xtc_raw 389
       python -m automask.dev.xtc_raw 389 --events 2000
 """
+
 from __future__ import annotations
 
 import glob
@@ -62,8 +63,8 @@ import numpy as np
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 XTC_DIR = os.path.join(ROOT, "xtc")
 
-DGRAM_HEADER = 40          # Sequence(16) + Env(4) + Xtc(20)
-XTC_HEADER = 20            # Damage(4) + Src(8) + TypeId(4) + extent(4)
+DGRAM_HEADER = 40  # Sequence(16) + Env(4) + Xtc(20)
+XTC_HEADER = 20  # Damage(4) + Src(8) + TypeId(4) + extent(4)
 INVALID_FIDUCIAL = 0x1FFFF
 
 TID_XTC = 1
@@ -80,13 +81,20 @@ BLD_KNOWN = {0: "EBeam", 1: "PhaseCavity", 2: "FEEGasDetEnergy"}
 #: branch are the informative ones -- they are far enough apart (2.41 vs 1.67)
 #: to separate, and far enough from the upstream monitors (~0.98) that a
 #: mis-assignment cannot hide.
-BRANCH_RATIO_389 = {"lombpm": 2.412, "diodeU": 1.668,
-                    "lomdiode": 0.983, "diode2": 0.978}
+BRANCH_RATIO_389 = {
+    "lombpm": 2.412,
+    "diodeU": 1.668,
+    "lomdiode": 0.983,
+    "diode2": 0.978,
+}
 
 #: Median of the channel the lab reads, run 389 (`docs/DATA.md`), as a second,
 #: independent discriminant.
-CHANNEL_MEDIAN_389 = {"diodeU": (0, 0.0178), "lombpm": (2, 0.2065),
-                      "diode2": (0, 0.0539)}
+CHANNEL_MEDIAN_389 = {
+    "diodeU": (0, 0.0178),
+    "lombpm": (2, 0.2065),
+    "diode2": (0, 0.0539),
+}
 
 BEAM_ON_CODE = 137
 AIN_CC_CHANNEL = 2
@@ -98,14 +106,17 @@ CC_VCC_THRESHOLD = 2.0
 #  container
 # ==========================================================================
 def stream_files(run: int) -> List[str]:
-    files = sorted(glob.glob(os.path.join(XTC_DIR, f"xppl1016922-r{run:04d}-s*-c00.xtc")))
+    files = sorted(
+        glob.glob(os.path.join(XTC_DIR, f"xppl1016922-r{run:04d}-s*-c00.xtc"))
+    )
     if not files:
         raise FileNotFoundError(f"no XTC streams for run {run} in {XTC_DIR}")
     return files
 
 
-def _walk(fh, start: int, end: int, want: frozenset, depth: int = 0,
-          maxdepth: int = 6) -> Iterator[Tuple[int, int, int, bytes]]:
+def _walk(
+    fh, start: int, end: int, want: frozenset, depth: int = 0, maxdepth: int = 6
+) -> Iterator[Tuple[int, int, int, bytes]]:
     """Yield `(typeid, version, src_phy, payload)` for wanted leaves in [start, end).
 
     Walks by SEEKING rather than by loading the datagram: a single event carries
@@ -121,7 +132,7 @@ def _walk(fh, start: int, end: int, want: frozenset, depth: int = 0,
             return
         _damage, _src_log, src_phy, contains, extent = struct.unpack("<5I", head)
         if extent < XTC_HEADER or off + extent > end:
-            return                       # truncated stream: stop, do not guess
+            return  # truncated stream: stop, do not guess
         tid = contains & 0xFFFF
         ver = (contains >> 16) & 0x7FFF
         if tid == TID_XTC and depth < maxdepth:
@@ -150,17 +161,20 @@ def iter_events(path: str, want: Sequence[int], max_events: Optional[int] = None
             head = fh.read(DGRAM_HEADER)
             if len(head) < DGRAM_HEADER:
                 break
-            nsec, sec, _ticks, stamp, _env, _dmg, _sl, _sp, _cont, extent = \
+            nsec, sec, _ticks, stamp, _env, _dmg, _sl, _sp, _cont, extent = (
                 struct.unpack("<10I", head)
+            )
             if extent < XTC_HEADER:
                 break
             end = off + 20 + extent
             if end > size:
-                break                    # truncated final datagram
+                break  # truncated final datagram
             fid = stamp & INVALID_FIDUCIAL
             if fid != INVALID_FIDUCIAL:
-                payloads = {(tid, sp): p
-                            for tid, _v, sp, p in _walk(fh, off + DGRAM_HEADER, end, want)}
+                payloads = {
+                    (tid, sp): p
+                    for tid, _v, sp, p in _walk(fh, off + DGRAM_HEADER, end, want)
+                }
                 if payloads:
                     yield fid, sec + nsec * 1e-9, payloads
                     n += 1
@@ -219,6 +233,7 @@ def decode_gasdet(payload: bytes) -> float:
 @dataclass
 class RawScan:
     """Everything decoded from one stream, before any monitor is given a name."""
+
     run: int
     files: List[str]
     fiducial: np.ndarray
@@ -226,7 +241,7 @@ class RawScan:
     beam_on: np.ndarray
     cc_open: np.ndarray
     vcc_open: np.ndarray
-    volts: np.ndarray                        # (n, 16)
+    volts: np.ndarray  # (n, 16)
     ipm_sum: Dict[int, np.ndarray] = field(default_factory=dict)
     ipm_channels: Dict[int, np.ndarray] = field(default_factory=dict)
     gasdet: Optional[np.ndarray] = None
@@ -281,10 +296,13 @@ def scan(run: int, max_events: Optional[int] = None, verbose: bool = True) -> Ra
     # only sources present on EVERY decoded event are kept.
     keep = {sp for sp, v in sums.items() if len(v) == n}
     if verbose and set(sums) - keep:
-        print(f"[xtc_raw] dropped ragged BLD sources: "
-              f"{sorted(hex(s) for s in set(sums) - keep)}")
+        print(
+            f"[xtc_raw] dropped ragged BLD sources: "
+            f"{sorted(hex(s) for s in set(sums) - keep)}"
+        )
     return RawScan(
-        run=run, files=files,
+        run=run,
+        files=files,
         fiducial=np.asarray(fids, dtype=np.int64),
         clock=np.asarray(clocks, dtype=np.float64),
         beam_on=np.asarray(beam, dtype=bool),
@@ -294,7 +312,8 @@ def scan(run: int, max_events: Optional[int] = None, verbose: bool = True) -> Ra
         ipm_sum={sp: np.asarray(sums[sp]) for sp in keep},
         ipm_channels={sp: np.stack(chans[sp]) for sp in keep},
         gasdet=np.asarray(gas) if len(gas) == n else None,
-        codes_seen=tuple(sorted(codes_seen)))
+        codes_seen=tuple(sorted(codes_seen)),
+    )
 
 
 # ==========================================================================
@@ -353,14 +372,19 @@ def identify_monitors(scan: RawScan, verbose: bool = True) -> Dict[str, int]:
         print("\n  BLD source   branch ratio   median(sum)   identified as")
         for sp, ratio, med in rows:
             name = next((k for k, v in assigned.items() if v == sp), None)
-            tag = (f"{name}  (DATA.md: {BRANCH_RATIO_389[name]:.3f})" if name
-                   else "upstream -- not branch-separable, left unnamed")
+            tag = (
+                f"{name}  (DATA.md: {BRANCH_RATIO_389[name]:.3f})"
+                if name
+                else "upstream -- not branch-separable, left unnamed"
+            )
             print(f"    0x{sp:02x}       {ratio:8.3f}   {med:11.5f}   {tag}")
         for name, (ci, med) in CHANNEL_MEDIAN_389.items():
             if name in assigned:
                 got = float(np.median(scan.ipm_channels[assigned[name]][lit, ci]))
-                print(f"    confirm: {name}/channels[{ci}] median {got:.4f} "
-                      f"(DATA.md run 389: {med:.4f})")
+                print(
+                    f"    confirm: {name}/channels[{ci}] median {got:.4f} "
+                    f"(DATA.md run 389: {med:.4f})"
+                )
     return assigned
 
 
@@ -374,8 +398,8 @@ def validate(scan: RawScan) -> Dict[str, float]:
     out["frac_beam_on"] = float(scan.beam_on.mean())
 
     v2, v3 = scan.volts[:, AIN_CC_CHANNEL], scan.volts[:, AIN_VCC_CHANNEL]
-    rail = ((np.abs(v2) < 0.5) | (np.abs(v2 - 5.05) < 0.5))
-    rail &= ((np.abs(v3) < 0.5) | (np.abs(v3 - 5.05) < 0.5))
+    rail = (np.abs(v2) < 0.5) | (np.abs(v2 - 5.05) < 0.5)
+    rail &= (np.abs(v3) < 0.5) | (np.abs(v3 - 5.05) < 0.5)
     out["frac_shutters_on_rail"] = float(rail.mean())
     out["n_channels"] = float(scan.volts.shape[1])
 
@@ -391,27 +415,39 @@ def validate(scan: RawScan) -> Dict[str, float]:
 
 def main():
     import argparse
+
     ap = argparse.ArgumentParser()
     ap.add_argument("runs", type=int, nargs="*", default=None)
     ap.add_argument("--events", type=int, default=None)
     args = ap.parse_args()
 
-    runs = args.runs or [int(os.path.basename(p).split("-r")[1][:4])
-                         for p in sorted(glob.glob(
-                             os.path.join(XTC_DIR, "xppl1016922-r*-s*-c00.xtc")))]
+    runs = args.runs or [
+        int(os.path.basename(p).split("-r")[1][:4])
+        for p in sorted(glob.glob(os.path.join(XTC_DIR, "xppl1016922-r*-s*-c00.xtc")))
+    ]
     for run in sorted(set(runs)):
         print(f"\n{'=' * 70}\nrun {run}")
         s = scan(run, args.events)
         v = validate(s)
-        print(f"  events {int(v['n_events'])}, beam on {100*v['frac_beam_on']:.1f}%, "
-              f"EVR codes {list(s.codes_seen)}")
-        print(f"  analog input: {int(v['n_channels'])} channels, "
-              f"{100*v['frac_shutters_on_rail']:.1f}% of shots have ch02/ch03 on a rail")
-        print(f"  IpmFex sum vs its own channels: max residual "
-              f"{v['max_ipm_sum_residual']:.2e}")
-        print(f"  fiducial increasing on {100*v['fiducial_monotonic_frac']:.1f}% of "
-              f"steps, clock on {100*v['clock_monotonic_frac']:.1f}%")
-        print(f"  CC open {100*s.cc_open.mean():.1f}%, VCC open {100*s.vcc_open.mean():.1f}%")
+        print(
+            f"  events {int(v['n_events'])}, beam on {100 * v['frac_beam_on']:.1f}%, "
+            f"EVR codes {list(s.codes_seen)}"
+        )
+        print(
+            f"  analog input: {int(v['n_channels'])} channels, "
+            f"{100 * v['frac_shutters_on_rail']:.1f}% of shots have ch02/ch03 on a rail"
+        )
+        print(
+            f"  IpmFex sum vs its own channels: max residual "
+            f"{v['max_ipm_sum_residual']:.2e}"
+        )
+        print(
+            f"  fiducial increasing on {100 * v['fiducial_monotonic_frac']:.1f}% of "
+            f"steps, clock on {100 * v['clock_monotonic_frac']:.1f}%"
+        )
+        print(
+            f"  CC open {100 * s.cc_open.mean():.1f}%, VCC open {100 * s.vcc_open.mean():.1f}%"
+        )
         identify_monitors(s)
 
 

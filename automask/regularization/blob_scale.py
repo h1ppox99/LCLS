@@ -13,6 +13,7 @@ Edge caveat: `mode="nearest"` correlates pixels within ~R of a border, so `k`
 is effectively looser there; the `geometry` floor already masks panel borders,
 covering most of that band.
 """
+
 from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Sequence
@@ -32,7 +33,7 @@ class BlobScaleParams:
 
 def _disk(radius: float) -> np.ndarray:
     r = int(round(radius))
-    yy, xx = np.mgrid[-r:r + 1, -r:r + 1]
+    yy, xx = np.mgrid[-r : r + 1, -r : r + 1]
     return (np.hypot(yy, xx) <= radius).astype(np.float64)
 
 
@@ -61,10 +62,12 @@ def apply(z, params: BlobScaleParams | None = None):
     return blob_scale(z, tuple(p.radii))
 
 
-register_reg(RegSpec(
-    name="blob_scale",
-    apply=apply,
-    params=BlobScaleParams,
-    kind="field",
-    doc="multi-scale disk matched filter; aggregates weak coherent evidence",
-))
+register_reg(
+    RegSpec(
+        name="blob_scale",
+        apply=apply,
+        params=BlobScaleParams,
+        kind="field",
+        doc="multi-scale disk matched filter; aggregates weak coherent evidence",
+    )
+)

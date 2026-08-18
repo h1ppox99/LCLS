@@ -21,13 +21,15 @@ evaluation loop otherwise fills on demand from raw XTC.
 from automask.masking import Channel, Pipeline
 from automask.sample import Sample
 
-pipe = Pipeline(channels=[
-    Channel("geometry", field_reg=None),        # floor: unmapped/ASIC lines
-    Channel("status_as_mask", field_reg=None),  # floor: psana pixel status, per run
-    Channel("variance", VarianceParams(k=3.5, mode="low"), field_reg="tv"),
-])
+pipe = Pipeline(
+    channels=[
+        Channel("geometry", field_reg=None),  # floor: unmapped/ASIC lines
+        Channel("status_as_mask", field_reg=None),  # floor: psana pixel status, per run
+        Channel("variance", VarianceParams(k=3.5, mode="low"), field_reg="tv"),
+    ]
+)
 sample = Sample.from_store(475, selection, pipe.needs())
-mask = pipe.run(sample)                          # bool, True == masked
+mask = pipe.run(sample)  # bool, True == masked
 ```
 
 One list of channels. Whether a channel belongs to the intensity-free floor is
@@ -93,13 +95,13 @@ from automask.dataset import load_mask, score
 from automask.image_store import ImageStore
 from automask.selection_presets import BEAM_ON_SELECTION
 
-img = ImageStore().reduce(475, BEAM_ON_SELECTION, "mean")   # (1064,1030), from XTC
-gt = load_mask("human_Mask")                                # bool, True==masked
+img = ImageStore().reduce(475, BEAM_ON_SELECTION, "mean")  # (1064,1030), from XTC
+gt = load_mask("human_Mask")  # bool, True==masked
 
 # ... your auto-masking algorithm ...
-pred = img == 0                            # trivial baseline
+pred = img == 0  # trivial baseline
 
-print(score(pred, gt))                     # {'iou':.., 'precision':.., 'recall':..}
+print(score(pred, gt))  # {'iou':.., 'precision':.., 'recall':..}
 ```
 
 `data/masks/` holds the hand-drawn references and is the only frozen input left;

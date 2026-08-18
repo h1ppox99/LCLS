@@ -8,6 +8,7 @@ bulk, and score every pixel by the Mahalanobis distance sqrt((x-mu)^T Sigma^-1
 low-variance AND dark). No labels needed, so it generalizes to label-free runs.
 Promoted from studies/fusion_stats.py.
 """
+
 from __future__ import annotations
 from dataclasses import dataclass
 
@@ -19,7 +20,7 @@ from automask.regularization.pad import pad_mask
 
 @dataclass
 class MahalanobisParams:
-    k: float = 3.0          # threshold on the Mahalanobis distance field
+    k: float = 3.0  # threshold on the Mahalanobis distance field
     pad: int = 2
     keep_frac: float = 0.8  # fraction of closest pixels kept when refitting
     iters: int = 5
@@ -59,10 +60,12 @@ def combine(floor, fields, sample, params: MahalanobisParams | None = None):
     return floor | picked
 
 
-register_combine(CombineSpec(
-    name="mahalanobis",
-    combine=combine,
-    params=MahalanobisParams,
-    consumes="fields",
-    doc="robust Mahalanobis joint-outlier distance over the field stack",
-))
+register_combine(
+    CombineSpec(
+        name="mahalanobis",
+        combine=combine,
+        params=MahalanobisParams,
+        consumes="fields",
+        doc="robust Mahalanobis joint-outlier distance over the field stack",
+    )
+)

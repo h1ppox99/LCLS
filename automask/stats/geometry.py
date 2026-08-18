@@ -4,6 +4,7 @@ stats/geometry.py -- geometry floor statistic (ASIC boundaries + module gap).
 Intensity-free, 100%-precision. This is a FLOOR stat: it emits a boolean mask
 directly and carries no sweep space (see stats/base.StatSpec.swept).
 """
+
 from __future__ import annotations
 from dataclasses import dataclass
 
@@ -35,11 +36,13 @@ def compute(sample, params: GeometryParams | None = None):
     return geometry_mask(sample.real, pad=p.pad, frac=p.frac)
 
 
-register_stat(StatSpec(
-    name="geometry",
-    compute=compute,
-    params=GeometryParams,
-    kind="floor",
-    needs=("real",),
-    doc="ASIC/gap border lines from the unmapped-pixel map; 100%-precision floor",
-))
+register_stat(
+    StatSpec(
+        name="geometry",
+        compute=compute,
+        params=GeometryParams,
+        kind="floor",
+        needs=("real",),
+        doc="ASIC/gap border lines from the unmapped-pixel map; 100%-precision floor",
+    )
+)

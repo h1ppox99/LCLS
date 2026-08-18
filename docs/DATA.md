@@ -37,8 +37,8 @@ Source `BldInfo(XPP-AIN-01)`, type `Bld.BldDataAnalogInputV1`, 16 channels of
 Confirmed against the lab's production code, `xpp_sharing/utils.py:176-177`:
 
 ```python
-cc  = np.array(f['ai/ch02'])   # CC monitor; large value typically indicates open
-vcc = np.array(f['ai/ch03'])   # VCC monitor
+cc = np.array(f["ai/ch02"])  # CC monitor; large value typically indicates open
+vcc = np.array(f["ai/ch03"])  # VCC monitor
 ```
 
 The lines are cleanly binary — ~0.045 V low, ~5.05 V high, with nothing in
@@ -67,8 +67,8 @@ but never uses it, and defines both datasets from `vcc` alone
 (`xpp_sharing/utils.py:250,307`):
 
 ```python
-mask_excluded |= (vcc < 2)   # "VCCC" dataset
-mask_excluded |= (vcc > 2)   # "CC" dataset  (complementary)
+mask_excluded |= vcc < 2  # "VCCC" dataset
+mask_excluded |= vcc > 2  # "CC" dataset  (complementary)
 ```
 
 So as currently used these are complementary states of one line, and "both on"
@@ -249,7 +249,9 @@ run 475 at 4.998 ps.
 - **`psana.Detector('XPP-AIN-01').get(evt)` returns `None`.** The `DdlDetector`
   wrapper cannot handle this type. Use the raw accessor:
   ```python
-  evt.get(psana.Bld.BldDataAnalogInputV1, psana.Source('BldInfo(XPP-AIN-01)')).channelVoltages()
+  evt.get(
+      psana.Bld.BldDataAnalogInputV1, psana.Source("BldInfo(XPP-AIN-01)")
+  ).channelVoltages()
   ```
   The same applies to `Lusi.IpmFexV1` (`TypeError: object of type 'IpmFexV1' has
   no len()`) — use `evt.get(psana.Lusi.IpmFexV1, psana.Source('BldInfo(...)'))`.

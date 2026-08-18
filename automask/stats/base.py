@@ -26,6 +26,7 @@ The pick/field split is the reason `Detector.defectiveness` is not total: a pick
 has no z-scale to fuse, so it is usable with the "picks" combiners (union) and
 must be given an explicit scale to take part in the "fields" ones.
 """
+
 from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Callable, Dict, Tuple, Type
@@ -39,10 +40,10 @@ STATS: Dict[str, "StatSpec"] = {}
 @dataclass
 class StatSpec:
     name: str
-    compute: Callable            # (sample, params) -> float field, or bool mask (pick/floor)
-    params: Type                 # dataclass type holding this stat's hyperparameters
-    kind: str = "field"          # "field", "pick" or "floor"
-    mode: str = "low"            # default defect side for field stats: low|high|both
+    compute: Callable  # (sample, params) -> float field, or bool mask (pick/floor)
+    params: Type  # dataclass type holding this stat's hyperparameters
+    kind: str = "field"  # "field", "pick" or "floor"
+    mode: str = "low"  # default defect side for field stats: low|high|both
     needs: Tuple[str, ...] = ()  # Sample attributes this stat reads (documentation)
     doc: str = ""
 

@@ -1,4 +1,5 @@
 """Pure metrics for comparing evidence masks and mask ensembles."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

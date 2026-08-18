@@ -7,6 +7,7 @@ not installed in the ana env):
 
 Self-contained: tiny arrays only, no frozen dataset and no psana.
 """
+
 from __future__ import annotations
 
 import os
@@ -15,7 +16,10 @@ import numpy as np
 import pytest
 
 from automask.image_store import (
-    ImageStore, _calibration_content_key, _content_key, _reduction_stub,
+    ImageStore,
+    _calibration_content_key,
+    _content_key,
+    _reduction_stub,
 )
 from automask.masking import Channel, Pipeline, production_pipeline
 from automask.regularization.area_gate import area_gate
@@ -29,8 +33,8 @@ from automask.stats.asic_polish import median_polish
 # -- regularizers ----------------------------------------------------------
 def test_area_gate_drops_small_components():
     m = np.zeros((40, 40), bool)
-    m[2:4, 2:4] = True            # 4 px
-    m[10:20, 10:20] = True        # 100 px
+    m[2:4, 2:4] = True  # 4 px
+    m[10:20, 10:20] = True  # 100 px
     out = area_gate(m, min_area=50)
     assert out[10:20, 10:20].all()
     assert not out[2:4, 2:4].any()
@@ -40,11 +44,11 @@ def test_area_gate_drops_small_components():
 def test_fill_holes_fills_interior_but_does_not_grow():
     m = np.zeros((20, 20), bool)
     m[5:15, 5:15] = True
-    m[9:11, 9:11] = False         # punch an interior hole
+    m[9:11, 9:11] = False  # punch an interior hole
     out = fill_holes(m)
     assert out[9:11, 9:11].all()
-    assert out.sum() == 100       # the 10x10 square, nothing more
-    assert not out[4, 4]          # boundary unchanged, unlike `pad`
+    assert out.sum() == 100  # the 10x10 square, nothing more
+    assert not out[4, 4]  # boundary unchanged, unlike `pad`
 
 
 def test_blob_scale_preserves_unit_variance_on_white_noise():
@@ -67,7 +71,7 @@ def test_blob_scale_amplifies_a_coherent_patch():
     z = rng.normal(size=(200, 200))
     yy, xx = np.mgrid[0:200, 0:200]
     patch = np.hypot(yy - 100, xx - 100) <= 12
-    z[patch] += 1.5                       # far below any sensible per-pixel k
+    z[patch] += 1.5  # far below any sensible per-pixel k
     out = blob_scale(z, radii=(12,))
     assert z[patch].max() < 6.0
     assert out[patch].max() > 12.0
@@ -87,7 +91,7 @@ def test_median_polish_removes_row_and_column_structure():
     cols = rng.normal(scale=50, size=(1, 64))
     block = rows + cols + rng.normal(size=(64, 64))
     res = median_polish(block)
-    assert res.std() < 1.5                # striping gone, noise left
+    assert res.std() < 1.5  # striping gone, noise left
 
 
 def test_median_polish_keeps_a_compact_anomaly():
@@ -166,14 +170,15 @@ def test_floor_channel_is_not_gated_by_real(monkeypatch):
 
     monkeypatch.setattr(status_stat, "panel_to_asm", lambda panel, run: panel[0])
     mean = np.ones((5, 5))
-    mean[2, 2] = 0.0                      # dead pixel: no value, so not `real`
+    mean[2, 2] = 0.0  # dead pixel: no value, so not `real`
     status = np.ones((1, 5, 5), dtype=np.uint8)
-    status[0, 2, 2] = 0                   # psana: 0 == bad
+    status[0, 2, 2] = 0  # psana: 0 == bad
     sample = Sample(run=475, arrays={"mean": mean, "status_as_mask": status})
 
     assert not sample.real[2, 2]
-    floor = Channel("status_as_mask", StatusAsMaskParams(pad=0),
-                    field_reg=None).pick(sample)
+    floor = Channel("status_as_mask", StatusAsMaskParams(pad=0), field_reg=None).pick(
+        sample
+    )
     assert floor[2, 2]
     assert floor.sum() == 1
 
@@ -223,18 +228,18 @@ def test_conditions_are_field_native_and_anded():
         branch=np.array([0, 0, 1, 1, 1]),
         quality=np.array([0.1, 0.5, 0.4, 0.8, 0.2]),
     )
-    selection = ShotSelection(where=(
-        Condition("branch", "==", 1),
-        Condition("quality", "between", (0.3, 0.8)),
-    ))
+    selection = ShotSelection(
+        where=(
+            Condition("branch", "==", 1),
+            Condition("quality", "between", (0.3, 0.8)),
+        )
+    )
     np.testing.assert_array_equal(selection.resolve(profile), [2, 3])
 
 
 def test_conditions_support_categorical_values():
     profile = _profile(4, mode=np.array(["sample", "dark", "sample", "calib"]))
-    selection = ShotSelection(where=(
-        Condition("mode", "in", ("dark", "calib")),
-    ))
+    selection = ShotSelection(where=(Condition("mode", "in", ("dark", "calib")),))
     np.testing.assert_array_equal(selection.resolve(profile), [1, 3])
 
 
@@ -285,7 +290,8 @@ def test_selection_reports_empty_and_missing_fields():
 def test_describe_reports_generic_selection_stages():
     profile = _profile(10, state=np.array([1] * 8 + [0] * 2))
     selection = ShotSelection(
-        where=(Condition("state", "==", 1),), n_shots=3,
+        where=(Condition("state", "==", 1),),
+        n_shots=3,
     )
     description = selection.describe(profile)
     assert description["n_events"] == 10
@@ -298,9 +304,7 @@ def test_describe_reports_generic_selection_stages():
 
 def test_describe_reports_an_empty_selection_without_raising():
     profile = _profile(4, state=np.zeros(4))
-    description = ShotSelection(where=(
-        Condition("state", ">", 0),
-    )).describe(profile)
+    description = ShotSelection(where=(Condition("state", ">", 0),)).describe(profile)
     assert description["n_eligible"] == 0
     assert description["n_selected"] == 0
 
@@ -312,19 +316,20 @@ def test_reduction_content_key_covers_the_whole_selection():
     import json
     from dataclasses import asdict
 
-    selection = ShotSelection(where=(
-        Condition("state", "==", "sample"),
-    ))
-    payload = json.dumps({"reduction": "mean", "selection": asdict(selection)},
-                         sort_keys=True)
-    assert _content_key(selection, "mean") == hashlib.sha1(
-        payload.encode()
-    ).hexdigest()[:12]
-    assert _reduction_stub(475, selection, "mean") == \
-        "mean_b7a9d7729a67_run0475"
+    selection = ShotSelection(where=(Condition("state", "==", "sample"),))
+    payload = json.dumps(
+        {"reduction": "mean", "selection": asdict(selection)}, sort_keys=True
+    )
+    assert (
+        _content_key(selection, "mean")
+        == hashlib.sha1(payload.encode()).hexdigest()[:12]
+    )
+    assert _reduction_stub(475, selection, "mean") == "mean_b7a9d7729a67_run0475"
     variants = (
         ShotSelection(where=(Condition("state", "==", "dark"),)),
-        ShotSelection(where=selection.where, trim=PercentileTrim("intensity", 0.1, 0.2)),
+        ShotSelection(
+            where=selection.where, trim=PercentileTrim("intensity", 0.1, 0.2)
+        ),
         ShotSelection(where=selection.where, n_shots=10),
         ShotSelection(where=selection.where, normalization="intensity"),
     )
@@ -334,9 +339,7 @@ def test_reduction_content_key_covers_the_whole_selection():
 
 
 def test_calibration_and_reduction_keys_do_not_collide():
-    selection = ShotSelection(where=(
-        Condition("state", "==", "sample"),
-    ))
+    selection = ShotSelection(where=(Condition("state", "==", "sample"),))
     keys = {
         _calibration_content_key("pedestals", 0),
         _calibration_content_key("rms", 0),
@@ -370,9 +373,11 @@ def _small_store(tmp_path, monkeypatch):
     import automask.io.read_xtc as read_xtc
 
     monkeypatch.setattr(
-        read_xtc, "panel_geometry",
+        read_xtc,
+        "panel_geometry",
         lambda run, source=None: (
-            np.array([[[0, 0], [1, 1]]]), np.array([[[0, 1], [0, 1]]])
+            np.array([[[0, 0], [1, 1]]]),
+            np.array([[[0, 1], [0, 1]]]),
         ),
     )
     profile = RunProfile(7, 2, [], {}, {}, [], source=object())
@@ -413,7 +418,8 @@ def test_median_mad_are_co_computed(tmp_path, monkeypatch):
 
     monkeypatch.setattr(store, "_stage_frames", stage)
     monkeypatch.setattr(
-        store, "_robust_reduce",
+        store,
+        "_robust_reduce",
         lambda path: (np.ones((1, 2, 2)), np.full((1, 2, 2), 2.0)),
     )
     selection = ShotSelection()
@@ -436,23 +442,27 @@ def test_image_store_caches_round_robin_and_chronological_folds(tmp_path, monkey
 
     monkeypatch.setattr(read_xtc, "iter_calibrated", frames)
     monkeypatch.setattr(
-        read_xtc, "panel_geometry",
+        read_xtc,
+        "panel_geometry",
         lambda run, source=None: (
-            np.array([[[0, 0], [1, 1]]]), np.array([[[0, 1], [0, 1]]])
+            np.array([[[0, 0], [1, 1]]]),
+            np.array([[[0, 1], [0, 1]]]),
         ),
     )
     selection = ShotSelection()
     folds = store.folds(7, selection, "mean", n_folds=4)
     chronological = store.folds(
-        7, selection, "std", n_folds=4, strategy="chronological")
+        7, selection, "std", n_folds=4, strategy="chronological"
+    )
 
     assert len(folds) == 4
     np.testing.assert_allclose([fold[0, 0] for fold in folds], np.arange(4) + 8)
-    np.testing.assert_allclose(
-        [fold[0, 0] for fold in chronological], np.sqrt(2.0))
+    np.testing.assert_allclose([fold[0, 0] for fold in chronological], np.sqrt(2.0))
     np.testing.assert_allclose(store.reduce(7, selection, "mean"), 9.5)
     assert any("round_robin_fold-03-of-04" in path.name for path in tmp_path.iterdir())
-    assert any("chronological_fold-03-of-04" in path.name for path in tmp_path.iterdir())
+    assert any(
+        "chronological_fold-03-of-04" in path.name for path in tmp_path.iterdir()
+    )
     assert calls == [7, 7]
 
 
@@ -468,14 +478,17 @@ def test_image_store_builds_robust_fold_reductions(tmp_path, monkeypatch):
 
     monkeypatch.setattr(read_xtc, "iter_calibrated", frames)
     monkeypatch.setattr(
-        read_xtc, "panel_geometry",
+        read_xtc,
+        "panel_geometry",
         lambda run, source=None: (
-            np.array([[[0, 0], [1, 1]]]), np.array([[[0, 1], [0, 1]]])
+            np.array([[[0, 0], [1, 1]]]),
+            np.array([[[0, 1], [0, 1]]]),
         ),
     )
     folds = store.folds(7, ShotSelection(), "median", n_folds=5)
     chronological = store.folds(
-        7, ShotSelection(), "mad", n_folds=5, strategy="chronological")
+        7, ShotSelection(), "mad", n_folds=5, strategy="chronological"
+    )
 
     np.testing.assert_allclose([fold[0, 0] for fold in folds], np.arange(5) + 7.5)
     np.testing.assert_allclose([fold[0, 0] for fold in chronological], 1.4826)
@@ -523,7 +536,7 @@ if __name__ == "__main__":
         try:
             fn()
             print(f"ok  {fn.__name__}")
-        except Exception as e:                       # noqa: BLE001 - test runner
+        except Exception as e:  # noqa: BLE001 - test runner
             failed += 1
             print(f"FAIL {fn.__name__}: {type(e).__name__}: {e}")
     print(f"\n{len(fns) - failed} passed" + (f", {failed} failed" if failed else ""))
@@ -541,7 +554,8 @@ def test_hydra_production_experiment_matches_the_python_recipe():
     from hydra import compose, initialize_config_dir
 
     conf_dir = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "conf")
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "conf"
+    )
     from automask.studies.sweep_hyperparameters import build_pipeline
 
     with initialize_config_dir(config_dir=conf_dir, version_base=None):
@@ -549,6 +563,7 @@ def test_hydra_production_experiment_matches_the_python_recipe():
         from_yaml = build_pipeline(cfg)
     from_python = production_pipeline("union")
 
-    assert [c.label for c in from_yaml.channels] == \
-        [c.label for c in from_python.channels]
+    assert [c.label for c in from_yaml.channels] == [
+        c.label for c in from_python.channels
+    ]
     assert from_yaml.needs() == from_python.needs()

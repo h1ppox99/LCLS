@@ -89,9 +89,7 @@ def test_detector_calibration_uses_psana_accessor(tmp_path, monkeypatch):
     calibration.mkdir()
     psana = FakePsana()
     monkeypatch.setitem(sys.modules, "psana", psana)
-    source = Psana1RunSource.from_files(
-        "xpptest", 12, [xtc], calib_dir=calibration
-    )
+    source = Psana1RunSource.from_files("xpptest", 12, [xtc], calib_dir=calibration)
 
     values = detector_calibration(12, "rms", gain=1, source=source)
 

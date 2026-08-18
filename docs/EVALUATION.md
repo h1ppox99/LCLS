@@ -12,17 +12,21 @@ masks.
 
 ```python
 from automask.evaluation import (
-    MaskValidationDesign, ParameterSweep, validate_mask,
+    MaskValidationDesign,
+    ParameterSweep,
+    validate_mask,
 )
 
 design = MaskValidationDesign(
     sweeps=(
         ParameterSweep(
-            "variance.params.k", (3.25, 3.75),
+            "variance.params.k",
+            (3.25, 3.75),
             "Check the declared +/-0.25 threshold tolerance",
         ),
         ParameterSweep(
-            "variance.field_reg.tv.weight", (3.0, 5.0),
+            "variance.field_reg.tv.weight",
+            (3.0, 5.0),
             "Check nearby smoothing strengths",
         ),
     ),

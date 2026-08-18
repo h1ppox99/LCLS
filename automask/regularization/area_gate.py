@@ -12,6 +12,7 @@ whose outline is irregular, which is most of them, and it re-introduces exactly
 the shape prior that the detection stage is careful not to assume. Size is a
 near-assumption-free property; shape is not.
 """
+
 from __future__ import annotations
 from dataclasses import dataclass
 
@@ -23,8 +24,8 @@ from automask.regularization.base import RegSpec, register_reg
 
 @dataclass
 class AreaGateParams:
-    min_area: int = 200      # components smaller than this are dropped
-    connectivity: int = 2    # 1 = 4-connected, 2 = 8-connected
+    min_area: int = 200  # components smaller than this are dropped
+    connectivity: int = 2  # 1 = 4-connected, 2 = 8-connected
 
 
 def area_gate(mask, min_area=200, connectivity=2):
@@ -48,10 +49,12 @@ def apply(mask, params: AreaGateParams | None = None):
     return area_gate(mask, p.min_area, p.connectivity)
 
 
-register_reg(RegSpec(
-    name="area_gate",
-    apply=apply,
-    params=AreaGateParams,
-    kind="mask",
-    doc="drop connected components below min_area (extended defects only)",
-))
+register_reg(
+    RegSpec(
+        name="area_gate",
+        apply=apply,
+        params=AreaGateParams,
+        kind="mask",
+        doc="drop connected components below min_area (extended defects only)",
+    )
+)

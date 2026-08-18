@@ -8,6 +8,7 @@ knob, replacing ad-hoc morphology. Two kinds by what they operate on:
   * KIND="mask"  -- boolean mask -> boolean mask (e.g. padding / hole filling),
     applied AFTER thresholding.
 """
+
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable, Dict, Type
@@ -19,9 +20,9 @@ REGULARIZERS: Dict[str, "RegSpec"] = {}
 @dataclass
 class RegSpec:
     name: str
-    apply: Callable        # (x, params) -> x  (field->field or mask->mask)
-    params: Type           # dataclass type holding this regularizer's knob(s)
-    kind: str = "field"    # "field" or "mask"
+    apply: Callable  # (x, params) -> x  (field->field or mask->mask)
+    params: Type  # dataclass type holding this regularizer's knob(s)
+    kind: str = "field"  # "field" or "mask"
     doc: str = ""
 
 

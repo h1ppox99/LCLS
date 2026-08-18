@@ -32,18 +32,18 @@ then (in the psana env):
 
 Re-running is safe (idempotent): it rebuilds the links.
 """
+
 from __future__ import annotations
 import os
 import shutil
 
-COLON = chr(0xF022)                       # the on-disk stand-in for ':'
+COLON = chr(0xF022)  # the on-disk stand-in for ':'
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 INSTRUMENT = "xpp"
 EXPERIMENT = "xppl1016922"
 # Where to build the psana-style tree. Prefer writable group storage, not home.
 # psana_env.sh sets SIT_PSDM_DATA from PSANA_PSDM in psana_env.local.
-PSDM = os.environ.get("SIT_PSDM_DATA",
-                      os.path.join(os.path.dirname(ROOT), "psdm"))
+PSDM = os.environ.get("SIT_PSDM_DATA", os.path.join(os.path.dirname(ROOT), "psdm"))
 
 
 def _fix(name: str) -> str:
@@ -93,15 +93,15 @@ def build():
     #    constant-type dirs (pedestals, pixel_gain, geometry, ...) which have
     #    no colons in their own names or their .data files.
     n = 0
-    for dtype in entries:                                  # e.g. Jungfrau<U+F022><U+F022>CalibV1
+    for dtype in entries:  # e.g. Jungfrau<U+F022><U+F022>CalibV1
         dtype_p = os.path.join(calib_src, dtype)
         if not os.path.isdir(dtype_p) or "CalibV1" not in dtype:
-            continue                                       # skip pedestal_workdir etc.
-        for src in os.listdir(dtype_p):                    # e.g. XppEndstation.0<U+F022>Jungfrau.0
+            continue  # skip pedestal_workdir etc.
+        for src in os.listdir(dtype_p):  # e.g. XppEndstation.0<U+F022>Jungfrau.0
             src_p = os.path.join(dtype_p, src)
             if not os.path.isdir(src_p):
                 continue
-            for ctype in os.listdir(src_p):                # pedestals, pixel_gain, geometry, ...
+            for ctype in os.listdir(src_p):  # pedestals, pixel_gain, geometry, ...
                 ctype_p = os.path.join(src_p, ctype)
                 if not os.path.isdir(ctype_p):
                     continue
@@ -112,12 +112,15 @@ def build():
         raise RuntimeError(
             f"no calibration constants linked from {calib_src}. psana would "
             f"fall back to UNCALIBRATED frames without saying so, which is why "
-            f"this is an error and not a warning. Found: {sorted(entries)[:6]}")
+            f"this is an error and not a warning. Found: {sorted(entries)[:6]}"
+        )
     print(f"  calib -> {n} constant-type dirs linked with real-colon names")
 
     print(f"\nSIT_PSDM_DATA layout ready at: {PSDM}")
     print(f"  export SIT_PSDM_DATA={PSDM}")
-    print(f"  dataset string:  exp={EXPERIMENT}:run=<RUN>:dir={os.path.join(exp_dir,'xtc')}")
+    print(
+        f"  dataset string:  exp={EXPERIMENT}:run=<RUN>:dir={os.path.join(exp_dir, 'xtc')}"
+    )
     return PSDM
 
 
@@ -147,6 +150,7 @@ def check(run: int = 475) -> bool:
         ok &= os.path.exists(target)
 
     import psana
+
     source = local_run_source(run)
     ds = source.open()
     files = source.files
@@ -158,8 +162,10 @@ def check(run: int = 475) -> bool:
             print("  -> det.calib() returned None: calibration is NOT wired up.")
             return False
         frame = np.asarray(frame)
-        print(f"  det.calib() -> shape {frame.shape}, mean {frame.mean():.3f}, "
-              f"finite {np.isfinite(frame).all()}")
+        print(
+            f"  det.calib() -> shape {frame.shape}, mean {frame.mean():.3f}, "
+            f"finite {np.isfinite(frame).all()}"
+        )
         break
     else:
         print(f"  -> no events decoded from run {run}")
@@ -173,8 +179,11 @@ if __name__ == "__main__":
     import sys
 
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--check", action="store_true",
-                    help="after building, open a run and pull one calibrated frame")
+    ap.add_argument(
+        "--check",
+        action="store_true",
+        help="after building, open a run and pull one calibrated frame",
+    )
     ap.add_argument("--run", type=int, default=475)
     args = ap.parse_args()
     build()

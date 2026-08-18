@@ -1,4 +1,5 @@
 """Detector bad-pixel floor, from psana's per-run pixel status."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -16,6 +17,7 @@ class StatusAsMaskParams:
     square dilation, matching the lab baseline's 5x5 dead-pixel dilation (pad=2)
     and the geometry floor stat. A dead pixel corrupts its neighbours (charge
     sharing / interpolation), so the halo is genuinely bad, not padding slack."""
+
     pad: int = 2
 
 
@@ -31,11 +33,13 @@ def compute(sample, params: StatusAsMaskParams | None = None):
     return pad_mask(panel_to_asm(bad, sample.run), p.pad)
 
 
-register_stat(StatSpec(
-    name="status_as_mask",
-    compute=compute,
-    params=StatusAsMaskParams,
-    kind="floor",
-    needs=("status_as_mask",),
-    doc="psana pixel-status bad-pixel mask, dilated; intensity-free floor",
-))
+register_stat(
+    StatSpec(
+        name="status_as_mask",
+        compute=compute,
+        params=StatusAsMaskParams,
+        kind="floor",
+        needs=("status_as_mask",),
+        doc="psana pixel-status bad-pixel mask, dilated; intensity-free floor",
+    )
+)

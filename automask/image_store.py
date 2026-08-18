@@ -1,4 +1,5 @@
 """Compute and cache selected-shot detector images."""
+
 from __future__ import annotations
 
 import hashlib
@@ -47,8 +48,10 @@ def _fold_stub(
     index: int,
     n_folds: int,
 ) -> str:
-    return (f"{_reduction_stub(run, selection, reduction)}_{strategy}"
-            f"_fold-{index:02d}-of-{n_folds:02d}")
+    return (
+        f"{_reduction_stub(run, selection, reduction)}_{strategy}"
+        f"_fold-{index:02d}-of-{n_folds:02d}"
+    )
 
 
 def _calibration_stub(run: int, constant: str, gain: int) -> str:
@@ -58,14 +61,19 @@ def _calibration_stub(run: int, constant: str, gain: int) -> str:
 
 def _select_line(run: int, selection: ShotSelection, counts: dict) -> str:
     n_used = counts.get("n_used")
-    used = "" if n_used is None or n_used == counts.get("n_selected") else \
-        f", {n_used} used"
+    used = (
+        ""
+        if n_used is None or n_used == counts.get("n_selected")
+        else f", {n_used} used"
+    )
     fields = ",".join(condition.field for condition in selection.where) or "none"
     trim = selection.trim.field if selection.trim is not None else "none"
-    return (f"[select] run {run:04d}: {counts['n_events']} shots total, "
-            f"{counts['n_eligible']} eligible "
-            f"(fields={fields}, trim={trim}), "
-            f"{counts['n_selected']} selected{used}")
+    return (
+        f"[select] run {run:04d}: {counts['n_events']} shots total, "
+        f"{counts['n_eligible']} eligible "
+        f"(fields={fields}, trim={trim}), "
+        f"{counts['n_selected']} selected{used}"
+    )
 
 
 def _assemble(panel: np.ndarray, ix: np.ndarray, iy: np.ndarray) -> np.ndarray:
@@ -83,8 +91,11 @@ class ImageStore:
         cache_dir: Path | None = None,
         run_profile: RunProfile | None = None,
     ):
-        self.cache_dir = Path(cache_dir) if cache_dir else (
-            ROOT / "automask" / "outputs" / "cache" / "images")
+        self.cache_dir = (
+            Path(cache_dir)
+            if cache_dir
+            else (ROOT / "automask" / "outputs" / "cache" / "images")
+        )
         self._profiles = {}
         if run_profile is not None:
             self._profiles[run_profile.run] = run_profile
@@ -103,7 +114,8 @@ class ImageStore:
             raise TypeError("selection must be a ShotSelection")
         if reduction not in REDUCTIONS:
             raise ValueError(
-                f"reduction must be one of {sorted(REDUCTIONS)}, got {reduction!r}")
+                f"reduction must be one of {sorted(REDUCTIONS)}, got {reduction!r}"
+            )
         if form not in _FORMS:
             raise ValueError(f"form must be one of {sorted(_FORMS)}, got {form!r}")
 
@@ -118,12 +130,16 @@ class ImageStore:
     def _reduction_path(
         self, run: int, selection: ShotSelection, reduction: Reduction, form: Form
     ) -> Path:
-        return self.cache_dir / f"{_reduction_stub(run, selection, reduction)}_{form}.npy"
+        return (
+            self.cache_dir / f"{_reduction_stub(run, selection, reduction)}_{form}.npy"
+        )
 
     def _reduction_meta_path(
         self, run: int, selection: ShotSelection, reduction: Reduction
     ) -> Path:
-        return self.cache_dir / f"{_reduction_stub(run, selection, reduction)}_meta.json"
+        return (
+            self.cache_dir / f"{_reduction_stub(run, selection, reduction)}_meta.json"
+        )
 
     def _calibration_path(self, run: int, constant: str, gain: int) -> Path:
         return self.cache_dir / f"{_calibration_stub(run, constant, gain)}_panel.npy"
@@ -174,8 +190,7 @@ class ImageStore:
     ) -> tuple[np.ndarray, ...]:
         """Return reductions over round-robin or chronological shot folds."""
         self._validate_folds(n_folds, strategy)
-        return self._fold_reductions(
-            run, selection, reduction, strategy, n_folds, form)
+        return self._fold_reductions(run, selection, reduction, strategy, n_folds, form)
 
     @staticmethod
     def _validate_folds(n_folds: int, strategy: FoldStrategy) -> None:
@@ -184,21 +199,18 @@ class ImageStore:
         if strategy not in ("round_robin", "chronological"):
             raise ValueError(f"unknown fold strategy {strategy!r}")
 
-    def _fold_reductions(
-        self, run, selection, reduction, strategy, n_folds, form
-    ):
+    def _fold_reductions(self, run, selection, reduction, strategy, n_folds, form):
         self._validate_reduction(selection, reduction, form)
         self._validate_folds(n_folds, strategy)
-        paths = [self._fold_path(
-            run, selection, reduction, strategy, i, n_folds, form)
-                 for i in range(n_folds)]
+        paths = [
+            self._fold_path(run, selection, reduction, strategy, i, n_folds, form)
+            for i in range(n_folds)
+        ]
         if not all(path.exists() for path in paths):
             if reduction in ("mean", "std"):
-                self._materialize_fold_mean_std(
-                    run, selection, n_folds, strategy)
+                self._materialize_fold_mean_std(run, selection, n_folds, strategy)
             else:
-                self._materialize_fold_median_mad(
-                    run, selection, n_folds, strategy)
+                self._materialize_fold_median_mad(run, selection, n_folds, strategy)
         return tuple(np.load(path) for path in paths)
 
     def calibration(self, run: int, constant: str, gain: int = 0) -> np.ndarray:
@@ -238,9 +250,16 @@ class ImageStore:
         stub = _calibration_stub(run, constant, gain)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         np.save(self.cache_dir / f"{stub}_panel.npy", panel)
-        (self.cache_dir / f"{stub}_meta.json").write_text(json.dumps({
-            "source": "calib", "constant": constant, "gain": gain, "run": run,
-        }))
+        (self.cache_dir / f"{stub}_meta.json").write_text(
+            json.dumps(
+                {
+                    "source": "calib",
+                    "constant": constant,
+                    "gain": gain,
+                    "run": run,
+                }
+            )
+        )
         print(f"[calib] run {run:04d}: {constant} gain {gain} -> {stub}")
 
     def _save_pair(
@@ -269,14 +288,16 @@ class ImageStore:
             self._save_pair(run, selection, ((reduction, full),), ix, iy, counts)
             for index, panel in enumerate(folds):
                 panel = panel.astype(np.float32)
-                stub = _fold_stub(
-                    run, selection, reduction, strategy, index, n_folds)
+                stub = _fold_stub(run, selection, reduction, strategy, index, n_folds)
                 np.save(self.cache_dir / f"{stub}_panel.npy", panel)
                 np.save(self.cache_dir / f"{stub}_asm.npy", _assemble(panel, ix, iy))
-                metadata = {**counts, "strategy": strategy, "fold_index": index,
-                            "n_used": counts["fold_counts"][index]}
-                (self.cache_dir / f"{stub}_meta.json").write_text(
-                    json.dumps(metadata))
+                metadata = {
+                    **counts,
+                    "strategy": strategy,
+                    "fold_index": index,
+                    "n_used": counts["fold_counts"][index],
+                }
+                (self.cache_dir / f"{stub}_meta.json").write_text(json.dumps(metadata))
 
     def _materialize_mean_std(self, run: int, selection: ShotSelection) -> None:
         from automask.io.read_xtc import panel_geometry
@@ -300,26 +321,34 @@ class ImageStore:
             stage_path.unlink(missing_ok=True)
         ix, iy = panel_geometry(run, source=self.profile(run).source)
         self._save_pair(
-            run, selection,
-            (("median", median_panel), ("mad", mad_panel)), ix, iy, counts,
+            run,
+            selection,
+            (("median", median_panel), ("mad", mad_panel)),
+            ix,
+            iy,
+            counts,
         )
 
-    def _materialize_fold_mean_std(
-        self, run, selection, n_folds, strategy
-    ) -> None:
+    def _materialize_fold_mean_std(self, run, selection, n_folds, strategy) -> None:
         from automask.io.read_xtc import panel_geometry
 
-        full, folds, counts = self._accumulate_folds(
-            run, selection, n_folds, strategy)
+        full, folds, counts = self._accumulate_folds(run, selection, n_folds, strategy)
         ix, iy = panel_geometry(run, source=self.profile(run).source)
-        self._save_folds(run, selection, (
-            ("mean", full[0], folds[0]),
-            ("std", full[1], folds[1]),
-        ), ix, iy, counts, n_folds, strategy)
+        self._save_folds(
+            run,
+            selection,
+            (
+                ("mean", full[0], folds[0]),
+                ("std", full[1], folds[1]),
+            ),
+            ix,
+            iy,
+            counts,
+            n_folds,
+            strategy,
+        )
 
-    def _materialize_fold_median_mad(
-        self, run, selection, n_folds, strategy
-    ) -> None:
+    def _materialize_fold_median_mad(self, run, selection, n_folds, strategy) -> None:
         from automask.io.read_xtc import panel_geometry
 
         stub = _reduction_stub(run, selection, "median")
@@ -327,15 +356,25 @@ class ImageStore:
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         try:
             counts = self._stage_frames(
-                run, selection, stage_path, n_folds=n_folds, strategy=strategy)
+                run, selection, stage_path, n_folds=n_folds, strategy=strategy
+            )
             full, folds = self._robust_reduce_folds(stage_path, n_folds)
         finally:
             stage_path.unlink(missing_ok=True)
         ix, iy = panel_geometry(run, source=self.profile(run).source)
-        self._save_folds(run, selection, (
-            ("median", full[0], folds[0]),
-            ("mad", full[1], folds[1]),
-        ), ix, iy, counts, n_folds, strategy)
+        self._save_folds(
+            run,
+            selection,
+            (
+                ("median", full[0], folds[0]),
+                ("mad", full[1], folds[1]),
+            ),
+            ix,
+            iy,
+            counts,
+            n_folds,
+            strategy,
+        )
 
     def _stage_frames(
         self,
@@ -354,12 +393,16 @@ class ImageStore:
         if strategy is not None:
             self._validate_folds(n_folds, strategy)
         if strategy is not None and indices.size < 2 * n_folds:
-            raise RuntimeError(f"run {run}: consistency evaluation needs at least "
-                               f"{2 * n_folds} selected shots for {n_folds} folds")
+            raise RuntimeError(
+                f"run {run}: consistency evaluation needs at least "
+                f"{2 * n_folds} selected shots for {n_folds} folds"
+            )
         counts = selection.describe(profile)
         print(_select_line(run, selection, counts))
         normalize = selection.normalization is not None
-        reference = selection.normalization_reference(profile, indices) if normalize else 1.0
+        reference = (
+            selection.normalization_reference(profile, indices) if normalize else 1.0
+        )
         i0 = profile.column(selection.normalization) if normalize else None
         position = {int(event): i for i, event in enumerate(indices)}
         if strategy is not None:
@@ -376,14 +419,18 @@ class ImageStore:
                     # Shaped by the frames psana actually decodes, not by an assumed geometry.
                     rows = frame.shape[-2]
                     frames = h5.create_dataset(
-                        "frames", shape=(indices.size, *frame.shape),
-                        dtype=np.float32, maxshape=(None, *frame.shape),
+                        "frames",
+                        shape=(indices.size, *frame.shape),
+                        dtype=np.float32,
+                        maxshape=(None, *frame.shape),
                         chunks=(1, *frame.shape[:-2], min(64, rows), frame.shape[-1]),
-                        compression="gzip", compression_opts=1,
+                        compression="gzip",
+                        compression_opts=1,
                     )
                     if strategy is not None:
                         folds = h5.create_dataset(
-                            "fold", shape=(indices.size,), dtype=np.int32)
+                            "fold", shape=(indices.size,), dtype=np.int32
+                        )
                 if normalize:
                     frame *= np.float32(reference / i0[event_index])
                 frames[staged] = frame
@@ -399,7 +446,9 @@ class ImageStore:
                         flush=True,
                     )
             if staged == 0:
-                raise RuntimeError(f"run {run}: selection {selection} yielded no frames")
+                raise RuntimeError(
+                    f"run {run}: selection {selection} yielded no frames"
+                )
             if staged != indices.size:
                 frames.resize(staged, axis=0)
                 if strategy is not None:
@@ -431,24 +480,23 @@ class ImageStore:
                 block = frames[:, :, row0:row1, :].astype(np.float32)
                 med = np.median(block, axis=0)
                 median[:, row0:row1, :] = med
-                mad[:, row0:row1, :] = 1.4826 * np.median(
-                    np.abs(block - med), axis=0
-                )
+                mad[:, row0:row1, :] = 1.4826 * np.median(np.abs(block - med), axis=0)
                 print(f"[images] rows {row0}:{row1}/{rows}", flush=True)
         return median, mad
 
     @staticmethod
-    def _robust_reduce_folds(
-        stage_path: Path, n_folds: int, row_block: int = 32
-    ):
+    def _robust_reduce_folds(stage_path: Path, n_folds: int, row_block: int = 32):
         import h5py
 
         with h5py.File(stage_path, "r") as h5:
             frames = h5["frames"]
-            rows_by_group = [np.flatnonzero(np.asarray(h5["fold"]) == i)
-                             for i in range(n_folds)]
+            rows_by_group = [
+                np.flatnonzero(np.asarray(h5["fold"]) == i) for i in range(n_folds)
+            ]
             if any(rows.size < 2 for rows in rows_by_group):
-                raise RuntimeError("consistency evaluation needs at least two shots per fold")
+                raise RuntimeError(
+                    "consistency evaluation needs at least two shots per fold"
+                )
             shape = (n_folds, *frames.shape[1:])
             median = np.empty(shape, dtype=np.float32)
             mad = np.empty_like(median)
@@ -465,7 +513,8 @@ class ImageStore:
                     med = np.median(block, axis=0)
                     median[group, :, row0:row1] = med
                     mad[group, :, row0:row1] = 1.4826 * np.median(
-                        np.abs(block - med), axis=0)
+                        np.abs(block - med), axis=0
+                    )
         return ((full_median, full_mad), (median, mad))
 
     def _accumulate(
@@ -478,14 +527,14 @@ class ImageStore:
         counts = selection.describe(profile)
         print(_select_line(run, selection, counts))
         normalize = selection.normalization is not None
-        reference = selection.normalization_reference(profile, indices) if normalize else 1.0
+        reference = (
+            selection.normalization_reference(profile, indices) if normalize else 1.0
+        )
         i0 = profile.column(selection.normalization) if normalize else None
 
         total = squared = None
         n_used = 0
-        for event_index, panel in iter_calibrated(
-            run, indices, source=profile.source
-        ):
+        for event_index, panel in iter_calibrated(run, indices, source=profile.source):
             frame = panel.astype(np.float64)
             if total is None:
                 # Shaped by the frames psana actually decodes, not by an assumed geometry.
@@ -514,12 +563,16 @@ class ImageStore:
         indices = selection.resolve(profile)
         self._validate_folds(n_folds, strategy)
         if indices.size < 2 * n_folds:
-            raise RuntimeError(f"run {run}: consistency evaluation needs at least "
-                               f"{2 * n_folds} selected shots for {n_folds} folds")
+            raise RuntimeError(
+                f"run {run}: consistency evaluation needs at least "
+                f"{2 * n_folds} selected shots for {n_folds} folds"
+            )
         counts = selection.describe(profile)
         print(_select_line(run, selection, counts))
         normalize = selection.normalization is not None
-        reference = selection.normalization_reference(profile, indices) if normalize else 1.0
+        reference = (
+            selection.normalization_reference(profile, indices) if normalize else 1.0
+        )
         i0 = profile.column(selection.normalization) if normalize else None
         position = {int(event): i for i, event in enumerate(indices)}
 
@@ -546,5 +599,4 @@ class ImageStore:
         full_mean = total.sum(axis=0) / full_n
         full_var = squared.sum(axis=0) / full_n - full_mean * full_mean
         counts.update(n_used=full_n, fold_counts=n.tolist())
-        return ((full_mean, np.sqrt(np.maximum(full_var, 0.0))),
-                (mean, std), counts)
+        return ((full_mean, np.sqrt(np.maximum(full_var, 0.0))), (mean, std), counts)

@@ -10,6 +10,7 @@ All masks follow one convention: bool, True == masked.
 
     gt = load_mask("human_Mask")                  # (1064, 1030) bool, True==masked
 """
+
 from __future__ import annotations
 import os, json
 import numpy as np
@@ -47,13 +48,13 @@ def manifest() -> dict:
 def score(pred: np.ndarray, truth: np.ndarray) -> dict:
     """IoU / precision / recall of a predicted mask vs a reference (True==masked)."""
     pred, truth = pred.astype(bool), truth.astype(bool)
-    tp = int((pred & truth).sum()); fp = int((pred & ~truth).sum())
+    tp = int((pred & truth).sum())
+    fp = int((pred & ~truth).sum())
     fn = int((~pred & truth).sum())
     iou = tp / (tp + fp + fn) if (tp + fp + fn) else 1.0
     prec = tp / (tp + fp) if (tp + fp) else 1.0
     rec = tp / (tp + fn) if (tp + fn) else 1.0
-    return {"iou": iou, "precision": prec, "recall": rec,
-            "tp": tp, "fp": fp, "fn": fn}
+    return {"iou": iou, "precision": prec, "recall": rec, "tp": tp, "fp": fp, "fn": fn}
 
 
 if __name__ == "__main__":

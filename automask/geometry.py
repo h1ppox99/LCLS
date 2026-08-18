@@ -15,6 +15,7 @@ arrays the center is (1005, 45), not (45, 1005) -- get_center() returns it in
 this axis0/axis1 order so callers can plug it straight into
 `np.indices(image.shape)` without re-deriving the swap.
 """
+
 from __future__ import annotations
 from functools import lru_cache
 import numpy as np
@@ -80,6 +81,7 @@ def asm_to_panel(asm: np.ndarray, run: int) -> np.ndarray:
 
 if __name__ == "__main__":
     import sys
+
     run = int(sys.argv[1]) if len(sys.argv) > 1 else 475
     c0, c1 = get_center(run)
     print(f"run {run}: assembled center (axis0, axis1) = ({c0:.1f}, {c1:.1f})")

@@ -21,9 +21,7 @@ class RunProfile:
     values: Dict[str, np.ndarray]
     summary: Dict[str, List[dict]]
     epics: List[dict]
-    source: Optional["Psana1RunSource"] = field(
-        default=None, repr=False, compare=False
-    )
+    source: Optional["Psana1RunSource"] = field(default=None, repr=False, compare=False)
 
     def column(self, name: str) -> np.ndarray:
         """Return one canonical per-shot field with a concise missing-field error."""

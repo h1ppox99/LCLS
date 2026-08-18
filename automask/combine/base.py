@@ -9,6 +9,7 @@ produce the final mask. Two families by what they consume:
     (large > 0 == wants masking), fused jointly then thresholded once
     (combine/weighted_sum.py, combine/mahalanobis.py).
 """
+
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable, Dict, Type
@@ -20,9 +21,9 @@ COMBINERS: Dict[str, "CombineSpec"] = {}
 @dataclass
 class CombineSpec:
     name: str
-    combine: Callable         # (floor, components, sample, params) -> bool mask
-    params: Type              # dataclass type holding this combiner's knob(s)
-    consumes: str = "picks"   # "picks" or "fields"
+    combine: Callable  # (floor, components, sample, params) -> bool mask
+    params: Type  # dataclass type holding this combiner's knob(s)
+    consumes: str = "picks"  # "picks" or "fields"
     doc: str = ""
 
 

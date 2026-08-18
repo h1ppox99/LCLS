@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Prewarm selected-shot images and detector calibrations for production.
 
-    source psana_env.sh
-    python -m automask.producers.build_images --run 389 475
+source psana_env.sh
+python -m automask.producers.build_images --run 389 475
 """
+
 from __future__ import annotations
 
 import argparse
@@ -24,16 +25,23 @@ def main() -> None:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument(
-        "--run", type=int, nargs="*", default=list(RUNS),
+        "--run",
+        type=int,
+        nargs="*",
+        default=list(RUNS),
         help="runs to prewarm (default: 389 475)",
     )
     parser.add_argument(
-        "--reduction", nargs="*", default=list(default_reductions),
+        "--reduction",
+        nargs="*",
+        default=list(default_reductions),
         choices=("mean", "std", "median", "mad"),
         help=f"selected-shot reductions (default: {default_reductions})",
     )
     parser.add_argument(
-        "--calibration", nargs="*", default=list(default_calibrations),
+        "--calibration",
+        nargs="*",
+        default=list(default_calibrations),
         help=f"detector constants (default: {default_calibrations})",
     )
     args = parser.parse_args()

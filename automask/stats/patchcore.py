@@ -37,6 +37,7 @@ to register it:
 
     from automask.stats import patchcore   # noqa: F401  (registers "patchcore")
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -56,19 +57,19 @@ IMAGENET_STD = (0.229, 0.224, 0.225)
 @dataclass
 class PatchCoreParams:
     k: float = 3.5
-    mode: str = "high"              # far from the normal manifold == defective
+    mode: str = "high"  # far from the normal manifold == defective
     backbone: str = "wide_resnet50_2"
-    known: str = "production"       # what already-trusted mask defines "not normal"
+    known: str = "production"  # what already-trusted mask defines "not normal"
     bank_run: Optional[int] = None  # None == fit the bank on the run under test
-    fill: str = "none"              # how masked pixels are erased from the INPUT
+    fill: str = "none"  # how masked pixels are erased from the INPUT
     #   "none"    -- leave them (the backbone sees dead bands and black gaps)
     #   "median"  -- constant fill: flat plateaus with STEP EDGES the CNN flags
     #   "nearest" -- nearest valid neighbour: no step, but streaky and too smooth
     #   "texture" -- smooth local level + noise matched to the local good scatter,
     #                so a filled region is statistically ordinary background
-    n_bank: int = 30000             # descriptors kept in the memory bank
-    neighbours: int = 1             # k of the k-NN distance
-    blur_sigma: float = 4.0         # smoothing of the upsampled score map
+    n_bank: int = 30000  # descriptors kept in the memory bank
+    neighbours: int = 1  # k of the k-NN distance
+    blur_sigma: float = 4.0  # smoothing of the upsampled score map
     seed: int = 0
 
 
@@ -83,8 +84,10 @@ def known_mask(sample, source: str) -> np.ndarray:
     off the Sample -- a Sample carries no ground truth."""
     if source == "human":
         from automask.evaluation import reference_mask
+
         return reference_mask(sample.run)
     from automask.masking import production_pipeline
+
     pipe = production_pipeline("union")
     if source == "floor":
         return pipe.floor(sample)
@@ -116,6 +119,7 @@ def _fill(arr: np.ndarray, bad: np.ndarray, mode: str, seed: int) -> np.ndarray:
     scores no anomaly at all.
     """
     from scipy.ndimage import distance_transform_edt, gaussian_filter
+
     good = ~bad
     if mode == "median":
         return np.where(bad, np.median(arr[good]), arr)
@@ -125,16 +129,19 @@ def _fill(arr: np.ndarray, bad: np.ndarray, mode: str, seed: int) -> np.ndarray:
         return np.where(bad, near, arr)
     if mode != "texture":
         raise ValueError(f"unknown fill mode {mode!r}")
-    base = gaussian_filter(near, 8.0)               # local level, streaks removed
+    base = gaussian_filter(near, 8.0)  # local level, streaks removed
     w = gaussian_filter(good.astype(float), 8.0)
-    scale = (gaussian_filter(np.where(good, np.abs(arr - base), 0.0), 8.0)
-             / np.maximum(w, 1e-6)) / 0.7979        # mean|dev| -> sigma
+    scale = (
+        gaussian_filter(np.where(good, np.abs(arr - base), 0.0), 8.0)
+        / np.maximum(w, 1e-6)
+    ) / 0.7979  # mean|dev| -> sigma
     noise = np.random.default_rng(seed).standard_normal(arr.shape) * scale
     return np.where(bad, base + noise, arr)
 
 
-def render(sample, known: Optional[np.ndarray] = None, fill: str = "none",
-           seed: int = 0) -> np.ndarray:
+def render(
+    sample, known: Optional[np.ndarray] = None, fill: str = "none", seed: int = 0
+) -> np.ndarray:
     """(3, H, W) float32 in [0, 1] -- the frame AFTER the trusted masks.
 
     `known` is excluded from the contrast stretch (a huge dead band no longer
@@ -162,9 +169,11 @@ def render(sample, known: Optional[np.ndarray] = None, fill: str = "none",
 def _backbone(name: str):
     import timm
     import torch
+
     if name not in _MODEL_CACHE:
-        model = timm.create_model(name, pretrained=True, features_only=True,
-                                  out_indices=(1, 2))
+        model = timm.create_model(
+            name, pretrained=True, features_only=True, out_indices=(1, 2)
+        )
         dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         _MODEL_CACHE[name] = (model.eval().to(dev), dev)
     return _MODEL_CACHE[name]
@@ -180,6 +189,7 @@ def descriptors(img: np.ndarray, backbone: str):
     """
     import torch
     import torch.nn.functional as F
+
     model, dev = _backbone(backbone)
     x = torch.from_numpy(img)[None].to(dev)
     mean = torch.tensor(IMAGENET_MEAN, device=dev).view(1, 3, 1, 1)
@@ -188,9 +198,11 @@ def descriptors(img: np.ndarray, backbone: str):
         feats = model((x - mean) / std)
         pooled = [F.avg_pool2d(f, 3, stride=1, padding=1) for f in feats]
         size = pooled[0].shape[-2:]
-        up = [pooled[0]] + [F.interpolate(f, size=size, mode="bilinear",
-                                          align_corners=False) for f in pooled[1:]]
-        emb = torch.cat(up, dim=1)[0]                  # (C, h, w)
+        up = [pooled[0]] + [
+            F.interpolate(f, size=size, mode="bilinear", align_corners=False)
+            for f in pooled[1:]
+        ]
+        emb = torch.cat(up, dim=1)[0]  # (C, h, w)
     return emb.permute(1, 2, 0).contiguous(), img.shape[1] / emb.shape[1]
 
 
@@ -198,6 +210,7 @@ def _patch_is_clean(exclude: np.ndarray, grid_shape, dev):
     """Grid cells whose whole receptive patch is free of `exclude` pixels."""
     import torch
     import torch.nn.functional as F
+
     m = torch.from_numpy(exclude.astype(np.float32))[None, None].to(dev)
     small = F.adaptive_max_pool2d(m, grid_shape)[0, 0]
     return small < 0.5
@@ -206,22 +219,25 @@ def _patch_is_clean(exclude: np.ndarray, grid_shape, dev):
 def fit_bank(sample, p: PatchCoreParams, exclude: np.ndarray):
     """Memory bank of descriptors from the pixels `exclude` does NOT cover."""
     import torch
+
     emb, _ = descriptors(render(sample, exclude, p.fill, p.seed), p.backbone)
     clean = _patch_is_clean(exclude, emb.shape[:2], emb.device)
     bank = emb[clean]
     if bank.shape[0] > p.n_bank:
         g = torch.Generator(device="cpu").manual_seed(p.seed)
-        idx = torch.randperm(bank.shape[0], generator=g)[:p.n_bank]
+        idx = torch.randperm(bank.shape[0], generator=g)[: p.n_bank]
         bank = bank[idx.to(bank.device)]
     return bank
 
 
-def anomaly_map(sample, bank, p: PatchCoreParams,
-                known: Optional[np.ndarray] = None) -> np.ndarray:
+def anomaly_map(
+    sample, bank, p: PatchCoreParams, known: Optional[np.ndarray] = None
+) -> np.ndarray:
     """Per-pixel distance-to-normal, upsampled and smoothed to image size."""
     import torch
     import torch.nn.functional as F
     from scipy.ndimage import gaussian_filter
+
     emb, _ = descriptors(render(sample, known, p.fill, p.seed), p.backbone)
     h, w, c = emb.shape
     q = emb.reshape(-1, c)
@@ -230,8 +246,13 @@ def anomaly_map(sample, bank, p: PatchCoreParams,
         d = torch.cdist(chunk, bank)
         dists.append(d.topk(p.neighbours, largest=False).values.mean(1))
     score = torch.cat(dists).reshape(1, 1, h, w)
-    full = F.interpolate(score, size=sample.mean.shape, mode="bilinear",
-                         align_corners=False)[0, 0].cpu().numpy()
+    full = (
+        F.interpolate(
+            score, size=sample.mean.shape, mode="bilinear", align_corners=False
+        )[0, 0]
+        .cpu()
+        .numpy()
+    )
     return gaussian_filter(full, p.blur_sigma) if p.blur_sigma > 0 else full
 
 
@@ -247,8 +268,14 @@ def _bank_for(sample, p: PatchCoreParams):
     zero). Excluding the *production* mask instead removes them without any
     hand label, which is what makes an unsupervised bank work at all.
     """
-    key = (p.backbone, p.bank_run if p.bank_run is not None else sample.run,
-           p.known, p.fill, p.n_bank, p.seed)
+    key = (
+        p.backbone,
+        p.bank_run if p.bank_run is not None else sample.run,
+        p.known,
+        p.fill,
+        p.n_bank,
+        p.seed,
+    )
     if key in _BANK_CACHE:
         return _BANK_CACHE[key]
     if p.bank_run is None:
@@ -256,6 +283,7 @@ def _bank_for(sample, p: PatchCoreParams):
     else:
         from automask.sample import Sample
         from automask.selection_presets import BEAM_ON_SELECTION
+
         src = Sample.from_store(
             p.bank_run, BEAM_ON_SELECTION, ("mean", "std", "pedestals")
         )
@@ -279,13 +307,15 @@ def compute(sample, params: PatchCoreParams | None = None):
     return patchcore_stat(sample, params or PatchCoreParams())
 
 
-register_stat(StatSpec(
-    name="patchcore",
-    compute=compute,
-    params=PatchCoreParams,
-    kind="field",
-    mode="high",
-    needs=("mean", "std"),
-    doc="PatchCore: distance from an ImageNet-feature memory bank of normal "
+register_stat(
+    StatSpec(
+        name="patchcore",
+        compute=compute,
+        params=PatchCoreParams,
+        kind="field",
+        mode="high",
+        needs=("mean", "std"),
+        doc="PatchCore: distance from an ImageNet-feature memory bank of normal "
         "patches; high z == unlike anything normal",
-))
+    )
+)

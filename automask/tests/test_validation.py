@@ -90,14 +90,11 @@ def test_regularizer_and_combiner_parameter_paths():
     from automask.masking import production_pipeline
 
     pipeline = production_pipeline("weighted_sum")
-    changed = _set_parameter(
-        pipeline, "variance.field_reg.tv.weight", 3.0)
-    changed = _set_parameter(
-        changed, "asic_polish.mask_reg.area_gate.min_area", 250)
+    changed = _set_parameter(pipeline, "variance.field_reg.tv.weight", 3.0)
+    changed = _set_parameter(changed, "asic_polish.mask_reg.area_gate.min_area", 250)
     changed = _set_parameter(changed, "combiner.params.k", 4.0)
     assert _get_parameter(changed, "variance.field_reg.tv.weight") == 3.0
-    assert _get_parameter(
-        changed, "asic_polish.mask_reg.area_gate.min_area") == 250
+    assert _get_parameter(changed, "asic_polish.mask_reg.area_gate.min_area") == 250
     assert _get_parameter(changed, "combiner.params.k") == 4.0
     assert _get_parameter(pipeline, "variance.field_reg.tv.weight") == 4.0
 
@@ -127,38 +124,48 @@ class _Store:
 def test_validation_separates_data_model_and_interaction_axes(test_stat):
     pipeline = _pipeline(test_stat, duplicate=True)
     design = MaskValidationDesign(
-        sweeps=(ParameterSweep(
-            "primary.params.k", (0.25, 1.25), "declared threshold tolerance"),),
+        sweeps=(
+            ParameterSweep(
+                "primary.params.k", (0.25, 1.25), "declared threshold tolerance"
+            ),
+        ),
         n_folds=2,
     )
-    report = validate_mask(
-        pipeline, 999, ShotSelection(), design, store=_Store())
+    report = validate_mask(pipeline, 999, ShotSelection(), design, store=_Store())
 
     assert report.data["round_robin"].pairwise_iou.tolist() == [1.0]
     assert report.data["chronological"].pairwise_iou.tolist() == [0.5]
     assert len(report.model.cases) == 2
     assert len(report.interaction["round_robin"].cases) == 4
     assert report.removed_channels == ()
-    assert [channel.label for channel in report.recommended_pipeline.evidence_channels] == [
-        "primary", "duplicate"
-    ]
+    assert [
+        channel.label for channel in report.recommended_pipeline.evidence_channels
+    ] == ["primary", "duplicate"]
     assert "descriptive" in report.to_markdown()
 
 
 def test_pruning_keeps_first_of_two_exact_duplicate_channels(test_stat):
     report = validate_mask(
-        _pipeline(test_stat, duplicate=True), 999, ShotSelection(),
-        MaskValidationDesign(n_folds=2), store=_Store())
+        _pipeline(test_stat, duplicate=True),
+        999,
+        ShotSelection(),
+        MaskValidationDesign(n_folds=2),
+        store=_Store(),
+    )
     assert report.removed_channels == ("duplicate",)
-    assert [channel.label for channel in report.recommended_pipeline.evidence_channels] == [
-        "primary"
-    ]
+    assert [
+        channel.label for channel in report.recommended_pipeline.evidence_channels
+    ] == ["primary"]
 
 
 def test_report_saves_structured_bundle(tmp_path, test_stat):
     report = validate_mask(
-        _pipeline(test_stat), 999, ShotSelection(),
-        MaskValidationDesign(n_folds=2), store=_Store())
+        _pipeline(test_stat),
+        999,
+        ShotSelection(),
+        MaskValidationDesign(n_folds=2),
+        store=_Store(),
+    )
     output = report.save(tmp_path / "report")
     assert (output / "report.md").exists()
     assert (output / "metrics.json").exists()

@@ -46,6 +46,7 @@ Radon alternative. `line_length` sits on a broad plateau (100-200 px) and the
 vote threshold barely matters; `width=1` gives the best precision on the added
 pixels at equal IoU.
 """
+
 from __future__ import annotations
 from dataclasses import dataclass
 
@@ -60,14 +61,14 @@ from automask.stats.blackhat import blackhat_stat
 
 @dataclass
 class HoughLinesParams:
-    radius: int = 5          # black-hat structuring element, px
-    bin_k: float = 4.0       # robust-MAD z bar binarizing the darkness field
-    min_size: int = 4        # drop connected specks below this many px
-    threshold: int = 10      # Hough accumulator votes needed
-    line_length: int = 100   # shortest segment kept, px
-    line_gap: int = 5        # gap tolerated inside one segment, px
-    width: int = 1           # dilation radius applied to rasterized segments, px
-    exclude_floor: bool = True   # hide geometry+calib from the accumulator
+    radius: int = 5  # black-hat structuring element, px
+    bin_k: float = 4.0  # robust-MAD z bar binarizing the darkness field
+    min_size: int = 4  # drop connected specks below this many px
+    threshold: int = 10  # Hough accumulator votes needed
+    line_length: int = 100  # shortest segment kept, px
+    line_gap: int = 5  # gap tolerated inside one segment, px
+    width: int = 1  # dilation radius applied to rasterized segments, px
+    exclude_floor: bool = True  # hide geometry+calib from the accumulator
     # z-worth of one picked pixel, for consumes="fields" combiners only.
     # None (default) => fusing this detector is an error rather than a silent no-op.
     defectiveness_scale: float | None = None
@@ -95,9 +96,9 @@ def segments_mask(segments, shape, width=1):
 def hough_segments(binary, threshold=10, line_length=100, line_gap=5, rng=0):
     """Probabilistic Hough segments of a binary map. `rng` is pinned so the same
     input gives the same segments -- the transform samples edge points."""
-    return probabilistic_hough_line(binary, threshold=threshold,
-                                    line_length=line_length, line_gap=line_gap,
-                                    rng=rng)
+    return probabilistic_hough_line(
+        binary, threshold=threshold, line_length=line_length, line_gap=line_gap, rng=rng
+    )
 
 
 def floor_mask(sample, pad=2):
@@ -106,6 +107,7 @@ def floor_mask(sample, pad=2):
     handed their output."""
     from automask.stats.geometry import geometry_mask
     from automask.stats.status_as_mask import compute as status_mask
+
     return geometry_mask(sample.real, pad=pad) | status_mask(sample)
 
 
@@ -115,8 +117,9 @@ def hough_lines_mask(image, real, p: HoughLinesParams, floor=None):
     domain = real if floor is None else (real & ~floor)
     z = blackhat_stat(image, real, radius=p.radius)
     binary = anomaly_map(z, domain, bin_k=p.bin_k, min_size=p.min_size)
-    segments = hough_segments(binary, threshold=p.threshold,
-                              line_length=p.line_length, line_gap=p.line_gap)
+    segments = hough_segments(
+        binary, threshold=p.threshold, line_length=p.line_length, line_gap=p.line_gap
+    )
     return segments_mask(segments, binary.shape, width=p.width) & domain
 
 
@@ -126,12 +129,14 @@ def compute(sample, params: HoughLinesParams | None = None):
     return hough_lines_mask(sample.mean, sample.real, p, floor=floor)
 
 
-register_stat(StatSpec(
-    name="hough_lines",
-    compute=compute,
-    params=HoughLinesParams,
-    kind="pick",
-    needs=("mean", "real", "status_as_mask"),
-    doc="probabilistic-Hough segments of the black-hat darkness map; "
+register_stat(
+    StatSpec(
+        name="hough_lines",
+        compute=compute,
+        params=HoughLinesParams,
+        kind="pick",
+        needs=("mean", "real", "status_as_mask"),
+        doc="probabilistic-Hough segments of the black-hat darkness map; "
         "emits a mask (kind='pick'), so field_reg must be None",
-))
+    )
+)

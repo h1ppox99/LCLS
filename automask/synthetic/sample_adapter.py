@@ -27,13 +27,18 @@ real) and the streak is additive. Only pixels in the caller-supplied valid
 ``region`` are modified, and the injected mask is a subset of it, matching the
 image-path convention. The source Sample is never mutated.
 """
+
 from __future__ import annotations
 
 import numpy as np
 
 from automask.sample import Sample
-from automask.synthetic.artifacts import (beamstop_factor, hot_patch_profile,
-                                          streak_profile, _robust_stats)
+from automask.synthetic.artifacts import (
+    beamstop_factor,
+    hot_patch_profile,
+    streak_profile,
+    _robust_stats,
+)
 
 
 def rotate_sample(sample, degrees: int):
@@ -57,9 +62,9 @@ def rotate_sample(sample, degrees: int):
     k = (int(degrees) // 90) % 4
     arrays = {}
     for name, array in sample.arrays.items():
-        if array.ndim == 3:          # native panel geometry, not assembled
+        if array.ndim == 3:  # native panel geometry, not assembled
             if k:
-                continue             # dropped: see the note above
+                continue  # dropped: see the note above
             arrays[name] = array
         else:
             arrays[name] = np.rot90(array, k)
@@ -114,13 +119,16 @@ def corrupt_sample(sample, name: str, rng, params: dict, region):
         ped = np.array(sample.pedestals, dtype=np.float64, copy=True)
         valid_panel = asm_to_panel(region, sample.run)
         _, sd = _robust_stats(ped[valid_panel])
-        ped[valid_panel] += (amplitude_sigma * sd
-                             * asm_to_panel(profile, sample.run)[valid_panel])
+        ped[valid_panel] += (
+            amplitude_sigma * sd * asm_to_panel(profile, sample.run)[valid_panel]
+        )
         updates = {"pedestals": ped}
         injected = core & region
 
     else:
-        raise ValueError(f"no Sample adapter for artifact {name!r} "
-                         f"(supported: streak, beamstop, beamstop_small, hot_patch)")
+        raise ValueError(
+            f"no Sample adapter for artifact {name!r} "
+            f"(supported: streak, beamstop, beamstop_small, hot_patch)"
+        )
 
     return sample.with_arrays(**updates), injected

@@ -1,4 +1,5 @@
 """Typed, human-readable output for run-local mask validation."""
+
 from __future__ import annotations
 
 import json
@@ -53,21 +54,29 @@ def _plain(value):
 def _pipeline_config(pipeline) -> dict:
     channels = []
     for channel in pipeline.channels:
+
         def stages(names, params):
             return [
-                {"name": name, "params": _plain(
-                    value if value is not None else REGULARIZERS[name].params())}
+                {
+                    "name": name,
+                    "params": _plain(
+                        value if value is not None else REGULARIZERS[name].params()
+                    ),
+                }
                 for name, value in channel._stages(names, params)
             ]
 
-        channels.append({
-            "name": channel.label,
-            "stat": channel.stat,
-            "params": _plain(channel._params()),
-            "field_regularizers": stages(
-                channel.field_reg, channel.field_reg_params),
-            "mask_regularizers": stages(channel.mask_reg, channel.mask_reg_params),
-        })
+        channels.append(
+            {
+                "name": channel.label,
+                "stat": channel.stat,
+                "params": _plain(channel._params()),
+                "field_regularizers": stages(
+                    channel.field_reg, channel.field_reg_params
+                ),
+                "mask_regularizers": stages(channel.mask_reg, channel.mask_reg_params),
+            }
+        )
     combiner_params = pipeline.combiner_params
     if combiner_params is None:
         combiner_params = COMBINERS[pipeline.combiner].params()
@@ -203,8 +212,7 @@ class MaskValidationReport:
             minimum = min((delta.iou for delta in deltas), default=1.0)
             maximum = max((delta.changed_fraction for delta in deltas), default=0.0)
             lines.append(
-                f"| {strategy} | {len(deltas)} | {minimum:.4f} | "
-                f"{100 * maximum:.4f}% |"
+                f"| {strategy} | {len(deltas)} | {minimum:.4f} | {100 * maximum:.4f}% |"
             )
 
         lines += [
@@ -249,35 +257,42 @@ class MaskValidationReport:
         fig.tight_layout(rect=[0, 0, 1, 0.95])
         figures["overview"] = fig
 
-        maps = [(f"data: {key}", value.instability)
-                for key, value in self.data.items()]
+        maps = [(f"data: {key}", value.instability) for key, value in self.data.items()]
         maps.append(("model", self.model.instability))
-        maps.extend((f"interaction: {key}", value.instability)
-                    for key, value in self.interaction.items())
-        fig, axes = plt.subplots(1, len(maps), figsize=(4.2 * len(maps), 4.3),
-                                 squeeze=False)
+        maps.extend(
+            (f"interaction: {key}", value.instability)
+            for key, value in self.interaction.items()
+        )
+        fig, axes = plt.subplots(
+            1, len(maps), figsize=(4.2 * len(maps), 4.3), squeeze=False
+        )
         image = None
         for ax, (label, values) in zip(axes[0], maps):
             image = ax.imshow(values, cmap="inferno", vmin=0.0, vmax=0.5)
             ax.set_title(label)
             ax.axis("off")
         if image is not None:
-            fig.colorbar(image, ax=list(axes[0]), fraction=0.025, pad=0.02,
-                         label="2p(1-p)")
+            fig.colorbar(
+                image, ax=list(axes[0]), fraction=0.025, pad=0.02, label="2p(1-p)"
+            )
         fig.suptitle("instability maps")
         figures["instability"] = fig
 
         if self.channels:
-            fig, axes = plt.subplots(1, len(self.channels),
-                                     figsize=(4.2 * len(self.channels), 4.3),
-                                     squeeze=False)
+            fig, axes = plt.subplots(
+                1,
+                len(self.channels),
+                figsize=(4.2 * len(self.channels), 4.3),
+                squeeze=False,
+            )
             for ax, channel in zip(axes[0], self.channels):
                 show_mask(channel.contribution_mask, ax=ax, title=channel.label)
             fig.suptitle("full-sample leave-one-channel-out changes")
             fig.tight_layout(rect=[0, 0, 1, 0.94])
             figures["ablations"] = fig
             figures["channels"] = channel_panels(
-                self.input_pipeline, self.sample, floor_row=True)
+                self.input_pipeline, self.sample, floor_row=True
+            )
         return figures
 
     def display(self):
@@ -305,13 +320,14 @@ class MaskValidationReport:
         for axis, result in [
             *((f"data_{key}", value) for key, value in self.data.items()),
             ("model", self.model),
-            *((f"interaction_{key}", value)
-              for key, value in self.interaction.items()),
+            *((f"interaction_{key}", value) for key, value in self.interaction.items()),
         ]:
-            np.save(path / f"{axis}_selection_frequency.npy",
-                    result.selection_frequency)
+            np.save(
+                path / f"{axis}_selection_frequency.npy", result.selection_frequency
+            )
             np.save(path / f"{axis}_instability.npy", result.instability)
         import matplotlib.pyplot as plt
+
         for name, figure in self.figures().items():
             figure.savefig(path / f"{name}.png", dpi=120, bbox_inches="tight")
             plt.close(figure)

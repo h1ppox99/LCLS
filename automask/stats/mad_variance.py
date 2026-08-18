@@ -20,6 +20,7 @@ complementary rather than redundant, and both remain monotone in their feature,
 so the log only conditions `k` and the TV stage (see the module docstring notes
 in `stats/variance.py`).
 """
+
 from __future__ import annotations
 from dataclasses import dataclass
 
@@ -30,8 +31,8 @@ from automask.stats.base import StatSpec, register_stat, robust_z
 
 @dataclass
 class MadVarianceParams:
-    k: float = 3.5          # robust-MAD threshold
-    mode: str = "high"      # flag LARGE robust dispersion (unstable pixels)
+    k: float = 3.5  # robust-MAD threshold
+    mode: str = "high"  # flag LARGE robust dispersion (unstable pixels)
 
 
 def mad_variance_stat(mad):
@@ -46,12 +47,14 @@ def compute(sample, params: MadVarianceParams | None = None):
     return mad_variance_stat(sample.mad)
 
 
-register_stat(StatSpec(
-    name="mad_variance",
-    compute=compute,
-    params=MadVarianceParams,
-    kind="field",
-    mode="high",
-    needs=("mad",),
-    doc="robust-MAD z of log10 per-pixel MAD; high z == persistently unstable",
-))
+register_stat(
+    StatSpec(
+        name="mad_variance",
+        compute=compute,
+        params=MadVarianceParams,
+        kind="field",
+        mode="high",
+        needs=("mad",),
+        doc="robust-MAD z of log10 per-pixel MAD; high z == persistently unstable",
+    )
+)

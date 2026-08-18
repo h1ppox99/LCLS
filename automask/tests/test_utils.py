@@ -80,17 +80,13 @@ class FakeEvr:
         return [FakeFifo(code) for code in self.codes]
 
 
-AnalogType = type(
-    "BldDataAnalogInputV1", (), {"__module__": "psana.Bld"}
-)
+AnalogType = type("BldDataAnalogInputV1", (), {"__module__": "psana.Bld"})
 EvrType = type("DataV4", (), {"__module__": "psana.EvrData"})
 
 
 class FakeEvent:
     def __init__(self, analog, codes):
-        self.analog_key = FakeEventKey(
-            AnalogType, "BldInfo(TEST-AIN)"
-        )
+        self.analog_key = FakeEventKey(AnalogType, "BldInfo(TEST-AIN)")
         self.evr_key = FakeEventKey(
             EvrType, "DetInfo(NoDetector.0:Evr.0)", alias="evr0"
         )
@@ -192,12 +188,8 @@ def test_profile_run_values_discovers_and_profiles_payloads(monkeypatch):
 
     assert profile.events == 2
     analog = profile.values["ai/ch01"]
-    beam = profile.values[
-        "DetInfo(NoDetector.0:Evr.0)/EvrData.DataV4/eventCode[137]"
-    ]
-    code_90 = profile.values[
-        "DetInfo(NoDetector.0:Evr.0)/EvrData.DataV4/eventCode[90]"
-    ]
+    beam = profile.values["DetInfo(NoDetector.0:Evr.0)/EvrData.DataV4/eventCode[137]"]
+    code_90 = profile.values["DetInfo(NoDetector.0:Evr.0)/EvrData.DataV4/eventCode[90]"]
     delay = profile.values["EPICS/delay"]
     state = profile.values["EPICS/state"]
 
@@ -240,9 +232,9 @@ def test_profile_run_values_hides_constant_rows_by_default(monkeypatch):
     ]
     data_source = FakeDataSource(events, states)
     rendered = []
-    monkeypatch.setattr(utils, "_show_table", lambda title, rows: rendered.append(
-        (title, rows)
-    ))
+    monkeypatch.setattr(
+        utils, "_show_table", lambda title, rows: rendered.append((title, rows))
+    )
 
     profile = utils.profile_run_values(
         12,
@@ -254,12 +246,8 @@ def test_profile_run_values_hides_constant_rows_by_default(monkeypatch):
     epics_rows = rendered[2][1]
     assert all(row["variation"] != "constant" for row in value_rows)
     assert [row["alias"] for row in epics_rows] == ["delay"]
-    assert any(
-        row["variation"] == "constant" for row in profile.summary["xtc"]
-    )
-    assert any(
-        row["variation"] == "constant" for row in profile.summary["epics"]
-    )
+    assert any(row["variation"] == "constant" for row in profile.summary["xtc"])
+    assert any(row["variation"] == "constant" for row in profile.summary["epics"])
 
 
 def test_profile_run_values_can_show_constant_rows(monkeypatch):
@@ -267,9 +255,9 @@ def test_profile_run_values_can_show_constant_rows(monkeypatch):
     states = [{"delay": 1.0, "state": "READY"} for _ in events]
     data_source = FakeDataSource(events, states)
     rendered = []
-    monkeypatch.setattr(utils, "_show_table", lambda title, rows: rendered.append(
-        (title, rows)
-    ))
+    monkeypatch.setattr(
+        utils, "_show_table", lambda title, rows: rendered.append((title, rows))
+    )
 
     utils.profile_run_values(
         12,
@@ -297,9 +285,7 @@ def test_short_values_rejects_opaque_and_binary_scalars():
         with np.testing.assert_raises(ValueError):
             utils._short_values("field", value)
 
-    assert utils._short_values("field", b"printable") == {
-        "field": "printable"
-    }
+    assert utils._short_values("field", b"printable") == {"field": "printable"}
 
 
 def test_payload_discovery_skips_unsupported_values_without_read_errors():

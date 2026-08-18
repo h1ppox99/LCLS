@@ -1,4 +1,5 @@
 """Reference-mask evaluation for fitting and held-out validation."""
+
 from __future__ import annotations
 import os
 from typing import Optional, Sequence, Tuple
@@ -13,6 +14,7 @@ from automask.selection_presets import BEAM_ON_SELECTION
 from automask.shot_selection import ShotSelection
 
 PACKAGE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 
 def _partition_runs(runs: Sequence[int]) -> Tuple[Tuple[int, ...], Tuple[int, ...]]:
     runs = tuple(runs)
@@ -62,7 +64,9 @@ def evaluate(
         full = score(pred, human)
         resid = score(pred & ~floor, target)
         per_run[run] = {
-            "iou": full["iou"], "precision": full["precision"], "recall": full["recall"],
+            "iou": full["iou"],
+            "precision": full["precision"],
+            "recall": full["recall"],
             "masked_frac": float(pred.mean()),
             "residual_iou": resid["iou"],
             "residual_precision": resid["precision"],
@@ -71,8 +75,10 @@ def evaluate(
         }
         if verbose:
             m = per_run[run]
-            print(f"  run {run}: IoU {m['iou']:.3f}  prec {m['precision']:.3f}  "
-                  f"rec {m['recall']:.3f}  ({100*m['masked_frac']:.2f}% masked)")
+            print(
+                f"  run {run}: IoU {m['iou']:.3f}  prec {m['precision']:.3f}  "
+                f"rec {m['recall']:.3f}  ({100 * m['masked_frac']:.2f}% masked)"
+            )
 
     keys = next(iter(per_run.values())).keys()
     mean = {k: float(np.mean([per_run[r][k] for r in runs])) for k in keys}

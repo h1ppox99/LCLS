@@ -15,6 +15,7 @@ Two spaces meet here, and they are not mixed:
   cannot survive that. A statistic that needs one assembled interprets it first,
   then calls :func:`automask.geometry.panel_to_asm`.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -46,7 +47,8 @@ class Sample:
         raise AttributeError(
             f"run {self.__dict__.get('run')}: sample carries no array {name!r}; "
             f"loaded: {sorted(arrays)}. Add it to the statistic's `needs` so the "
-            f"pipeline requests it.")
+            f"pipeline requests it."
+        )
 
     @property
     def real(self) -> np.ndarray:
@@ -60,13 +62,15 @@ class Sample:
         while leaving calibration constants alone -- those are not estimated from
         this run's shots, so consistency folds must not perturb them.
         """
-        return Sample(run=self.run, arrays={**self.arrays, **arrays},
-                      selection=self.selection)
+        return Sample(
+            run=self.run, arrays={**self.arrays, **arrays}, selection=self.selection
+        )
 
     @cached_property
     def center(self) -> Tuple[float, float]:
         """Beam center in assembled (axis0, axis1) index order."""
         from automask.geometry import get_center
+
         return get_center(self.run)
 
     @classmethod

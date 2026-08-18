@@ -34,11 +34,13 @@ def test_labelled_evaluation_defaults_to_validation_runs(monkeypatch):
             self.run = run
 
     monkeypatch.setattr(
-        labelled.Sample, "from_store",
+        labelled.Sample,
+        "from_store",
         lambda run, selection, needs, store=None: Sample(run),
     )
     monkeypatch.setattr(
-        labelled, "reference_mask",
+        labelled,
+        "reference_mask",
         lambda run: np.array([[True, False], [False, False]]),
     )
     monkeypatch.setattr(labelled, "VALIDATION_RUNS", (396, 475))
@@ -71,18 +73,19 @@ def test_consistency_uses_fixed_folds_and_excludes_the_floor():
 
     class Store:
         round_robin_data = tuple(full.copy() for _ in range(4))
-        chronological_data = (
-            full.copy(), full.copy(), late.copy(), late.copy())
+        chronological_data = (full.copy(), full.copy(), late.copy(), late.copy())
 
         def reduce(self, run, selection, reduction):
             return self.round_robin_data[0]
 
         def folds(self, run, selection, reduction, n_folds, strategy):
-            return (self.round_robin_data if strategy == "round_robin"
-                    else self.chronological_data)
+            return (
+                self.round_robin_data
+                if strategy == "round_robin"
+                else self.chronological_data
+            )
 
-    result = evaluation.evaluate_consistency(
-        Pipeline(), 999, store=Store(), n_folds=4)
+    result = evaluation.evaluate_consistency(Pipeline(), 999, store=Store(), n_folds=4)
     assert result["n_folds"] == 4
     assert result["round_robin"]["fold_iou"].shape == (6,)
     assert result["round_robin"]["fold_iou_mean"] == 1.0

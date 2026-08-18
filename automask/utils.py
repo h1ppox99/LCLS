@@ -1,4 +1,5 @@
 """Reusable helpers for the production notebook."""
+
 from __future__ import annotations
 
 import os
@@ -16,7 +17,14 @@ ROOT = Path(__file__).resolve().parent.parent
 COLON = chr(0xF022)
 
 _PAYLOAD_ACCESSOR_VETO = {
-    "TypeId", "Version", "calib", "data", "frame", "image", "raw", "waveform"
+    "TypeId",
+    "Version",
+    "calib",
+    "data",
+    "frame",
+    "image",
+    "raw",
+    "waveform",
 }
 
 
@@ -24,7 +32,7 @@ def _payload_type_name(payload_type):
     if payload_type is None:
         return "—"
     module = payload_type.__module__
-    module = module[len("psana."):] if module.startswith("psana.") else module
+    module = module[len("psana.") :] if module.startswith("psana.") else module
     return f"{module}.{payload_type.__name__}"
 
 
@@ -53,8 +61,7 @@ def configure_psana_environment():
     os.environ.setdefault("SIT_ROOT", str(Path(psdm) / "sit_root"))
     os.environ.setdefault("SIT_DATA", str(Path(psdm) / "data"))
     environment = {
-        name: os.environ[name]
-        for name in ("SIT_PSDM_DATA", "SIT_ROOT", "SIT_DATA")
+        name: os.environ[name] for name in ("SIT_PSDM_DATA", "SIT_ROOT", "SIT_DATA")
     }
 
     checkout = os.environ.get("SMALLDATA_TOOLS") or config.get("SMALLDATA_TOOLS")
@@ -81,84 +88,89 @@ def configure_psana_environment():
 def _show_table(title, rows, columns=None):
     from IPython.display import Markdown, display
 
-    display(Markdown(f'### {title}'))
+    display(Markdown(f"### {title}"))
     if not rows:
-        display(Markdown('_None found._'))
+        display(Markdown("_None found._"))
         return
     columns = columns or list(rows[0])
 
     def clean(value):
-        return str(value).replace('|', '\\|').replace('\n', '<br>')
+        return str(value).replace("|", "\\|").replace("\n", "<br>")
 
     lines = [
-        '| ' + ' | '.join(columns) + ' |',
-        '| ' + ' | '.join('---' for _ in columns) + ' |',
+        "| " + " | ".join(columns) + " |",
+        "| " + " | ".join("---" for _ in columns) + " |",
     ]
     lines.extend(
-        '| ' + ' | '.join(clean(row.get(column, '')) for column in columns) + ' |'
+        "| " + " | ".join(clean(row.get(column, "")) for column in columns) + " |"
         for row in rows
     )
-    display(Markdown('\n'.join(lines)))
+    display(Markdown("\n".join(lines)))
 
 
 def _human_bytes(n_bytes):
     value = float(n_bytes)
-    for unit in ('B', 'KiB', 'MiB', 'GiB', 'TiB'):
-        if value < 1024 or unit == 'TiB':
-            return f'{value:.2f} {unit}'
+    for unit in ("B", "KiB", "MiB", "GiB", "TiB"):
+        if value < 1024 or unit == "TiB":
+            return f"{value:.2f} {unit}"
         value /= 1024
 
 
 def _xtc_inventory(experiment, run):
-    pattern = re.compile(r'-r(?P<run>\d+)-s(?P<stream>\d+)-c(?P<chunk>\d+)\.xtc$')
-    files = sorted(Path(XTC_DIR).glob(f'{experiment}-r{run:04d}-s*-c*.xtc'))
+    pattern = re.compile(r"-r(?P<run>\d+)-s(?P<stream>\d+)-c(?P<chunk>\d+)\.xtc$")
+    files = sorted(Path(XTC_DIR).glob(f"{experiment}-r{run:04d}-s*-c*.xtc"))
     rows = []
     for path in files:
         match = pattern.search(path.name)
-        stream = int(match.group('stream')) if match else None
-        chunk = int(match.group('chunk')) if match else None
-        rows.append({
-            'file': path.name,
-            'stream': f's{stream:02d}' if stream is not None else '?',
-            'chunk': f'c{chunk:02d}' if chunk is not None else '?',
-            'size': _human_bytes(path.stat().st_size),
-            'path': str(path.resolve()),
-        })
+        stream = int(match.group("stream")) if match else None
+        chunk = int(match.group("chunk")) if match else None
+        rows.append(
+            {
+                "file": path.name,
+                "stream": f"s{stream:02d}" if stream is not None else "?",
+                "chunk": f"c{chunk:02d}" if chunk is not None else "?",
+                "size": _human_bytes(path.stat().st_size),
+                "path": str(path.resolve()),
+            }
+        )
     return {
-        'files': rows,
-        'total_bytes': sum(path.stat().st_size for path in files),
+        "files": rows,
+        "total_bytes": sum(path.stat().st_size for path in files),
     }
 
 
 def _calibration_file_inventory(run, detector_type, detector_source):
     source_dir = (
-        Path(ROOT) / 'calib'
-        / detector_type.replace(':', COLON)
-        / detector_source.replace(':', COLON)
+        Path(ROOT)
+        / "calib"
+        / detector_type.replace(":", COLON)
+        / detector_source.replace(":", COLON)
     )
     rows = []
     if not source_dir.exists():
         return rows
     for constant_dir in sorted(path for path in source_dir.iterdir() if path.is_dir()):
         candidates = []
-        for path in constant_dir.glob('*.data'):
-            match = re.fullmatch(r'(\d+)-(end|\d+)\.data', path.name)
+        for path in constant_dir.glob("*.data"):
+            match = re.fullmatch(r"(\d+)-(end|\d+)\.data", path.name)
             if not match:
                 continue
             start = int(match.group(1))
-            end = float('inf') if match.group(2) == 'end' else int(match.group(2))
+            end = float("inf") if match.group(2) == "end" else int(match.group(2))
             if start <= run <= end:
                 candidates.append((start, end, path))
         selected = max(candidates, default=None, key=lambda item: item[0])
         if selected is None:
             continue
         start, end, path = selected
-        rows.append({
-            'constant': constant_dir.name,
-            'run range': f"{start}–{'end' if end == float('inf') else int(end)}",
-            'size': _human_bytes(path.stat().st_size),
-            'path': str(path.resolve()),
-        })
+        rows.append(
+            {
+                "constant": constant_dir.name,
+                "run range": f"{start}–{'end' if end == float('inf') else int(end)}",
+                "size": _human_bytes(path.stat().st_size),
+                "path": str(path.resolve()),
+            }
+        )
     return rows
 
 
@@ -168,14 +180,14 @@ def list_experiment_content(
     from IPython.display import Markdown, display
 
     xtc = _xtc_inventory(experiment, run)
-    calibration = _calibration_file_inventory(
-        run, detector_calib_type, detector_source
+    calibration = _calibration_file_inventory(run, detector_calib_type, detector_source)
+    display(
+        Markdown(
+            f"**Experiment:** `{experiment}`  \n"
+            f"**Run:** `{run:04d}`  \n"
+            f"**Detector:** `{detector}` (`{detector_source}`)"
+        )
     )
-    display(Markdown(
-        f"**Experiment:** `{experiment}`  \n"
-        f"**Run:** `{run:04d}`  \n"
-        f"**Detector:** `{detector}` (`{detector_source}`)"
-    ))
     _show_table(
         "Relevant XTC files",
         xtc["files"],
@@ -199,11 +211,7 @@ def list_experiment_content(
 
 def _short_values(field, value):
     array = np.asarray(value)
-    if (
-        array.ndim > 1
-        or array.size > 64
-        or array.dtype.kind not in "biufcUS"
-    ):
+    if array.ndim > 1 or array.size > 64 or array.dtype.kind not in "biufcUS":
         raise ValueError("field is not a supported short scalar or vector")
 
     def scalar(item):
@@ -221,10 +229,7 @@ def _short_values(field, value):
 
     if array.ndim == 0:
         return {field: scalar(array)}
-    return {
-        f"{field}[{index}]": scalar(item)
-        for index, item in enumerate(array)
-    }
+    return {f"{field}[{index}]": scalar(item) for index, item in enumerate(array)}
 
 
 def _discover_payload_values(payload):
@@ -276,8 +281,7 @@ def _record_values(columns, metadata, group, values, n_events, **field_info):
 def _profile_array(values):
     present = [value for value in values if value is not None]
     numeric = present and all(
-        isinstance(value, (bool, int, float, complex, np.number))
-        for value in present
+        isinstance(value, (bool, int, float, complex, np.number)) for value in present
     )
     return np.asarray(
         [np.nan if value is None and numeric else value for value in values],
@@ -291,20 +295,27 @@ def _column_summary(values):
         available = int(available_mask.sum())
         if not available:
             return "0.0%", "unavailable", "no values"
-        text_values = np.asarray([
-            value.decode("utf-8", errors="replace")
-            if isinstance(value, bytes) else str(value)
-            for value in values
-        ], dtype=object)
+        text_values = np.asarray(
+            [
+                value.decode("utf-8", errors="replace")
+                if isinstance(value, bytes)
+                else str(value)
+                for value in values
+            ],
+            dtype=object,
+        )
         observed = text_values[available_mask]
         unique, counts = np.unique(observed, return_counts=True)
         coverage = f"{available / values.size:.1%}"
         if unique.size == 1:
             return coverage, "constant", _abbreviate(unique[0])
-        changes = int(np.count_nonzero(
-            available_mask[1:] & available_mask[:-1]
-            & (text_values[1:] != text_values[:-1])
-        ))
+        changes = int(
+            np.count_nonzero(
+                available_mask[1:]
+                & available_mask[:-1]
+                & (text_values[1:] != text_values[:-1])
+            )
+        )
         if unique.size > 10:
             first, last = observed[0], observed[-1]
             return (
@@ -313,8 +324,7 @@ def _column_summary(values):
                 f"first={_abbreviate(first)}, last={_abbreviate(last)}",
             )
         counts_text = ", ".join(
-            f"{_abbreviate(value)}: {count}"
-            for value, count in zip(unique, counts)
+            f"{_abbreviate(value)}: {count}" for value, count in zip(unique, counts)
         )
         return coverage, f"{unique.size} values; {changes} changes", counts_text
 
@@ -328,9 +338,9 @@ def _column_summary(values):
     if unique.size == 1:
         return coverage, "constant", f"{unique[0]:.4g}"
     if unique.size <= 10:
-        changes = int(np.count_nonzero(
-            finite[1:] & finite[:-1] & (values[1:] != values[:-1])
-        ))
+        changes = int(
+            np.count_nonzero(finite[1:] & finite[:-1] & (values[1:] != values[:-1]))
+        )
         counts = ", ".join(
             f"{value:.8g}: {int(np.count_nonzero(observed == value))}"
             for value in unique
@@ -345,11 +355,15 @@ def _column_summary(values):
 
 
 def _abbreviate(value, limit=120):
-    return value if len(value) <= limit else value[:limit - 1] + "…"
+    return value if len(value) <= limit else value[: limit - 1] + "…"
 
 
 def profile_run_values(
-    run, source=None, detector_set=None, max_events=None, show=True,
+    run,
+    source=None,
+    detector_set=None,
+    max_events=None,
+    show=True,
     show_constants=False,
 ) -> RunProfile:
     """Profile one run through smalldata_tools and psana payload discovery.
@@ -380,14 +394,17 @@ def profile_run_values(
             alias = event_key.alias() or "—"
             key_name = event_key.key() or ""
             identity = (source_name, type_name, key_name)
-            info = payloads.setdefault(identity, {
-                "source": source_name,
-                "alias": alias,
-                "type": type_name,
-                "key": key_name or "—",
-                "events": 0,
-                "errors": 0,
-            })
+            info = payloads.setdefault(
+                identity,
+                {
+                    "source": source_name,
+                    "alias": alias,
+                    "type": type_name,
+                    "key": key_name or "—",
+                    "events": 0,
+                    "errors": 0,
+                },
+            )
             info["events"] += 1
             if payload_type is None:
                 continue
@@ -462,8 +479,7 @@ def profile_run_values(
             }
 
     value_arrays = {
-        field_id: _profile_array(values)
-        for field_id, values in columns.items()
+        field_id: _profile_array(values) for field_id, values in columns.items()
     }
     epics_arrays = {
         field_id: values
@@ -476,7 +492,7 @@ def profile_run_values(
             "alias": info["alias"],
             "type": info["type"],
             "key": info["key"],
-            "coverage": f'{info["events"] / n_events:.1%}',
+            "coverage": f"{info['events'] / n_events:.1%}",
             "read errors": info["errors"],
         }
         for info in sorted(
@@ -491,37 +507,45 @@ def profile_run_values(
             continue
         coverage, variation, observed = _column_summary(values)
         metadata = field_metadata[field_id]
-        value_rows.append({
-            "source": metadata["source"],
-            "field": metadata["field"],
-            "type": metadata["type"],
-            "origin": metadata["origin"],
-            "coverage": coverage,
-            "variation": variation,
-            "observed": observed,
-        })
+        value_rows.append(
+            {
+                "source": metadata["source"],
+                "field": metadata["field"],
+                "type": metadata["type"],
+                "origin": metadata["origin"],
+                "coverage": coverage,
+                "variation": variation,
+                "observed": observed,
+            }
+        )
 
     epics_rows = []
     for field_id, values in sorted(epics_arrays.items()):
         coverage, variation, observed = _column_summary(values)
         alias = field_id.removeprefix("EPICS/")
-        epics_rows.append({
-            "alias": alias,
-            "PV": detector_set.epics_metadata.get(alias, alias),
-            "dtype": str(values.dtype),
-            "coverage": coverage,
-            "variation": variation,
-            "observed": observed,
-        })
+        epics_rows.append(
+            {
+                "alias": alias,
+                "PV": detector_set.epics_metadata.get(alias, alias),
+                "dtype": str(values.dtype),
+                "coverage": coverage,
+                "variation": variation,
+                "observed": observed,
+            }
+        )
 
     if show:
         _show_table(f"Raw XTC payloads ({n_events:,} decoded events)", payload_rows)
-        visible_value_rows = value_rows if show_constants else [
-            row for row in value_rows if row["variation"] != "constant"
-        ]
-        visible_epics_rows = epics_rows if show_constants else [
-            row for row in epics_rows if row["variation"] != "constant"
-        ]
+        visible_value_rows = (
+            value_rows
+            if show_constants
+            else [row for row in value_rows if row["variation"] != "constant"]
+        )
+        visible_epics_rows = (
+            epics_rows
+            if show_constants
+            else [row for row in epics_rows if row["variation"] != "constant"]
+        )
         _show_table("Profiled per-shot values", visible_value_rows)
         _show_table("EPICS process variables", visible_epics_rows)
     return RunProfile(
@@ -558,7 +582,8 @@ def print_detector_geometry(run, detector_name=JUNGFRAU_NAME, source=None):
         "index-map shape": tuple(ix.shape) if ix is not None else None,
         "assembled shape": (
             (int(iy.max()) + 1, int(ix.max()) + 1)
-            if ix is not None and iy is not None else None
+            if ix is not None and iy is not None
+            else None
         ),
     }
     rows = [{"property": key, "value": value} for key, value in geometry.items()]

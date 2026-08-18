@@ -1,4 +1,5 @@
 """Declarative selection of event indices from a profiled run."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -9,8 +10,17 @@ import numpy as np
 from automask.run_profile import RunProfile
 
 Operator = Literal[
-    "==", "!=", "<", "<=", ">", ">=", "between", "in", "not in",
-    "finite", "nonzero",
+    "==",
+    "!=",
+    "<",
+    "<=",
+    ">",
+    ">=",
+    "between",
+    "in",
+    "not in",
+    "finite",
+    "nonzero",
 ]
 
 
@@ -24,8 +34,17 @@ class Condition:
 
     def __post_init__(self) -> None:
         operators = {
-            "==", "!=", "<", "<=", ">", ">=", "between", "in", "not in",
-            "finite", "nonzero",
+            "==",
+            "!=",
+            "<",
+            "<=",
+            ">",
+            ">=",
+            "between",
+            "in",
+            "not in",
+            "finite",
+            "nonzero",
         }
         if not self.field:
             raise ValueError("a condition needs a field name")
@@ -167,8 +186,7 @@ class ShotSelection:
                 finite = np.isfinite(values)
             except TypeError as error:
                 raise TypeError(
-                    f"run {profile.run}: trim field {self.trim.field!r} "
-                    "must be numeric"
+                    f"run {profile.run}: trim field {self.trim.field!r} must be numeric"
                 ) from error
             eligible = keep & finite
             if not eligible.any():

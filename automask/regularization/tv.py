@@ -1,6 +1,7 @@
 """
 regularization/tv.py -- Total-Variation field regularizer (Chambolle).
 """
+
 from __future__ import annotations
 from dataclasses import dataclass
 
@@ -11,7 +12,7 @@ from automask.regularization.base import RegSpec, register_reg
 
 @dataclass
 class TVParams:
-    weight: float = 4.0     # data-fidelity <-> shape-prior knob; <=0 is a no-op
+    weight: float = 4.0  # data-fidelity <-> shape-prior knob; <=0 is a no-op
 
 
 def tv_denoise(z, weight):
@@ -26,10 +27,12 @@ def apply(z, params: TVParams | None = None):
     return tv_denoise(z, weight)
 
 
-register_reg(RegSpec(
-    name="tv",
-    apply=apply,
-    params=TVParams,
-    kind="field",
-    doc="isotropic TV denoising of the continuous field before thresholding",
-))
+register_reg(
+    RegSpec(
+        name="tv",
+        apply=apply,
+        params=TVParams,
+        kind="field",
+        doc="isotropic TV denoising of the continuous field before thresholding",
+    )
+)

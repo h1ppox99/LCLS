@@ -13,11 +13,17 @@ recovered -- scored only over pixels that were valid in the ground truth.
 
 Mask convention throughout matches the rest of automask: bool, True == masked.
 """
+
 from automask.synthetic.artifacts import (
-    ARTIFACTS, straight_streak, beamstop_shadow,
+    ARTIFACTS,
+    straight_streak,
+    beamstop_shadow,
 )
 from automask.synthetic.metrics import masking_metrics
 
 __all__ = [
-    "ARTIFACTS", "straight_streak", "beamstop_shadow", "masking_metrics",
+    "ARTIFACTS",
+    "straight_streak",
+    "beamstop_shadow",
+    "masking_metrics",
 ]

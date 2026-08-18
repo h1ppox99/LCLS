@@ -4,6 +4,7 @@ combine/union.py -- boolean-union combiner.
 Unions the intensity-free floor with every per-detector thresholded pick. The
 classic combiner; combine/weighted_sum.py is the continuous-fusion alternative.
 """
+
 from __future__ import annotations
 from dataclasses import dataclass
 
@@ -28,10 +29,12 @@ def combine(floor, picks, sample, params: UnionParams | None = None):
     return combine_masks(floor, picks)
 
 
-register_combine(CombineSpec(
-    name="union",
-    combine=combine,
-    params=UnionParams,
-    consumes="picks",
-    doc="OR the floor with each thresholded per-detector pick",
-))
+register_combine(
+    CombineSpec(
+        name="union",
+        combine=combine,
+        params=UnionParams,
+        consumes="picks",
+        doc="OR the floor with each thresholded per-detector pick",
+    )
+)

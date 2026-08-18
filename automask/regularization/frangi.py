@@ -16,6 +16,7 @@ Knob (FrangiParams):
     black_ridges False (default) enhances BRIGHT ridges -- the sign the pipeline's
                  defectiveness fields use (large == wants masking); True for dark.
 """
+
 from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional, Sequence
@@ -34,15 +35,20 @@ class FrangiParams:
     black_ridges: bool = False
 
 
-def frangi_ridges(z, sigmas=(1.0, 2.0, 3.0), beta=0.5, gamma=None,
-                  black_ridges=False):
+def frangi_ridges(z, sigmas=(1.0, 2.0, 3.0), beta=0.5, gamma=None, black_ridges=False):
     """Frangi vesselness of a 2-D field. Non-finite pixels are treated as 0 for
     the Hessian and zeroed back out in the response, so gaps don't leak ridges."""
     z = np.asarray(z, dtype=np.float64)
     finite = np.isfinite(z)
     work = z if finite.all() else np.where(finite, z, 0.0)
-    resp = frangi(work, sigmas=tuple(sigmas), beta=beta, gamma=gamma,
-                  black_ridges=black_ridges, mode="reflect")
+    resp = frangi(
+        work,
+        sigmas=tuple(sigmas),
+        beta=beta,
+        gamma=gamma,
+        black_ridges=black_ridges,
+        mode="reflect",
+    )
     if not finite.all():
         resp = np.where(finite, resp, 0.0)
     return resp
@@ -70,14 +76,17 @@ def auto_threshold(resp, domain=None, floor=1e-9, nbins=256):
 
 def apply(z, params: FrangiParams | None = None):
     p = params if params is not None else FrangiParams()
-    return frangi_ridges(z, sigmas=p.sigmas, beta=p.beta, gamma=p.gamma,
-                         black_ridges=p.black_ridges)
+    return frangi_ridges(
+        z, sigmas=p.sigmas, beta=p.beta, gamma=p.gamma, black_ridges=p.black_ridges
+    )
 
 
-register_reg(RegSpec(
-    name="frangi",
-    apply=apply,
-    params=FrangiParams,
-    kind="field",
-    doc="multiscale Frangi vesselness -- enhances line/ridge defects before thresholding",
-))
+register_reg(
+    RegSpec(
+        name="frangi",
+        apply=apply,
+        params=FrangiParams,
+        kind="field",
+        doc="multiscale Frangi vesselness -- enhances line/ridge defects before thresholding",
+    )
+)

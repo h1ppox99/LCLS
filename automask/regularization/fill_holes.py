@@ -7,6 +7,7 @@ otherwise solid defect; those pixels are part of the defect, so filling them is 
 correction rather than padding slack. Unlike `pad`, this grows nothing at the
 outer boundary -- only fully enclosed background is turned on.
 """
+
 from __future__ import annotations
 from dataclasses import dataclass
 
@@ -18,7 +19,7 @@ from automask.regularization.base import RegSpec, register_reg
 
 @dataclass
 class FillHolesParams:
-    connectivity: int = 1    # background connectivity; 1 (4-connected) fills more
+    connectivity: int = 1  # background connectivity; 1 (4-connected) fills more
 
 
 def fill_holes(mask, connectivity=1):
@@ -33,10 +34,12 @@ def apply(mask, params: FillHolesParams | None = None):
     return fill_holes(mask, p.connectivity)
 
 
-register_reg(RegSpec(
-    name="fill_holes",
-    apply=apply,
-    params=FillHolesParams,
-    kind="mask",
-    doc="fill enclosed holes left by thresholding a graded field",
-))
+register_reg(
+    RegSpec(
+        name="fill_holes",
+        apply=apply,
+        params=FillHolesParams,
+        kind="mask",
+        doc="fill enclosed holes left by thresholding a graded field",
+    )
+)

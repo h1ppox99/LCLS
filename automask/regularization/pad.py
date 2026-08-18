@@ -1,6 +1,7 @@
 """
 regularization/pad.py -- square-dilation mask regularizer (grows sparse picks).
 """
+
 from __future__ import annotations
 from dataclasses import dataclass
 
@@ -12,7 +13,7 @@ from automask.regularization.base import RegSpec, register_reg
 
 @dataclass
 class PadParams:
-    pad: int = 2            # half-width; (2*pad+1) square dilation
+    pad: int = 2  # half-width; (2*pad+1) square dilation
 
 
 def pad_mask(mask, pad=2):
@@ -27,10 +28,12 @@ def apply(mask, params: PadParams | None = None):
     return pad_mask(mask, pad)
 
 
-register_reg(RegSpec(
-    name="pad",
-    apply=apply,
-    params=PadParams,
-    kind="mask",
-    doc="square binary dilation to grow sparse thresholded picks",
-))
+register_reg(
+    RegSpec(
+        name="pad",
+        apply=apply,
+        params=PadParams,
+        kind="mask",
+        doc="square binary dilation to grow sparse thresholded picks",
+    )
+)

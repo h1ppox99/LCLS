@@ -11,7 +11,8 @@ strategies:
 from automask.evaluation import evaluate_consistency
 
 result = evaluate_consistency(
-    pipeline, run=475, selection=selection, store=store, n_folds=10)
+    pipeline, run=475, selection=selection, store=store, n_folds=10
+)
 ```
 
 `ImageStore.folds` defaults to 10 folds and accepts `strategy="round_robin"` or

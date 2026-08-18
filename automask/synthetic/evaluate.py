@@ -25,6 +25,7 @@ Config keys (see the shipped synthetic_baseline.yaml):
     artifacts      per-type parameter dict; a [lo, hi] value is sampled uniformly
                    per example (int stays int); 'center' is passed through as-is
 """
+
 from __future__ import annotations
 
 import argparse
@@ -37,8 +38,10 @@ from importlib import import_module
 import numpy as np
 
 import matplotlib
+
 if not os.environ.get("MPLBACKEND") and not (
-        os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+    os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
+):
     matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
@@ -73,7 +76,9 @@ def _is_path(spec: str) -> bool:
 def _load_source_image(spec) -> tuple[np.ndarray, str]:
     """A `.npy` path, or a run number whose selected-shot mean to corrupt."""
     if isinstance(spec, str) and _is_path(spec):
-        return np.load(spec).astype(np.float64), os.path.splitext(os.path.basename(spec))[0]
+        return np.load(spec).astype(np.float64), os.path.splitext(
+            os.path.basename(spec)
+        )[0]
     try:
         run = int(spec)
     except (TypeError, ValueError):
@@ -82,6 +87,7 @@ def _load_source_image(spec) -> tuple[np.ndarray, str]:
         ) from None
     from automask.image_store import ImageStore
     from automask.selection_presets import BEAM_ON_SELECTION
+
     image = ImageStore().reduce(run, BEAM_ON_SELECTION, "mean").astype(np.float64)
     return image, f"run{run:04d}"
 
@@ -92,7 +98,7 @@ def _load_gt_mask(spec: str) -> np.ndarray:
 
 
 def _resolve_masker(spec: str):
-    """"module:function" -> callable (the project's masker convention)."""
+    """ "module:function" -> callable (the project's masker convention)."""
     if ":" not in spec:
         raise ValueError(f"masker must be 'module:function', got {spec!r}")
     module_name, func_name = spec.split(":", 1)
@@ -120,13 +126,20 @@ def _rotate(image: np.ndarray, gt: np.ndarray, degrees: int):
 def _sample_params(rng, params: dict | None) -> dict:
     out = {}
     for key, val in (params or {}).items():
-        is_range = (key != "center" and isinstance(val, (list, tuple))
-                    and len(val) == 2
-                    and all(isinstance(x, (int, float)) for x in val))
+        is_range = (
+            key != "center"
+            and isinstance(val, (list, tuple))
+            and len(val) == 2
+            and all(isinstance(x, (int, float)) for x in val)
+        )
         if is_range:
             lo, hi = val
             sampled = rng.uniform(lo, hi)
-            out[key] = int(round(sampled)) if isinstance(lo, int) and isinstance(hi, int) else float(sampled)
+            out[key] = (
+                int(round(sampled))
+                if isinstance(lo, int) and isinstance(hi, int)
+                else float(sampled)
+            )
         else:
             out[key] = val
     return out
@@ -144,10 +157,14 @@ def _display(img: np.ndarray) -> np.ndarray:
 def _figure(original, corrupted, injected, pred, region, title, path):
     """Five-panel diagnostic: original, corrupted, injected, predicted, TP/FP/FN."""
     fig, ax = plt.subplots(1, 5, figsize=(20, 4.4))
-    ax[0].imshow(_display(original), cmap="magma"); ax[0].set_title("original")
-    ax[1].imshow(_display(corrupted), cmap="magma"); ax[1].set_title("corrupted")
-    ax[2].imshow(injected, cmap="gray"); ax[2].set_title("injected mask")
-    ax[3].imshow(pred, cmap="gray"); ax[3].set_title("predicted mask")
+    ax[0].imshow(_display(original), cmap="magma")
+    ax[0].set_title("original")
+    ax[1].imshow(_display(corrupted), cmap="magma")
+    ax[1].set_title("corrupted")
+    ax[2].imshow(injected, cmap="gray")
+    ax[2].set_title("injected mask")
+    ax[3].imshow(pred, cmap="gray")
+    ax[3].set_title("predicted mask")
     ax[4].imshow(agree_rgb(pred & region, injected & region))
     ax[4].set_title("overlay (green=TP red=FP blue=FN)")
     for a in ax:
@@ -172,16 +189,18 @@ def _image_context(cfg):
     masker = _resolve_masker(masker_spec)
 
     def for_rotation(degrees):
-        rimage, rgt = _rotate(image, gt, degrees)   # image + mask rotate together
+        rimage, rgt = _rotate(image, gt, degrees)  # image + mask rotate together
         region = ~rgt
         full = np.ones_like(rgt, dtype=bool)
+
         def run_example(name, rng, params):
-            if name == ORIGINAL:                     # no injection: score vs the real mask
+            if name == ORIGINAL:  # no injection: score vs the real mask
                 pred = np.asarray(masker(rimage)).astype(bool)
                 return rimage, rimage, rgt, pred, full
             corrupted, injected = ARTIFACTS[name](rimage, region, rng, **params)
             pred = np.asarray(masker(corrupted)).astype(bool)
             return rimage, corrupted, injected, pred, region
+
         return run_example
 
     return [(image_id, for_rotation)], masker_spec
@@ -207,33 +226,40 @@ def _pipeline_context(cfg):
         runs = [int(cfg["run"])]
     runs = [int(run) for run in runs]
     combiner = cfg.get("combiner", "union")
-    pipe = cfg.get("_pipeline")                       # a swept Pipeline, if provided
+    pipe = cfg.get("_pipeline")  # a swept Pipeline, if provided
     if pipe is None:
         pipe = production_pipeline(combiner)
         model = f"production_pipeline(combiner={combiner})"
     else:
-        model = ("swept_pipeline("
-                 + ",".join(c.label for c in pipe.evidence_channels) + ")")
-    signature = (f"{model} "
-                 f"run{'s' if len(runs) > 1 else ''} {runs if len(runs) > 1 else runs[0]}")
+        model = (
+            "swept_pipeline(" + ",".join(c.label for c in pipe.evidence_channels) + ")"
+        )
+    signature = (
+        f"{model} "
+        f"run{'s' if len(runs) > 1 else ''} {runs if len(runs) > 1 else runs[0]}"
+    )
 
     def make_source(run):
         sample = Sample.from_store(run, BEAM_ON_SELECTION, pipe.needs())
         human = reference_mask(run)
+
         def for_rotation(degrees):
             k = (int(degrees) // 90) % 4
             rs = rotate_sample(sample, degrees)
-            rhuman = np.rot90(human, k)               # the reference rotates with it
-            region = ~rhuman                          # originally-valid pixels
+            rhuman = np.rot90(human, k)  # the reference rotates with it
+            region = ~rhuman  # originally-valid pixels
             full = np.ones_like(rhuman, dtype=bool)
+
             def run_example(name, rng, params):
-                if name == ORIGINAL:                  # no injection: score vs the real mask
+                if name == ORIGINAL:  # no injection: score vs the real mask
                     pred = pipe.run(rs).astype(bool)
                     return rs.mean, rs.mean, rhuman, pred, full
                 csample, injected = corrupt_sample(rs, name, rng, params, region)
                 pred = pipe.run(csample).astype(bool)
                 return rs.mean, csample.mean, injected, pred, region
+
             return run_example
+
         return f"run{run:04d}", for_rotation
 
     return [make_source(r) for r in runs], signature
@@ -246,7 +272,7 @@ _CONTEXTS = {"image": _image_context, "pipeline": _pipeline_context}
 # main evaluation loop
 # --------------------------------------------------------------------------
 def evaluate_config(cfg: dict, pipeline=None) -> dict:
-    if pipeline is not None:                          # score a caller-supplied Pipeline
+    if pipeline is not None:  # score a caller-supplied Pipeline
         cfg = {**cfg, "_pipeline": pipeline}
     mode = cfg.get("mode", "image")
     if mode not in _CONTEXTS:
@@ -266,51 +292,79 @@ def evaluate_config(cfg: dict, pipeline=None) -> dict:
     os.makedirs(fig_dir, exist_ok=True)
     csv_path = os.path.join(out_dir, "results.csv")
 
-    header = (["image_id", "rotation", "artifact_type", "seed", "injected_px", "params"]
-              + _METRIC_COLS)
+    header = [
+        "image_id",
+        "rotation",
+        "artifact_type",
+        "seed",
+        "injected_px",
+        "params",
+    ] + _METRIC_COLS
     rows = []
     for src_idx, (image_id, for_rotation) in enumerate(sources):
-      for rot_idx, degrees in enumerate(rotations):
-        run_example = for_rotation(degrees)
-        for type_idx, name in enumerate(cases):
-            # An artifact may restrict which rotations it is valid under (e.g.
-            # `hot_patch` corrupts a panel-form constant, which has no image
-            # rotation -- see sample_adapter.rotate_sample). Popped here so it
-            # never reaches the generator as a parameter.
-            acfg = dict(artifact_cfg.get(name) or {})
-            allowed = acfg.pop("rotations", None)
-            if allowed is not None and int(degrees) not in [int(a) for a in allowed]:
-                continue
-            # the original-mask case injects nothing and is deterministic -> run once.
-            n = 1 if name == ORIGINAL else n_per
-            for i in range(n):
-                # deterministic per-example seed: same config -> same corruption
-                seed = (base_seed + src_idx * 1_000_000 + rot_idx * 100_000
-                        + type_idx * 10_000 + i)
-                rng = np.random.default_rng(seed)
-                params = _sample_params(rng, acfg)
+        for rot_idx, degrees in enumerate(rotations):
+            run_example = for_rotation(degrees)
+            for type_idx, name in enumerate(cases):
+                # An artifact may restrict which rotations it is valid under (e.g.
+                # `hot_patch` corrupts a panel-form constant, which has no image
+                # rotation -- see sample_adapter.rotate_sample). Popped here so it
+                # never reaches the generator as a parameter.
+                acfg = dict(artifact_cfg.get(name) or {})
+                allowed = acfg.pop("rotations", None)
+                if allowed is not None and int(degrees) not in [
+                    int(a) for a in allowed
+                ]:
+                    continue
+                # the original-mask case injects nothing and is deterministic -> run once.
+                n = 1 if name == ORIGINAL else n_per
+                for i in range(n):
+                    # deterministic per-example seed: same config -> same corruption
+                    seed = (
+                        base_seed
+                        + src_idx * 1_000_000
+                        + rot_idx * 100_000
+                        + type_idx * 10_000
+                        + i
+                    )
+                    rng = np.random.default_rng(seed)
+                    params = _sample_params(rng, acfg)
 
-                original, corrupted, injected, pred, region = run_example(name, rng, params)
-                metrics = masking_metrics(pred, injected, region)
+                    original, corrupted, injected, pred, region = run_example(
+                        name, rng, params
+                    )
+                    metrics = masking_metrics(pred, injected, region)
 
-                tag = f"{image_id}__rot{int(degrees):03d}__{name}__{i:02d}"
-                if save_figures:
-                    _figure(original, corrupted, injected, pred, region,
+                    tag = f"{image_id}__rot{int(degrees):03d}__{name}__{i:02d}"
+                    if save_figures:
+                        _figure(
+                            original,
+                            corrupted,
+                            injected,
+                            pred,
+                            region,
                             title=f"{tag}  seed={seed}  "
-                                  f"P={metrics['precision']:.2f} R={metrics['recall']:.2f} "
-                                  f"F1={metrics['f1']:.2f} IoU={metrics['iou']:.2f}",
-                            path=os.path.join(fig_dir, tag + ".png"))
+                            f"P={metrics['precision']:.2f} R={metrics['recall']:.2f} "
+                            f"F1={metrics['f1']:.2f} IoU={metrics['iou']:.2f}",
+                            path=os.path.join(fig_dir, tag + ".png"),
+                        )
 
-                rows.append({
-                    "image_id": image_id, "rotation": int(degrees),
-                    "artifact_type": name, "seed": seed,
-                    "injected_px": int(injected.sum()), "params": json.dumps(params),
-                    **{k: round(metrics[k], 6) for k in _METRIC_COLS},
-                })
-                print(f"{tag:44s} seed={seed:<7d} inj={int(injected.sum()):>7d} "
-                      f"P={metrics['precision']:.3f} R={metrics['recall']:.3f} "
-                      f"F1={metrics['f1']:.3f} IoU={metrics['iou']:.3f} "
-                      f"FPR={metrics['fpr']:.4f}")
+                    rows.append(
+                        {
+                            "image_id": image_id,
+                            "rotation": int(degrees),
+                            "artifact_type": name,
+                            "seed": seed,
+                            "injected_px": int(injected.sum()),
+                            "params": json.dumps(params),
+                            **{k: round(metrics[k], 6) for k in _METRIC_COLS},
+                        }
+                    )
+                    print(
+                        f"{tag:44s} seed={seed:<7d} inj={int(injected.sum()):>7d} "
+                        f"P={metrics['precision']:.3f} R={metrics['recall']:.3f} "
+                        f"F1={metrics['f1']:.3f} IoU={metrics['iou']:.3f} "
+                        f"FPR={metrics['fpr']:.4f}"
+                    )
 
     with open(csv_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=header)
@@ -337,9 +391,12 @@ def evaluate_config(cfg: dict, pipeline=None) -> dict:
 def _summarize(rows: list[dict]) -> list[dict]:
     """Mean of every metric per artifact type (across rotations + examples),
     plus an 'overall' row. This is the aggregate score used to rank maskers."""
+
     def agg(name, rs):
         d = {"artifact_type": name, "n": len(rs)}
-        d.update({k: round(float(np.mean([r[k] for r in rs])), 6) for k in _METRIC_COLS})
+        d.update(
+            {k: round(float(np.mean([r[k] for r in rs])), 6) for k in _METRIC_COLS}
+        )
         return d
 
     groups = defaultdict(list)
@@ -355,18 +412,25 @@ def _print_summary(summary: list[dict], masker_spec: str) -> None:
     print(f"\n=== synthetic summary (masker={masker_spec}) ===")
     print(f"{'artifact':12s} {'n':>3s} " + " ".join(f"{k:>11s}" for k in _METRIC_COLS))
     for row in summary:
-        print(f"{row['artifact_type']:12s} {row['n']:>3d} "
-              + " ".join(f"{row[k]:11.4f}" for k in _METRIC_COLS))
+        print(
+            f"{row['artifact_type']:12s} {row['n']:>3d} "
+            + " ".join(f"{row[k]:11.4f}" for k in _METRIC_COLS)
+        )
 
 
 def main():
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--config", default=DEFAULT_CONFIG,
-                    help="path to the YAML config (default: shipped synthetic_baseline.yaml)")
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    ap.add_argument(
+        "--config",
+        default=DEFAULT_CONFIG,
+        help="path to the YAML config (default: shipped synthetic_baseline.yaml)",
+    )
     args = ap.parse_args()
 
     import yaml
+
     with open(args.config) as f:
         cfg = yaml.safe_load(f)
     evaluate_config(cfg)

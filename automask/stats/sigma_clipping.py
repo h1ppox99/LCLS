@@ -30,6 +30,7 @@ way in and re-applied on the way out, so `model`/`std` come back in `image`'s
 raw units. Solid angle needs no such care -- a function of 2theta alone
 (within-ring spread 1.2e-3), so the ring model absorbs it.
 """
+
 from __future__ import annotations
 from dataclasses import dataclass
 
@@ -37,17 +38,17 @@ import numpy as np
 
 from automask.stats.base import StatSpec, register_stat
 
-PIXEL_M = 75e-6            # 75 um square pixels
-DIST_M = 0.190            # sample-detector distance (not the stale psana z map)
+PIXEL_M = 75e-6  # 75 um square pixels
+DIST_M = 0.190  # sample-detector distance (not the stale psana z map)
 WAVELENGTH_M = 1.2915e-10  # 1.2915 A
-RADIAL_UNIT = "r_mm"      # bin on in-plane radial distance, matching the old px binning
+RADIAL_UNIT = "r_mm"  # bin on in-plane radial distance, matching the old px binning
 
 
 @dataclass
 class SigmaClippingParams:
-    bin_width: float = 3.0      # px, radial annulus width
-    thres: float = 5.0          # sigma-clip cut-off passed to sigma_clip_ng
-    max_iter: int = 5           # sigma-clip iterations
+    bin_width: float = 3.0  # px, radial annulus width
+    thres: float = 5.0  # sigma-clip cut-off passed to sigma_clip_ng
+    max_iter: int = 5  # sigma-clip iterations
     k: float = 5.0
     mode: str = "both"
 
@@ -62,6 +63,7 @@ def sigma_clipping_stat(image, real, center, bin_width=3.0, thres=5.0, max_iter=
     and std(r); the returned z-score is then thresholded downstream at `k`.
     """
     from pyFAI.integrator.azimuthal import AzimuthalIntegrator
+
     # Deferred so numpy-only stats do not import pyFAI until needed.
     from automask.azimuthal import POLARIZATION
 
@@ -72,8 +74,13 @@ def sigma_clipping_stat(image, real, center, bin_width=3.0, thres=5.0, max_iter=
     # automask.azimuthal.integrator, which measured the difference against
     # psana's own q map (rms 7e-5 vs 4.9e-4 A^-1).
     ai = AzimuthalIntegrator(
-        dist=DIST_M, poni1=(c0 + 0.5) * PIXEL_M, poni2=(c1 + 0.5) * PIXEL_M,
-        pixel1=PIXEL_M, pixel2=PIXEL_M, wavelength=WAVELENGTH_M)
+        dist=DIST_M,
+        poni1=(c0 + 0.5) * PIXEL_M,
+        poni2=(c1 + 0.5) * PIXEL_M,
+        pixel1=PIXEL_M,
+        pixel2=PIXEL_M,
+        wavelength=WAVELENGTH_M,
+    )
     ai.detector.shape = image.shape
     mask = ~real
 
@@ -84,18 +91,35 @@ def sigma_clipping_stat(image, real, center, bin_width=3.0, thres=5.0, max_iter=
 
     # Iterative azimuthal sigma clip -> robust ring mean I(r) and per-ring std(r),
     # both computed after outliers have been discarded from each ring.
-    res = ai.sigma_clip_ng(image, npt=npt, mask=mask, unit=RADIAL_UNIT,
-                           error_model="azimuthal", thres=thres, max_iter=max_iter,
-                           polarization_factor=POLARIZATION)
-    model = ai.calcfrom1d(res.radial, res.intensity, shape=image.shape,
-                          dim1_unit=RADIAL_UNIT, mask=mask,
-                          polarization_factor=POLARIZATION)
+    res = ai.sigma_clip_ng(
+        image,
+        npt=npt,
+        mask=mask,
+        unit=RADIAL_UNIT,
+        error_model="azimuthal",
+        thres=thres,
+        max_iter=max_iter,
+        polarization_factor=POLARIZATION,
+    )
+    model = ai.calcfrom1d(
+        res.radial,
+        res.intensity,
+        shape=image.shape,
+        dim1_unit=RADIAL_UNIT,
+        mask=mask,
+        polarization_factor=POLARIZATION,
+    )
     # res.std is the per-pixel azimuthal spread (what sigma_clip_ng thresholds
     # against); res.sigma/.sem is the standard error of the mean -- not this. It
     # is a spread in corrected space, so it takes the same factor back as `model`.
-    std = ai.calcfrom1d(res.radial, res.std, shape=image.shape,
-                        dim1_unit=RADIAL_UNIT, mask=mask,
-                        polarization_factor=POLARIZATION)
+    std = ai.calcfrom1d(
+        res.radial,
+        res.std,
+        shape=image.shape,
+        dim1_unit=RADIAL_UNIT,
+        mask=mask,
+        polarization_factor=POLARIZATION,
+    )
 
     z = np.zeros_like(image)
     good = real & (std > 0)
@@ -105,16 +129,19 @@ def sigma_clipping_stat(image, real, center, bin_width=3.0, thres=5.0, max_iter=
 
 def compute(sample, params: SigmaClippingParams | None = None):
     p = params or SigmaClippingParams()
-    return sigma_clipping_stat(sample.mean, sample.real, sample.center,
-                               p.bin_width, p.thres, p.max_iter)
+    return sigma_clipping_stat(
+        sample.mean, sample.real, sample.center, p.bin_width, p.thres, p.max_iter
+    )
 
 
-register_stat(StatSpec(
-    name="sigma_clipping",
-    compute=compute,
-    params=SigmaClippingParams,
-    kind="field",
-    mode="both",
-    needs=("mean", "real", "center"),
-    doc="azimuthal sigma-clip residual z-score (pyFAI sigma_clip_ng); needs beam center",
-))
+register_stat(
+    StatSpec(
+        name="sigma_clipping",
+        compute=compute,
+        params=SigmaClippingParams,
+        kind="field",
+        mode="both",
+        needs=("mean", "real", "center"),
+        doc="azimuthal sigma-clip residual z-score (pyFAI sigma_clip_ng); needs beam center",
+    )
+)

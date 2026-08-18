@@ -7,6 +7,7 @@ under pytest or directly (pytest is not installed in the ana env):
 They use a tiny synthetic image + mask (no frozen dataset needed) so the checks
 are fast and self-contained.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -21,7 +22,7 @@ def _toy():
     rng = np.random.default_rng(0)
     image = rng.uniform(1.0, 100.0, size=(64, 80))
     gt = np.zeros((64, 80), dtype=bool)
-    gt[:4, :] = gt[-4:, :] = gt[:, :4] = gt[:, -4:] = True   # invalid border
+    gt[:4, :] = gt[-4:, :] = gt[:, :4] = gt[:, -4:] = True  # invalid border
     return image, gt
 
 
@@ -41,7 +42,9 @@ def test_original_image_unchanged():
     valid = ~gt
     for gen in ARTIFACTS.values():
         gen(image, valid, np.random.default_rng(1))
-        assert np.array_equal(image, original), f"{gen.__name__} mutated the source image"
+        assert np.array_equal(image, original), (
+            f"{gen.__name__} mutated the source image"
+        )
 
 
 def test_no_invalid_pixel_modified():
@@ -49,10 +52,10 @@ def test_no_invalid_pixel_modified():
     valid = ~gt
     for gen in ARTIFACTS.values():
         corrupted, injected = gen(image, valid, np.random.default_rng(2))
-        assert np.array_equal(corrupted[gt], image[gt]), \
+        assert np.array_equal(corrupted[gt], image[gt]), (
             f"{gen.__name__} changed an originally-invalid pixel"
-        assert not injected[gt].any(), \
-            f"{gen.__name__} injected into an invalid pixel"
+        )
+        assert not injected[gt].any(), f"{gen.__name__} injected into an invalid pixel"
 
 
 def test_perfect_prediction_scores_one():
@@ -81,8 +84,12 @@ def test_beamstop_shapes_differ():
     image, gt = _toy()
     valid = ~gt
     kw = dict(center=[0.5, 0.5], radius=12.0, axis_ratio=1.0, softness=0.0)
-    _, ell = beamstop_shadow(image, valid, np.random.default_rng(0), shape="ellipse", **kw)
-    _, rect = beamstop_shadow(image, valid, np.random.default_rng(0), shape="rect", **kw)
+    _, ell = beamstop_shadow(
+        image, valid, np.random.default_rng(0), shape="ellipse", **kw
+    )
+    _, rect = beamstop_shadow(
+        image, valid, np.random.default_rng(0), shape="rect", **kw
+    )
     # a square box strictly contains the inscribed circle of the same half-extent
     assert rect.sum() > ell.sum()
     assert (ell & ~rect).sum() == 0

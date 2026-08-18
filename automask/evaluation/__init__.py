@@ -1,4 +1,5 @@
 """Labelled evaluation and ground-truth-free consistency diagnostics."""
+
 from automask.evaluation.consistency import evaluate_consistency
 from automask.evaluation.labelled import (
     ALL_RUNS,

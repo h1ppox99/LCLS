@@ -26,6 +26,7 @@ they are folded into the mask regardless of what the pipeline says about them.
 Run:  python -m automask.azimuthal             # all local XTC runs
       python -m automask.azimuthal 475
 """
+
 from __future__ import annotations
 import os
 from typing import Optional
@@ -37,11 +38,11 @@ from automask import geometry
 HERE = os.path.dirname(os.path.abspath(__file__))
 FIG_DIR = os.path.join(HERE, "outputs", "figures")
 
-DIST_M = 0.190          # sample -> detector
+DIST_M = 0.190  # sample -> detector
 WAVELENGTH_M = 1.2915e-10
 PIXEL_M = 75e-6
 NPT = 256
-MIN_COUNT = 200         # bins thinner than this are noise, not signal
+MIN_COUNT = 200  # bins thinner than this are noise, not signal
 
 # pyFAI's polarization_factor is signed by which detector axis the E-field lies
 # along: +1 = axis2 (fast), -1 = axis1 (slow). Our assembled arrays are
@@ -72,13 +73,18 @@ def integrator(run: int, shape: Optional[tuple] = None):
     # the +0.5 is a 37.5 um offset: small, but it dominates the residual --
     # against psana's per-pixel q map it is the difference between an rms of
     # 4.9e-4 and 7e-5 A^-1 (the latter being the assembly's own rounding floor).
-    return AzimuthalIntegrator(dist=DIST_M, poni1=(c0 + 0.5) * PIXEL_M,
-                               poni2=(c1 + 0.5) * PIXEL_M, detector=det,
-                               wavelength=WAVELENGTH_M)
+    return AzimuthalIntegrator(
+        dist=DIST_M,
+        poni1=(c0 + 0.5) * PIXEL_M,
+        poni2=(c1 + 0.5) * PIXEL_M,
+        detector=det,
+        wavelength=WAVELENGTH_M,
+    )
 
 
-def integrate(img, run: int, mask=None, npt: int = NPT, ai=None,
-              min_count: int = MIN_COUNT):
+def integrate(
+    img, run: int, mask=None, npt: int = NPT, ai=None, min_count: int = MIN_COUNT
+):
     """1-D azimuthal average of `img` ignoring `mask` (True == masked).
 
     Returns `(q [A^-1], I, sigma)`. Solid-angle, polarization and Poisson
@@ -94,14 +100,21 @@ def integrate(img, run: int, mask=None, npt: int = NPT, ai=None,
     m = dead_canvas(run)
     if mask is not None:
         m = m | np.asarray(mask, dtype=bool)
-    res = ai.integrate1d(np.asarray(img, dtype=np.float64), npt,
-                         mask=m.astype(np.uint8), unit="q_A^-1",
-                         correctSolidAngle=True,
-                         polarization_factor=POLARIZATION,
-                         error_model="poisson")
+    res = ai.integrate1d(
+        np.asarray(img, dtype=np.float64),
+        npt,
+        mask=m.astype(np.uint8),
+        unit="q_A^-1",
+        correctSolidAngle=True,
+        polarization_factor=POLARIZATION,
+        error_model="poisson",
+    )
     thin = res.count < min_count
-    return (res.radial, np.where(thin, np.nan, res.intensity),
-            np.where(thin, np.nan, res.sigma))
+    return (
+        res.radial,
+        np.where(thin, np.nan, res.intensity),
+        np.where(thin, np.nan, res.sigma),
+    )
 
 
 def plot_run(run: int, npt: int = NPT, out: Optional[str] = None):
@@ -124,8 +137,10 @@ def plot_run(run: int, npt: int = NPT, out: Optional[str] = None):
     ax.set_yscale("log")
     ax.set_xlabel("q  [Å$^{-1}$]")
     ax.set_ylabel("I(q)  [ADU, solid-angle corrected]")
-    ax.set_title(f"run {run} — azimuthal integration, production mask "
-                 f"({100*mask.mean():.1f}% of the canvas masked)")
+    ax.set_title(
+        f"run {run} — azimuthal integration, production mask "
+        f"({100 * mask.mean():.1f}% of the canvas masked)"
+    )
     ax.grid(alpha=0.25)
 
     os.makedirs(FIG_DIR, exist_ok=True)
@@ -141,10 +156,12 @@ def plot_run(run: int, npt: int = NPT, out: Optional[str] = None):
 
 def main(runs=None):
     from automask.evaluation import ALL_RUNS
-    for run in (ALL_RUNS if runs is None else runs):
+
+    for run in ALL_RUNS if runs is None else runs:
         plot_run(run)
 
 
 if __name__ == "__main__":
     import sys
+
     main([int(a) for a in sys.argv[1:]] or None)

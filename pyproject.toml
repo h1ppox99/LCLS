@@ -25,3 +25,7 @@ dependencies = [
 [tool.setuptools.packages.find]
 include = ["automask*"]
 namespaces = false
+
+[tool.ruff]
+target-version = "py37"
+extend-exclude = ["xpp_sharing"]

@@ -9,6 +9,7 @@ flagging real pre-existing artifacts that were never part of the injection.
 Every ratio has an explicit zero-denominator fallback. The precision / recall /
 IoU conventions match ``automask.dataset.score`` (empty-vs-empty -> 1.0).
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -19,8 +20,7 @@ def _ratio(num, den, default: float) -> float:
     return float(num) / float(den) if den else float(default)
 
 
-def masking_metrics(pred: np.ndarray, injected: np.ndarray,
-                    region: np.ndarray) -> dict:
+def masking_metrics(pred: np.ndarray, injected: np.ndarray, region: np.ndarray) -> dict:
     """Score ``pred`` against ``injected``, both restricted to ``region``.
 
     Parameters are boolean arrays of identical shape (True == masked / present).
@@ -30,22 +30,29 @@ def masking_metrics(pred: np.ndarray, injected: np.ndarray,
     """
     pred = pred.astype(bool) & region
     truth = injected.astype(bool) & region
-    neg = region & ~truth                     # originally-valid non-artifact px
+    neg = region & ~truth  # originally-valid non-artifact px
 
     tp = int((pred & truth).sum())
     fp = int((pred & neg).sum())
     fn = int((~pred & truth).sum())
     tn = int((~pred & neg).sum())
 
-    precision = _ratio(tp, tp + fp, 1.0)      # no positives predicted -> 1.0
-    recall = _ratio(tp, tp + fn, 1.0)         # nothing to find -> 1.0
+    precision = _ratio(tp, tp + fp, 1.0)  # no positives predicted -> 1.0
+    recall = _ratio(tp, tp + fn, 1.0)  # nothing to find -> 1.0
     iou = _ratio(tp, tp + fp + fn, 1.0)
     f1 = _ratio(2 * precision * recall, precision + recall, 0.0)
-    fpr = _ratio(fp, fp + tn, 0.0)            # no negatives -> 0.0
+    fpr = _ratio(fp, fp + tn, 0.0)  # no negatives -> 0.0
     masked_frac = _ratio(int(pred.sum()), int(region.sum()), 0.0)
 
     return {
-        "precision": precision, "recall": recall, "f1": f1, "iou": iou,
-        "fpr": fpr, "masked_frac": masked_frac,
-        "tp": tp, "fp": fp, "fn": fn, "tn": tn,
+        "precision": precision,
+        "recall": recall,
+        "f1": f1,
+        "iou": iou,
+        "fpr": fpr,
+        "masked_frac": masked_frac,
+        "tp": tp,
+        "fp": fp,
+        "fn": fn,
+        "tn": tn,
     }

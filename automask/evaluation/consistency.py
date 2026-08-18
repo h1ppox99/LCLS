@@ -1,4 +1,5 @@
 """Mask reproducibility across fixed real-shot folds."""
+
 from __future__ import annotations
 
 import itertools
@@ -22,7 +23,9 @@ def _evidence_mask(pipeline, sample, shape, floor=None):
     floor = np.asarray(pipeline.floor(sample) if floor is None else floor)
     mask = np.asarray(
         pipeline.run(sample, floor=floor)
-        if isinstance(pipeline, Pipeline) else pipeline.run(sample))
+        if isinstance(pipeline, Pipeline)
+        else pipeline.run(sample)
+    )
     if mask.dtype != np.bool_ or floor.dtype != np.bool_:
         raise TypeError("a pipeline mask and floor must be boolean")
     if mask.shape != shape or floor.shape != shape:
@@ -31,8 +34,12 @@ def _evidence_mask(pipeline, sample, shape, floor=None):
 
 
 def _fold_metrics(masks, full) -> dict:
-    pairwise = np.array([_iou(masks[i], masks[j])
-                         for i, j in itertools.combinations(range(len(masks)), 2)])
+    pairwise = np.array(
+        [
+            _iou(masks[i], masks[j])
+            for i, j in itertools.combinations(range(len(masks)), 2)
+        ]
+    )
     versus_full = np.array([_iou(mask, full) for mask in masks])
     return {
         "fold_iou": pairwise,
@@ -58,8 +65,7 @@ def evaluate_consistency(
     reductions = sorted(({"mean", *pipeline.needs()} - set(DERIVED)) & REDUCTIONS)
     fold_reductions = {
         strategy: {
-            name: store.folds(
-                run, selection, name, n_folds=n_folds, strategy=strategy)
+            name: store.folds(run, selection, name, n_folds=n_folds, strategy=strategy)
             for name in reductions
         }
         for strategy in ("round_robin", "chronological")
@@ -74,9 +80,14 @@ def evaluate_consistency(
     metrics = {}
     for strategy, reductions_by_fold in fold_reductions.items():
         masks = [
-            _evidence_mask(pipeline, sample.with_arrays(**{
-                name: reductions_by_fold[name][i] for name in reductions
-            }), floor.shape, floor=floor)
+            _evidence_mask(
+                pipeline,
+                sample.with_arrays(
+                    **{name: reductions_by_fold[name][i] for name in reductions}
+                ),
+                floor.shape,
+                floor=floor,
+            )
             for i in range(n_folds)
         ]
         metrics[strategy] = _fold_metrics(masks, full)

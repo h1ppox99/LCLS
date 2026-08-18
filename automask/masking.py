@@ -26,6 +26,7 @@ intensity-free floor is not a second list to keep in step -- it is read from eac
 stat's registered `kind`, so a floor channel is configured exactly like any
 other and its knobs are reachable the same way.
 """
+
 from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
@@ -37,7 +38,7 @@ import numpy as np
 from automask import stats  # noqa: F401
 from automask import regularization  # noqa: F401
 from automask import combine  # noqa: F401
-from automask.stats.base import STATS, threshold_stat, robust_z          # noqa: F401
+from automask.stats.base import STATS, threshold_stat, robust_z  # noqa: F401
 from automask.regularization.base import REGULARIZERS
 from automask.combine.base import COMBINERS
 from automask.sample import Sample  # noqa: F401
@@ -74,6 +75,7 @@ class Channel:
     `name` labels the channel when one stat appears more than once in a pipeline
     (two black-hats at different radii); it defaults to the stat name.
     """
+
     stat: str
     params: object = None
     field_reg: Optional[str | List[str]] = "tv"
@@ -88,16 +90,20 @@ class Channel:
             raise ValueError(
                 f"stat '{self.stat}' is kind='{spec.kind}': it emits a boolean "
                 f"mask, so there is no field for field_reg={self.field_reg!r} to "
-                f"act on. Pass field_reg=None (Hydra: regularization=none).")
-        for names, params, kind in ((self.field_reg, self.field_reg_params, "field"),
-                                    (self.mask_reg, self.mask_reg_params, "mask")):
+                f"act on. Pass field_reg=None (Hydra: regularization=none)."
+            )
+        for names, params, kind in (
+            (self.field_reg, self.field_reg_params, "field"),
+            (self.mask_reg, self.mask_reg_params, "mask"),
+        ):
             for name, _ in self._stages(names, params):
                 got = REGULARIZERS[name].kind
                 if got != kind:
                     raise ValueError(
                         f"regularizer '{name}' is kind='{got}' but was given as a "
                         f"{kind}_reg on stat '{self.stat}'; a {got} regularizer "
-                        f"acts on {'a continuous field' if got == 'field' else 'a boolean mask'}.")
+                        f"acts on {'a continuous field' if got == 'field' else 'a boolean mask'}."
+                    )
 
     @staticmethod
     def _stages(names, params) -> List[tuple]:
@@ -115,11 +121,13 @@ class Channel:
         elif not isinstance(params, (list, tuple)):
             raise ValueError(
                 f"regularizer list {names} needs a list of params (or None), "
-                f"got a single {type(params).__name__}")
+                f"got a single {type(params).__name__}"
+            )
         if len(params) != len(names):
             raise ValueError(
                 f"regularizer list {names} has {len(names)} entries but "
-                f"{len(params)} params")
+                f"{len(params)} params"
+            )
         return list(zip(names, params))
 
     @property
@@ -140,7 +148,8 @@ class Channel:
         if spec.emits_mask:
             raise TypeError(
                 f"stat '{self.stat}' is kind='{spec.kind}' and has no continuous "
-                f"field; use .pick(sample).")
+                f"field; use .pick(sample)."
+            )
         z = spec.compute(sample, self._params())
         for name, params in self._stages(self.field_reg, self.field_reg_params):
             z = REGULARIZERS[name].apply(z, params)
@@ -161,7 +170,9 @@ class Channel:
         else:
             mode = getattr(p, "mode", spec.mode)
             m = threshold_stat(self.field(sample), p.k, mode)
-        gate = (lambda mask: mask) if self.is_floor else (lambda mask: mask & sample.real)
+        gate = (
+            (lambda mask: mask) if self.is_floor else (lambda mask: mask & sample.real)
+        )
         m = gate(m)
         for name, params in self._stages(self.mask_reg, self.mask_reg_params):
             m = gate(REGULARIZERS[name].apply(m, params))
@@ -189,7 +200,8 @@ class Channel:
                     f"combiner. Use combiner='union', or set "
                     f"{type(p).__name__}.defectiveness_scale to the z-value one "
                     f"picked pixel should be worth (must exceed the combiner's k "
-                    f"to mask on its own).")
+                    f"to mask on its own)."
+                )
             d = np.where(self.pick(sample), float(scale), 0.0)
         else:
             mode = getattr(p, "mode", spec.mode)
@@ -212,6 +224,7 @@ class Pipeline:
     both puts it in the floor and makes its knobs reachable -- the old parallel
     list of bare names could do neither.
     """
+
     channels: List[Channel] = field(default_factory=list)
     combiner: str = "union"
     combiner_params: object = None
@@ -222,7 +235,8 @@ class Pipeline:
         if duplicates:
             raise ValueError(
                 f"channel labels must be unique, got duplicates {duplicates}; "
-                f"pass Channel(..., name=...) to tell them apart.")
+                f"pass Channel(..., name=...) to tell them apart."
+            )
 
     @property
     def floor_channels(self) -> List[Channel]:
@@ -262,7 +276,8 @@ class Pipeline:
             raise TypeError("a pipeline floor must be boolean")
         if floor.shape != sample.real.shape:
             raise ValueError(
-                f"pipeline floor shape {floor.shape} != sample shape {sample.real.shape}")
+                f"pipeline floor shape {floor.shape} != sample shape {sample.real.shape}"
+            )
         cspec = COMBINERS[self.combiner]
         evidence = self.evidence_channels
         if cspec.consumes == "picks":
@@ -285,11 +300,15 @@ _HOUGH_FUSION_Z = 5.0
 
 def floor_channels() -> List[Channel]:
     """The intensity-free floor: unmapped/ASIC geometry + psana pixel status."""
-    return [Channel("geometry", field_reg=None), Channel("status_as_mask", field_reg=None)]
+    return [
+        Channel("geometry", field_reg=None),
+        Channel("status_as_mask", field_reg=None),
+    ]
 
 
-def production_pipeline(combiner: str = "union",
-                        line_detector: bool = True) -> Pipeline:
+def production_pipeline(
+    combiner: str = "union", line_detector: bool = True
+) -> Pipeline:
     """The default recipe: TV variance + hough_lines + asic_polish on the
     geometry + pixel-status floor. combiner="union" reproduces `combo`;
     combiner="weighted_sum" reproduces `combo_sum`.
@@ -304,20 +323,38 @@ def production_pipeline(combiner: str = "union",
     from automask.combine.weighted_sum import WeightedSumParams
 
     channels = floor_channels()
-    channels.append(Channel("variance", VarianceParams(k=3.5, mode="low"),
-                            field_reg="tv", field_reg_params=TVParams(4.0)))
+    channels.append(
+        Channel(
+            "variance",
+            VarianceParams(k=3.5, mode="low"),
+            field_reg="tv",
+            field_reg_params=TVParams(4.0),
+        )
+    )
     if line_detector:
-        channels.append(Channel(
-            "hough_lines", HoughLinesParams(defectiveness_scale=_HOUGH_FUSION_Z),
-            field_reg=None))
-    channels.append(Channel(
-        "asic_polish", AsicPolishParams(asic=256, n_iter=3, k=15.0, mode="high"),
-        field_reg=["blob_scale"], field_reg_params=[BlobScaleParams()],
-        mask_reg=["fill_holes", "area_gate"],
-        mask_reg_params=[FillHolesParams(), AreaGateParams()]))
+        channels.append(
+            Channel(
+                "hough_lines",
+                HoughLinesParams(defectiveness_scale=_HOUGH_FUSION_Z),
+                field_reg=None,
+            )
+        )
+    channels.append(
+        Channel(
+            "asic_polish",
+            AsicPolishParams(asic=256, n_iter=3, k=15.0, mode="high"),
+            field_reg=["blob_scale"],
+            field_reg_params=[BlobScaleParams()],
+            mask_reg=["fill_holes", "area_gate"],
+            mask_reg_params=[FillHolesParams(), AreaGateParams()],
+        )
+    )
     if combiner == "weighted_sum":
-        return Pipeline(channels, combiner="weighted_sum",
-                        combiner_params=WeightedSumParams(k=3.5, pad=2))
+        return Pipeline(
+            channels,
+            combiner="weighted_sum",
+            combiner_params=WeightedSumParams(k=3.5, pad=2),
+        )
     return Pipeline(channels, combiner=combiner)
 
 
@@ -352,10 +389,16 @@ def mask_image(
     if not work.any():
         return np.ones(image.shape, dtype=bool)
 
-    return Pipeline([
-        Channel("geometry", field_reg=None),
-        Channel("blackhat",
+    return Pipeline(
+        [
+            Channel("geometry", field_reg=None),
+            Channel(
+                "blackhat",
                 BlackhatParams(radius=blackhat_radius, k=blackhat_k, mode="high"),
-                field_reg="tv", field_reg_params=TVParams(blackhat_weight),
-                mask_reg="pad", mask_reg_params=PadParams(pad)),
-    ]).run(Sample(run=-1, arrays={"mean": work}))
+                field_reg="tv",
+                field_reg_params=TVParams(blackhat_weight),
+                mask_reg="pad",
+                mask_reg_params=PadParams(pad),
+            ),
+        ]
+    ).run(Sample(run=-1, arrays={"mean": work}))
