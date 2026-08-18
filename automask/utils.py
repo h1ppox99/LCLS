@@ -85,29 +85,6 @@ def configure_psana_environment():
     return environment
 
 
-def _show_table(title, rows, columns=None):
-    from IPython.display import Markdown, display
-
-    display(Markdown(f"### {title}"))
-    if not rows:
-        display(Markdown("_None found._"))
-        return
-    columns = columns or list(rows[0])
-
-    def clean(value):
-        return str(value).replace("|", "\\|").replace("\n", "<br>")
-
-    lines = [
-        "| " + " | ".join(columns) + " |",
-        "| " + " | ".join("---" for _ in columns) + " |",
-    ]
-    lines.extend(
-        "| " + " | ".join(clean(row.get(column, "")) for column in columns) + " |"
-        for row in rows
-    )
-    display(Markdown("\n".join(lines)))
-
-
 def _human_bytes(n_bytes):
     value = float(n_bytes)
     for unit in ("B", "KiB", "MiB", "GiB", "TiB"):
@@ -177,27 +154,8 @@ def _calibration_file_inventory(run, detector_type, detector_source):
 def list_experiment_content(
     experiment, run, detector, detector_source, detector_calib_type
 ):
-    from IPython.display import Markdown, display
-
     xtc = _xtc_inventory(experiment, run)
     calibration = _calibration_file_inventory(run, detector_calib_type, detector_source)
-    display(
-        Markdown(
-            f"**Experiment:** `{experiment}`  \n"
-            f"**Run:** `{run:04d}`  \n"
-            f"**Detector:** `{detector}` (`{detector_source}`)"
-        )
-    )
-    _show_table(
-        "Relevant XTC files",
-        xtc["files"],
-        ["file", "stream", "chunk", "size", "path"],
-    )
-    _show_table(
-        "Applicable detector calibration files",
-        calibration,
-        ["constant", "run range", "size", "path"],
-    )
     return {
         "experiment": experiment,
         "run": int(run),
@@ -294,7 +252,7 @@ def _column_summary(values):
         available_mask = np.asarray([value is not None for value in values])
         available = int(available_mask.sum())
         if not available:
-            return "0.0%", "unavailable", "no values"
+            return "0.0%", "unavailable", False
         text_values = np.asarray(
             [
                 value.decode("utf-8", errors="replace")
@@ -308,7 +266,7 @@ def _column_summary(values):
         unique, counts = np.unique(observed, return_counts=True)
         coverage = f"{available / values.size:.1%}"
         if unique.size == 1:
-            return coverage, "constant", _abbreviate(unique[0])
+            return coverage, f"constant: {_abbreviate(unique[0])}", True
         changes = int(
             np.count_nonzero(
                 available_mask[1:]
@@ -320,37 +278,44 @@ def _column_summary(values):
             first, last = observed[0], observed[-1]
             return (
                 coverage,
-                f"{unique.size} values; {changes} changes",
+                f"{unique.size} values; {changes} changes; "
                 f"first={_abbreviate(first)}, last={_abbreviate(last)}",
+                False,
             )
         counts_text = ", ".join(
             f"{_abbreviate(value)}: {count}" for value, count in zip(unique, counts)
         )
-        return coverage, f"{unique.size} values; {changes} changes", counts_text
+        return (
+            coverage,
+            f"{unique.size} values; {changes} changes; {counts_text}",
+            False,
+        )
 
     finite = np.isfinite(values)
     available = int(finite.sum())
     if not available:
-        return "0.0%", "unavailable", "no finite values"
+        return "0.0%", "unavailable", False
     observed = values[finite]
     unique = np.unique(observed)
     coverage = f"{available / values.size:.1%}"
     if unique.size == 1:
-        return coverage, "constant", f"{unique[0]:.4g}"
+        return coverage, f"constant: {unique[0]:.4g}", True
     if unique.size <= 10:
         changes = int(
             np.count_nonzero(finite[1:] & finite[:-1] & (values[1:] != values[:-1]))
         )
         counts = ", ".join(
-            f"{value:.8g}: {int(np.count_nonzero(observed == value))}"
+            f"{value:.8g} x {int(np.count_nonzero(observed == value))}"
             for value in unique
         )
-        return coverage, f"{unique.size} values; {changes} changes", counts
+        kind = "binary" if unique.size == 2 else f"discrete: {unique.size} values"
+        return coverage, f"{kind}; {changes} changes; {counts}", False
     p05, median, p95 = np.percentile(observed, [5, 50, 95])
     return (
         coverage,
-        f"continuous; {unique.size} values",
-        f"p05={p05:.4g}, median={median:.4g}, p95={p95:.4g}",
+        f"continuous: {unique.size} values; p05={p05:.4g}, "
+        f"median={median:.4g}, p95={p95:.4g}",
+        False,
     )
 
 
@@ -363,14 +328,8 @@ def profile_run_values(
     source=None,
     detector_set=None,
     max_events=None,
-    show=True,
-    show_constants=False,
 ) -> RunProfile:
-    """Profile one run through smalldata_tools and psana payload discovery.
-
-    Constant per-shot values remain available in the returned profile, but are
-    hidden from the rendered value tables unless ``show_constants`` is true.
-    """
+    """Profile one run through smalldata_tools and psana payload discovery."""
     source = source or local_run_source(run)
     data_source = source.open()
     detector_set = detector_set or Lcls1DetectorAdapters(data_source)
@@ -505,49 +464,37 @@ def profile_run_values(
     for field_id, values in sorted(value_arrays.items()):
         if field_id.startswith("EPICS/"):
             continue
-        coverage, variation, observed = _column_summary(values)
+        coverage, summary, constant = _column_summary(values)
         metadata = field_metadata[field_id]
         value_rows.append(
             {
+                "name": field_id,
                 "source": metadata["source"],
                 "field": metadata["field"],
                 "type": metadata["type"],
                 "origin": metadata["origin"],
                 "coverage": coverage,
-                "variation": variation,
-                "observed": observed,
+                "summary": summary,
+                "constant": constant,
             }
         )
 
     epics_rows = []
     for field_id, values in sorted(epics_arrays.items()):
-        coverage, variation, observed = _column_summary(values)
+        coverage, summary, constant = _column_summary(values)
         alias = field_id.removeprefix("EPICS/")
         epics_rows.append(
             {
+                "name": field_id,
                 "alias": alias,
                 "PV": detector_set.epics_metadata.get(alias, alias),
                 "dtype": str(values.dtype),
                 "coverage": coverage,
-                "variation": variation,
-                "observed": observed,
+                "summary": summary,
+                "constant": constant,
             }
         )
 
-    if show:
-        _show_table(f"Raw XTC payloads ({n_events:,} decoded events)", payload_rows)
-        visible_value_rows = (
-            value_rows
-            if show_constants
-            else [row for row in value_rows if row["variation"] != "constant"]
-        )
-        visible_epics_rows = (
-            epics_rows
-            if show_constants
-            else [row for row in epics_rows if row["variation"] != "constant"]
-        )
-        _show_table("Profiled per-shot values", visible_value_rows)
-        _show_table("EPICS process variables", visible_epics_rows)
     return RunProfile(
         run=int(run),
         events=n_events,
@@ -559,7 +506,7 @@ def profile_run_values(
     )
 
 
-def print_detector_geometry(run, detector_name=JUNGFRAU_NAME, source=None):
+def detector_geometry(run, detector_name=JUNGFRAU_NAME, source=None):
     import psana
 
     source = source or local_run_source(run)
@@ -586,5 +533,4 @@ def print_detector_geometry(run, detector_name=JUNGFRAU_NAME, source=None):
             else None
         ),
     }
-    rows = [{"property": key, "value": value} for key, value in geometry.items()]
-    _show_table("Jungfrau geometry", rows)
+    return geometry

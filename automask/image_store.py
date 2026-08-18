@@ -105,7 +105,7 @@ class ImageStore:
         if run not in self._profiles:
             from automask.utils import profile_run_values
 
-            self._profiles[run] = profile_run_values(run, show=False)
+            self._profiles[run] = profile_run_values(run)
         return self._profiles[run]
 
     @staticmethod

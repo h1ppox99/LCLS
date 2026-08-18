@@ -169,7 +169,7 @@ class FakeDetectorSet:
         }
 
 
-def test_profile_run_values_discovers_and_profiles_payloads(monkeypatch):
+def test_profile_run_values_discovers_and_profiles_payloads():
     events = [
         FakeEvent([0.0, 5.0], [90, 137]),
         FakeEvent([0.0, 0.0], [91, 137]),
@@ -178,8 +178,6 @@ def test_profile_run_values_discovers_and_profiles_payloads(monkeypatch):
         {"delay": 3.1, "state": "MOVING"},
         {"delay": 4.2, "state": "READY"},
     ]
-    monkeypatch.setattr(utils, "_show_table", lambda *_args: None)
-
     data_source = FakeDataSource(events, epics_states)
     source = FakeRunSource(data_source)
     profile = utils.profile_run_values(
@@ -201,27 +199,23 @@ def test_profile_run_values_discovers_and_profiles_payloads(monkeypatch):
     assert profile.epics[0]["PV"] == "XPP:TEST:DELAY.RBV"
 
 
-def test_profile_run_values_can_stop_without_rendering(monkeypatch):
+def test_profile_run_values_can_stop_early():
     events = [FakeEvent([0.0, 5.0], [137]) for _ in range(3)]
     states = [{"delay": 1.0, "state": "READY"} for _ in events]
     data_source = FakeDataSource(events, states)
-    rendered = []
-    monkeypatch.setattr(utils, "_show_table", lambda *args: rendered.append(args))
 
     profile = utils.profile_run_values(
         12,
         source=FakeRunSource(data_source),
         detector_set=FakeDetectorSet(data_source),
         max_events=2,
-        show=False,
     )
 
     assert profile.events == 2
     assert all(values.shape == (2,) for values in profile.values.values())
-    assert rendered == []
 
 
-def test_profile_run_values_hides_constant_rows_by_default(monkeypatch):
+def test_profile_summary_retains_constant_rows():
     events = [
         FakeEvent([0.0, 5.0], [137]),
         FakeEvent([0.0, 0.0], [137]),
@@ -231,10 +225,6 @@ def test_profile_run_values_hides_constant_rows_by_default(monkeypatch):
         {"delay": 2.0, "state": "READY"},
     ]
     data_source = FakeDataSource(events, states)
-    rendered = []
-    monkeypatch.setattr(
-        utils, "_show_table", lambda title, rows: rendered.append((title, rows))
-    )
 
     profile = utils.profile_run_values(
         12,
@@ -242,42 +232,19 @@ def test_profile_run_values_hides_constant_rows_by_default(monkeypatch):
         detector_set=FakeDetectorSet(data_source),
     )
 
-    value_rows = rendered[1][1]
-    epics_rows = rendered[2][1]
-    assert all(row["variation"] != "constant" for row in value_rows)
-    assert [row["alias"] for row in epics_rows] == ["delay"]
-    assert any(row["variation"] == "constant" for row in profile.summary["xtc"])
-    assert any(row["variation"] == "constant" for row in profile.summary["epics"])
-
-
-def test_profile_run_values_can_show_constant_rows(monkeypatch):
-    events = [FakeEvent([0.0, 5.0], [137]) for _ in range(2)]
-    states = [{"delay": 1.0, "state": "READY"} for _ in events]
-    data_source = FakeDataSource(events, states)
-    rendered = []
-    monkeypatch.setattr(
-        utils, "_show_table", lambda title, rows: rendered.append((title, rows))
-    )
-
-    utils.profile_run_values(
-        12,
-        source=FakeRunSource(data_source),
-        detector_set=FakeDetectorSet(data_source),
-        show_constants=True,
-    )
-
-    assert any(row["variation"] == "constant" for row in rendered[1][1])
-    assert any(row["variation"] == "constant" for row in rendered[2][1])
+    assert any(row["constant"] for row in profile.summary["xtc"])
+    assert any(row["constant"] for row in profile.summary["epics"])
+    assert all("summary" in row and "observed" not in row for row in profile.epics)
 
 
 def test_profile_summary_reports_discrete_changes():
-    coverage, variation, observed = utils._column_summary(
+    coverage, summary, constant = utils._column_summary(
         np.asarray([0.0, 0.0, 1.0, 1.0, np.nan])
     )
 
     assert coverage == "80.0%"
-    assert variation == "2 values; 1 changes"
-    assert observed == "0: 2, 1: 2"
+    assert summary == "binary; 1 changes; 0 x 2, 1 x 2"
+    assert constant is False
 
 
 def test_short_values_rejects_opaque_and_binary_scalars():
@@ -311,8 +278,8 @@ def test_payload_discovery_skips_unsupported_values_without_read_errors():
 def test_profile_summary_bounds_high_cardinality_text():
     values = np.asarray([f"state-{index}" for index in range(20)], dtype=object)
 
-    coverage, variation, observed = utils._column_summary(values)
+    coverage, summary, constant = utils._column_summary(values)
 
     assert coverage == "100.0%"
-    assert variation == "20 values; 19 changes"
-    assert observed == "first=state-0, last=state-19"
+    assert summary == "20 values; 19 changes; first=state-0, last=state-19"
+    assert constant is False

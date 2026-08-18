@@ -53,33 +53,19 @@ def save_figure(fig, name):
 PSANA_ENVIRONMENT = configure_psana_environment()
 
 # %% [markdown]
-# ## 0. Experiment content
-
-# %% [markdown]
-# This first stage only identifies the experiment and resolves the files relevant to the requested run and detector. It does not open or analyze any data. In practice, the agent should recover this context; it is explicit here so the notebook remains reproducible.
+# ## 1. Run inspection
+#
+# The inspection resolves the run's XTC streams and applicable detector calibration files, then makes one XTC pass to inventory raw payloads and build the event-aligned `RunProfile`. It also reads detector geometry. The resulting report is the concise context handed to the agent; the full arrays remain available through `inspection_report.profile`.
 
 # %% [markdown]
 # Inputs to clarify before starting:
 # 1. Experiment name
 # 2. Run number
 # 3. Detector alias, psana source, and calibration type
-# 4. Data paths: find the run's `.xtc` streams and the detector calibration files applicable to that run.
-
-# %% [markdown]
-# Expected output:
-# ```markdown
-# Experiment: ""
-# Run: ""
-# Detector: ""
-# Relevant files:
-# - XTC files (Markdown table)
-# - Applicable detector calibration files (Markdown table)
-# ```
 
 # %%
-# Hardcoded information for this run
-
 from automask.io.read_xtc import JUNGFRAU_NAME
+from automask.run_inspection import inspect_run
 
 EXPERIMENT_NAME = "xppl1016922"
 RUN = 396
@@ -88,43 +74,19 @@ DETECTOR_SOURCE = "XppEndstation.0:Jungfrau.0"
 DETECTOR_CALIB_TYPE = "Jungfrau::CalibV1"
 
 # %%
-from automask.utils import (
-    list_experiment_content,
-    profile_run_values,
-    print_detector_geometry,
+inspection_report = inspect_run(
+    EXPERIMENT_NAME,
+    RUN,
+    DETECTOR_NAME,
+    DETECTOR_SOURCE,
+    DETECTOR_CALIB_TYPE,
 )
-
-# %%
-experiment_content = list_experiment_content(
-    EXPERIMENT_NAME, RUN, DETECTOR_NAME, DETECTOR_SOURCE, DETECTOR_CALIB_TYPE
+inspection_report.display()
+inspection_report.save(
+    OUTPUT_DIR / f"run_{RUN:04d}_inspection",
+    overwrite=True,
 )
-xtc = experiment_content["xtc"]
-
-# %% [markdown]
-# ## 1. Analysis of the listed files
-#
-# This stage is reached once the available files and XTC keys have been listed. It profiles their values, reads detector geometry, and analyzes the relevant calibration constants.
-
-# %% [markdown]
-# At this stage, available and confirmed information should be:
-# 1. RUN
-# 2. Experiment name
-# 3. Detector alias
-# 4. XTC and calibration files
-
-# %% [markdown]
-# ### Profile XTC and EPICS values and geometry
-#
-# The run profiler discovers payloads directly from `event.keys()` and extracts the known numeric fields from every decoded event. After each event it also records the current value of every process variable in `data_source.env().epicsStore()`, including both its alias and underlying PV name. It does not require experiment-specific payload or value definitions.
-#
-# ```python
-# run_profile = profile_run_values(RUN)
-# print_detector_geometry(RUN)
-# ```
-
-# %%
-run_profile = profile_run_values(RUN)
-print_detector_geometry(RUN)
+run_profile = inspection_report.profile
 
 # %% [markdown]
 # > [!warning]

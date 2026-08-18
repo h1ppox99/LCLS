@@ -68,7 +68,7 @@ OUTPUT_DIR = (
 )
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-run_profile = profile_run_values(RUN, show=False)
+run_profile = profile_run_values(RUN)
 BEAM = "DetInfo(NoDetector.0:Evr.0)/EvrData.DataV4/eventCode[137]"
 VCC = "ai/ch03"
 base_conditions = (Condition(BEAM, "==", 1), Condition(MONITOR, "nonzero"))

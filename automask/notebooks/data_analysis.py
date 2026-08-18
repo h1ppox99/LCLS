@@ -45,7 +45,7 @@ all_valid_shots = ShotSelection(where=(Condition(BRIGHTNESS_FIELD, "nonzero"),))
 from automask.io.read_xtc import iter_calibrated, panel_geometry
 from automask.utils import profile_run_values
 
-run_profile = profile_run_values(RUN, show=False)
+run_profile = profile_run_values(RUN)
 selected_indices = all_valid_shots.resolve(run_profile)
 selection_counts = all_valid_shots.describe(run_profile)
 print(f"run {RUN:04d}: {selection_counts}")

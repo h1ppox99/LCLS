@@ -211,15 +211,15 @@ def test_image_store_profiles_each_run_once(tmp_path, monkeypatch):
 
     calls = []
 
-    def profile_run(run, show):
-        calls.append((run, show))
+    def profile_run(run):
+        calls.append(run)
         return RunProfile(run, 0, [], {}, {}, [])
 
     monkeypatch.setattr(utils, "profile_run_values", profile_run)
     store = ImageStore(cache_dir=tmp_path)
     assert store.profile(12) is store.profile(12)
     assert store.profile(13) is store.profile(13)
-    assert calls == [(12, False), (13, False)]
+    assert calls == [12, 13]
 
 
 def test_conditions_are_field_native_and_anded():
