@@ -26,16 +26,19 @@ command -v mamba || conda install -y -n base -c conda-forge mamba
 #    solver bump numpy under psana, which breaks it in ways that surface as
 #    segfaults rather than import errors. `mamba` here only to get a faster
 #    solve and a readable conflict report -- it does not change the result.
-mamba create -y -p "$SW/envs/ana-4.0.62" -c lcls-i -c conda-forge \
-    psana=4.0.62 python=3.9 libtiff=4.4 \
-    numpy h5py scipy scikit-image matplotlib pyfai hydra-core tifffile
+mamba create -y -p "$SW/envs/ana-4.0.66-py311" -c lcls-i -c conda-forge \
+    psana=4.0.66 python=3.11 \
+    numpy h5py scipy scikit-image matplotlib pyfai hydra-core tifffile pytest
 
 # 3. the package itself, without letting pip touch the compiled stack
-conda activate "$SW/envs/ana-4.0.62"
+conda activate "$SW/envs/ana-4.0.66-py311"
 cd /home/users/hippowal/LCLS
 pip install -e . --no-deps
 
-# 4. official SLAC detector adapters used by run profiling
+# 4. agent runtime; pinned to the version validated with this psana solve
+python -m pip install claude-agent-sdk==0.2.139
+
+# 5. official SLAC detector adapters used by run profiling
 mkdir -p "$SW/src"
 git clone https://github.com/slac-lcls/smalldata_tools.git "$SW/src/smalldata_tools"
 cd "$SW/src/smalldata_tools"
@@ -56,7 +59,7 @@ ln -sfn /home/groups/darve/hippowal/LCLS/xtc   xtc
 ln -sfn /home/groups/darve/hippowal/LCLS/calib calib
 
 cat > psana_env.local <<'EOF'
-PSANA_ENV=/home/groups/darve/hippowal/sw/envs/ana-4.0.62
+PSANA_ENV=/home/groups/darve/hippowal/sw/envs/ana-4.0.66-py311
 PSANA_PSDM=/home/groups/darve/hippowal/psdm
 PSANA_CONDA_SH=/home/groups/darve/hippowal/sw/miniforge/etc/profile.d/conda.sh
 SMALLDATA_TOOLS=/home/groups/darve/hippowal/sw/src/smalldata_tools

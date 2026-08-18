@@ -42,7 +42,7 @@ sitting alongside the data mirror. There is no `src/` wrapper. Import project co
 psana **is installed locally** and works. Activate it with:
 
 ```bash
-source psana_env.sh      # sets SIT_* vars, activates conda env ana-4.0.62
+source psana_env.sh      # sets SIT_* vars, activates conda env ana-4.0.66-py311
 ```
 
 The Bash tool does not persist shell state between calls, so source it in the *same* command

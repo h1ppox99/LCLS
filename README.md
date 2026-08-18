@@ -17,7 +17,7 @@ automask/          the project — an installable Python package (import automas
   synthetic/       synthetic-artifact benchmark (no real data needed)
   conf/ scripts/   Hydra configs + sweep launchers
 docs/              experiment + psana background (DATA_OVERVIEW, PSANA_XTC, DATA)
-psana_env.sh       activate the ana-4.0.62 conda env (for XTC / psana)
+psana_env.sh       activate the ana-4.0.66-py311 conda env (for XTC / psana)
 calib/ xtc/        the production data mirror (gitignored — large)
 xpp_sharing/       the lab's current production method (read-only baseline)
 ```
@@ -28,17 +28,17 @@ xpp_sharing/       the lab's current production method (read-only baseline)
 
 The XTC readers need psana, which is intentionally not installed by this
 project's `pip` dependencies. Choose an environment path and set the same path
-as `ENVP` in `psana_env.sh`.
+as `PSANA_ENV` in `psana_env.local`.
 
 ```bash
-ENVP=/Data/$USER/envs/ana-4.0.62
+ENVP=/Data/$USER/envs/ana-4.0.66-py311
 
 conda create -p "$ENVP" \
   -c lcls-i -c conda-forge \
-  psana=4.0.62 python=3.9 numpy h5py
+  psana=4.0.66 python=3.11 numpy h5py pytest
 ```
 
-Edit `psana_env.sh` so its `ENVP` value matches the path above, then install
+Edit `psana_env.local` so its `PSANA_ENV` value matches the path above, then install
 this project from inside that environment. `--no-deps` preserves psana's pinned
 scientific packages.
 

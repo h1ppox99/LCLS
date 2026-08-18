@@ -8,7 +8,7 @@
 # next to it (gitignored); it is sourced first if present:
 #
 #   # psana_env.local
-#   PSANA_ENV=/home/groups/darve/hippowal/sw/envs/ana-4.0.62
+#   PSANA_ENV=/home/groups/darve/hippowal/sw/envs/ana-4.0.66-py311
 #   PSANA_PSDM=/home/groups/darve/hippowal/psdm
 #   PSANA_CONDA_SH=/home/groups/darve/hippowal/sw/miniforge/etc/profile.d/conda.sh
 #   SMALLDATA_TOOLS=/home/groups/darve/hippowal/sw/src/smalldata_tools

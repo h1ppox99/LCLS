@@ -23,8 +23,14 @@ dependencies = [
     "pytest"
 ]
 
+[project.optional-dependencies]
+agent = ["claude-agent-sdk==0.2.139"]
+
+[project.scripts]
+lcls-agent = "lcls_agent.cli:main"
+
 [tool.setuptools.packages.find]
-include = ["automask*"]
+include = ["automask*", "lcls_agent*"]
 namespaces = false
 
 [tool.ruff]
