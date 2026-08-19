@@ -21,7 +21,9 @@ automask/outputs/
 xpp_sharing/Image_data/
 
 # --- harness / editor ---
-.claude/
+# Ignore local Claude state while keeping versioned project skills.
+/.claude/*
+!/.claude/skills/
 .DS_Store
 
 # --- binary / data blobs anywhere ---

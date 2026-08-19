@@ -124,7 +124,7 @@ def plot_run(run: int, npt: int = NPT, out: Optional[str] = None):
     from automask.selection_presets import BEAM_ON_SELECTION
     import matplotlib.pyplot as plt
 
-    pipe = production_pipeline("union")
+    pipe = production_pipeline()
     sample = Sample.from_store(run, BEAM_ON_SELECTION, pipe.needs())
     mask = pipe.run(sample)
     img = sample.mean

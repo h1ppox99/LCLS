@@ -6,11 +6,13 @@ import argparse
 import asyncio
 import importlib
 import importlib.metadata
+import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
-from lcls_agent.config import HostConfig, REPO_ROOT
+from lcls_agent.config import HostConfig, REPO_ROOT, SKILL_NAMES
 from lcls_agent.runtime import run_agent
 
 
@@ -35,12 +37,17 @@ def doctor() -> int:
         except Exception as exc:
             checks.append((module_name, False, f"{type(exc).__name__}: {exc}"))
 
+    cli_path = None
     try:
         sdk = importlib.import_module("claude_agent_sdk")
         cli_path = Path(sdk.__file__).resolve().parent / "_bundled" / "claude"
         checks.append(("bundled Claude CLI", cli_path.is_file(), str(cli_path)))
     except Exception as exc:
         checks.append(("bundled Claude CLI", False, str(exc)))
+
+    for skill_name in SKILL_NAMES:
+        skill_path = REPO_ROOT / ".claude" / "skills" / skill_name / "SKILL.md"
+        checks.append((f"skill {skill_name}", skill_path.is_file(), str(skill_path)))
 
     try:
         importlib.import_module("psana")
@@ -54,10 +61,30 @@ def doctor() -> int:
         "CLAUDE_CODE_OAUTH_TOKEN",
     )
     detected = [name for name in auth_names if os.environ.get(name)]
-    auth_detail = (
-        ", ".join(detected) if detected else "no environment credential detected"
-    )
-    checks.append(("authentication environment", bool(detected), auth_detail))
+    auth_ok = bool(detected)
+    auth_detail = ", ".join(detected)
+    if not auth_ok and cli_path is not None and cli_path.is_file():
+        try:
+            completed = subprocess.run(
+                [str(cli_path), "auth", "status", "--json"],
+                capture_output=True,
+                check=False,
+                text=True,
+                timeout=10,
+            )
+            status = json.loads(completed.stdout) if completed.returncode == 0 else {}
+            auth_ok = bool(status.get("loggedIn"))
+            if auth_ok:
+                method = status.get("authMethod", "Claude login")
+                subscription = status.get("subscriptionType")
+                auth_detail = (
+                    f"{method} ({subscription})" if subscription else str(method)
+                )
+        except (OSError, subprocess.SubprocessError, json.JSONDecodeError):
+            pass
+    if not auth_detail:
+        auth_detail = "no environment credential or Claude login detected"
+    checks.append(("authentication", auth_ok, auth_detail))
 
     required = {
         "python",
@@ -66,6 +93,7 @@ def doctor() -> int:
         "pytest",
         "bundled Claude CLI",
     }
+    required.update(f"skill {name}" for name in SKILL_NAMES)
     failed = False
     for name, ok, detail in checks:
         label = "ok" if ok else "warn"
@@ -131,13 +159,22 @@ def main(argv: list[str] | None = None) -> int:
         print(f"lcls-agent: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 2
 
-    print(f"[artifacts] {completed.run_dir}")
-    cost = completed.result.get("total_cost_usd")
+    print(f"[artifacts] {completed.workdir}")
+    result = completed.result
+    cost = getattr(result, "total_cost_usd", None)
     if cost is not None:
         print(f"[cost] ${cost:.4f}")
     if not completed.succeeded:
-        failure_text = str(completed.result.get("result") or "").lower()
-        if "not logged in" in failure_text:
+        subtype = getattr(result, "subtype", None)
+        failure_text = str(getattr(result, "result", "") or "").lower()
+        if subtype == "error_max_budget_usd":
+            print(
+                "[hint] --max-budget-usd is a stopping threshold, not an exact "
+                "cap; one model call can carry the final cost past it. Use a "
+                "lower threshold, a cheaper model, or a narrower task.",
+                file=sys.stderr,
+            )
+        elif "not logged in" in failure_text:
             print(
                 "[hint] Authenticate the bundled Claude runtime or export the "
                 "gateway credentials before retrying.",

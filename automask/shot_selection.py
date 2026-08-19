@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Literal, Optional, Tuple
+from typing import Any, Literal, Optional, Tuple, get_args
 
 import numpy as np
 
@@ -22,6 +22,7 @@ Operator = Literal[
     "finite",
     "nonzero",
 ]
+CONDITION_OPERATORS = tuple(get_args(Operator))
 
 
 @dataclass(frozen=True)
@@ -33,22 +34,9 @@ class Condition:
     value: Any = None
 
     def __post_init__(self) -> None:
-        operators = {
-            "==",
-            "!=",
-            "<",
-            "<=",
-            ">",
-            ">=",
-            "between",
-            "in",
-            "not in",
-            "finite",
-            "nonzero",
-        }
         if not self.field:
             raise ValueError("a condition needs a field name")
-        if self.operator not in operators:
+        if self.operator not in CONDITION_OPERATORS:
             raise ValueError(f"unknown condition operator {self.operator!r}")
         if self.operator == "between":
             if not isinstance(self.value, (tuple, list)) or len(self.value) != 2:

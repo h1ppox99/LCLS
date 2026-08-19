@@ -9,9 +9,8 @@ from typing import Dict, Tuple
 
 import numpy as np
 
-from automask.combine.base import COMBINERS
 from automask.evaluation.metrics import MaskDelta
-from automask.regularization.base import REGULARIZERS
+from automask.recipes import pipeline_to_dict
 
 
 @dataclass(frozen=True)
@@ -52,39 +51,7 @@ def _plain(value):
 
 
 def _pipeline_config(pipeline) -> dict:
-    channels = []
-    for channel in pipeline.channels:
-
-        def stages(names, params):
-            return [
-                {
-                    "name": name,
-                    "params": _plain(
-                        value if value is not None else REGULARIZERS[name].params()
-                    ),
-                }
-                for name, value in channel._stages(names, params)
-            ]
-
-        channels.append(
-            {
-                "name": channel.label,
-                "stat": channel.stat,
-                "params": _plain(channel._params()),
-                "field_regularizers": stages(
-                    channel.field_reg, channel.field_reg_params
-                ),
-                "mask_regularizers": stages(channel.mask_reg, channel.mask_reg_params),
-            }
-        )
-    combiner_params = pipeline.combiner_params
-    if combiner_params is None:
-        combiner_params = COMBINERS[pipeline.combiner].params()
-    return {
-        "channels": channels,
-        "combiner": pipeline.combiner,
-        "combiner_params": _plain(combiner_params),
-    }
+    return pipeline_to_dict(pipeline)
 
 
 def _ensemble_dict(result: EnsembleResult) -> dict:

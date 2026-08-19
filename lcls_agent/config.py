@@ -12,11 +12,24 @@ PermissionMode = Literal["auto", "dontAsk"]
 REPO_ROOT = Path(__file__).resolve().parent.parent
 READ_TOOLS = ("Read", "Glob", "Grep")
 WORKSPACE_TOOLS = READ_TOOLS + ("Edit", "Write", "Bash")
+SKILL_NAMES = ("automask",)
+SKILL_TOOL = "Skill"
 
 SYSTEM_PROMPT = """You are the general LCLS workspace agent for this repository.
 Inspect evidence before acting. Treat raw experiment data and calibration data as
-read-only. Never expose credentials. Work only on the user's requested task and
-report the files changed, commands run, tests performed, and any unresolved risk.
+read-only. Never expose credentials. Work only on the requested task.
+
+For automasking work, use the in-process `automask` tools rather than ad hoc Python
+or a shell CLI. They keep run profiles, selections, and pipelines alive as objects
+you name by short handle (`prof-1`, `sel-2`, `pipe-1`); pass those handles between
+tools, and pass parameters inline as objects. Typical flow: `inspect_run` (or
+`load_profile` to reuse a cache) -> `define_selection` -> `describe_selection`/
+`preview_selection` -> `define_pipeline` -> `build_mask` -> `validate_mask`. Call
+`automask_catalog` first when you need the exact statistic, regularizer, or
+parameter shapes; skip it for inspection- or selection-only work.
+
+Answer concisely and report handles produced, tools run, artifacts written, and
+unresolved risks.
 """
 
 
@@ -52,23 +65,45 @@ class HostConfig:
 
     @property
     def tools(self) -> tuple[str, ...]:
-        if self.permission_mode == "dontAsk":
-            return READ_TOOLS
-        return WORKSPACE_TOOLS
+        base = READ_TOOLS if self.permission_mode == "dontAsk" else WORKSPACE_TOOLS
+        return base + (SKILL_TOOL,)
 
-    def sdk_options(self):
-        """Build options lazily so `doctor` can report a missing SDK cleanly."""
+    def sdk_options(
+        self,
+        *,
+        automask_server=None,
+        automask_tools: tuple[str, ...] = (),
+        automask_read_only: tuple[str, ...] = (),
+    ):
+        """Build options lazily so `doctor` can report a missing SDK cleanly.
+
+        The in-process automask tools only ever write inside the run's own
+        working directory (guarded against protected data trees), so they are
+        auto-approved: the full set in ``auto`` mode, the read-only subset in
+        ``dontAsk`` mode, which also hides the mutating ones entirely.
+        """
         from claude_agent_sdk import ClaudeAgentOptions
 
+        from lcls_agent.tools import SERVER_NAME
+
+        if self.permission_mode == "dontAsk":
+            exposed = tuple(automask_read_only)
+            auto_approved = READ_TOOLS + tuple(automask_read_only)
+        else:
+            exposed = tuple(automask_tools)
+            auto_approved = READ_TOOLS + tuple(automask_tools)
         return ClaudeAgentOptions(
-            tools=list(self.tools),
-            allowed_tools=list(READ_TOOLS),
+            tools=list(self.tools) + list(exposed),
+            allowed_tools=list(auto_approved),
+            mcp_servers=(
+                {SERVER_NAME: automask_server} if automask_server is not None else {}
+            ),
             system_prompt=SYSTEM_PROMPT,
             permission_mode=self.permission_mode,
             cwd=self.root,
             model=self.resolved_model,
             max_turns=self.max_turns,
             max_budget_usd=self.max_budget_usd,
-            setting_sources=[],
-            skills=[],
+            setting_sources=["project"],
+            skills=list(SKILL_NAMES),
         )

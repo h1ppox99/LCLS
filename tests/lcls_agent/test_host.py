@@ -2,32 +2,45 @@ from __future__ import annotations
 
 import asyncio
 import io
-import json
 
 import pytest
 from claude_agent_sdk import AssistantMessage, ResultMessage, TextBlock
 
-from lcls_agent.cli import build_parser
-from lcls_agent.config import HostConfig, READ_TOOLS, WORKSPACE_TOOLS
+from lcls_agent.cli import build_parser, main
+from lcls_agent.config import (
+    REPO_ROOT,
+    HostConfig,
+    READ_TOOLS,
+    SKILL_NAMES,
+    WORKSPACE_TOOLS,
+)
 from lcls_agent.runtime import run_agent
 
 
 def test_auto_mode_exposes_workspace_tools_but_only_preapproves_reads(tmp_path):
     options = HostConfig(root=tmp_path, permission_mode="auto").sdk_options()
 
-    assert options.tools == list(WORKSPACE_TOOLS)
+    assert options.tools == [*WORKSPACE_TOOLS, "Skill"]
     assert options.allowed_tools == list(READ_TOOLS)
     assert options.permission_mode == "auto"
-    assert options.setting_sources == []
-    assert options.skills == []
+    assert options.setting_sources == ["project"]
+    assert options.skills == list(SKILL_NAMES)
 
 
 def test_dont_ask_mode_is_read_only(tmp_path):
     options = HostConfig(root=tmp_path, permission_mode="dontAsk").sdk_options()
 
-    assert options.tools == list(READ_TOOLS)
+    assert options.tools == [*READ_TOOLS, "Skill"]
     assert options.allowed_tools == list(READ_TOOLS)
     assert options.permission_mode == "dontAsk"
+
+
+def test_allowlisted_project_skills_exist():
+    for name in SKILL_NAMES:
+        path = REPO_ROOT / ".claude" / "skills" / name / "SKILL.md"
+
+        assert path.is_file()
+        assert path.read_text().startswith(f"---\nname: {name}\n")
 
 
 def test_invalid_limits_are_rejected(tmp_path):
@@ -45,7 +58,33 @@ def test_cli_defaults_to_auto_mode():
     assert args.max_budget_usd == 2.0
 
 
-def test_runtime_records_success_without_a_model_call(tmp_path):
+def test_cli_explains_soft_budget_stop(monkeypatch, tmp_path, capsys):
+    async def fake_run_agent(prompt, config, output_dir=None):
+        from types import SimpleNamespace
+
+        from lcls_agent.runtime import AgentResult
+
+        return AgentResult(
+            workdir=tmp_path,
+            result=SimpleNamespace(
+                subtype="error_max_budget_usd",
+                is_error=True,
+                total_cost_usd=0.31,
+                result="",
+            ),
+        )
+
+    monkeypatch.setattr("lcls_agent.cli.run_agent", fake_run_agent)
+
+    status = main(["run", "brief task", "--max-budget-usd", "0.20"])
+
+    assert status == 1
+    captured = capsys.readouterr()
+    assert "[cost] $0.3100" in captured.out
+    assert "stopping threshold, not an exact cap" in captured.err
+
+
+def test_runtime_streams_answer_and_returns_result(tmp_path):
     async def fake_query(*, prompt, options):
         assert prompt == "summarize"
         assert options.permission_mode == "auto"
@@ -61,7 +100,7 @@ def test_runtime_records_success_without_a_model_call(tmp_path):
             result="done",
         )
 
-    output_dir = tmp_path / "recorded-run"
+    output_dir = tmp_path / "run"
     stream = io.StringIO()
     completed = asyncio.run(
         run_agent(
@@ -75,10 +114,8 @@ def test_runtime_records_success_without_a_model_call(tmp_path):
 
     assert completed.succeeded
     assert stream.getvalue() == "done\n"
-    request = json.loads((output_dir / "request.json").read_text())
-    result = json.loads((output_dir / "result.json").read_text())
-    events = (output_dir / "events.jsonl").read_text().splitlines()
-    assert request["permission_mode"] == "auto"
-    assert result["session_id"] == "session-test"
-    assert result["total_cost_usd"] == 0.01
-    assert len(events) == 2
+    assert completed.result.session_id == "session-test"
+    assert completed.result.total_cost_usd == 0.01
+    assert completed.workdir == output_dir.resolve()
+    # A run that invokes no automask tool leaves no working directory behind.
+    assert not output_dir.exists()

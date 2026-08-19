@@ -10,7 +10,7 @@ for run 475; run 389 raw XTC is incomplete.
 automask/          the project — an installable Python package (import automask)
   io/              production psana/XTC readers and official detector adapters
   dev/             local-mirror setup and raw-format validation tools
-  stats/ regularization/ combine/   the masking method registries
+  stats/ regularization/   the masking method registries (combine/ is the fixed union)
   image_store.py   selected-shot reductions + detector calibration cache
   producers/       optionally prewarm image caches from psana/XTC
   studies/         exploratory scripts + the Hydra sweep driver
@@ -83,6 +83,21 @@ selection = ShotSelection(where=(Condition("ai/ch03", "<=", 2.0),))
 event_indices = selection.resolve(profile)
 mean_image = ImageStore(run_profile=profile).reduce(475, selection, "mean")
 ```
+
+## Using automask
+
+`automask` is a library: capability discovery, reusable run-inspection profiles,
+field-native shot selection, image reductions, mask construction, and run-local
+validation are all called directly from Python.
+
+```python
+from automask.catalog import capability_catalog
+from automask.run_inspection import inspect_run
+```
+
+See [`docs/AUTOMASK.md`](docs/AUTOMASK.md) for the scripting workflow and
+conventions. The agent reaches the same operations through the in-process tools
+in `lcls_agent/`; there is no separate command-line tool.
 
 ## Build and run
 

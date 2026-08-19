@@ -34,7 +34,9 @@ def calib_dir() -> str:
     )
 
 
-JUNGFRAU_NAME = "jungfrau1M_alcove"  # psana alias; source is XppEndstation.0:Jungfrau.0
+JUNGFRAU_NAME = "jungfrau1M_alcove"
+JUNGFRAU_SOURCE = "XppEndstation.0:Jungfrau.0"
+JUNGFRAU_CALIB_TYPE = "Jungfrau::CalibV1"
 
 
 def available_xtc_runs(

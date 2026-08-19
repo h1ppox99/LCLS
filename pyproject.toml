@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "automask"
 version = "0.1.0"
 description = "Automatic Jungfrau1M detector masking for LCLS experiment xppl1016922 (XPP/SLAC)"
-requires-python = ">=3.7"
+requires-python = ">=3.11"
 # Runtime deps. psana is NOT here: it ships via the ana conda env (see psana_env.sh),
 # so install this package with `pip install -e . --no-deps` inside that env to avoid
 # pip touching numpy/scipy and breaking psana.
@@ -34,5 +34,5 @@ include = ["automask*", "lcls_agent*"]
 namespaces = false
 
 [tool.ruff]
-target-version = "py37"
+target-version = "py311"
 extend-exclude = ["xpp_sharing"]
