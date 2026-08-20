@@ -39,13 +39,20 @@ from xtclib import read_dgram, scan_headers, walk_leaves
 ROOT = Path(__file__).resolve().parent.parent
 
 EBEAM_FIELDS = [  # (index in the 20-double BldDataEBeamV7 block, column name)
-    (0, "ebeam_charge_nc"), (1, "ebeam_l3_mev"),
-    (6, "ebeam_pkcurr_bc2"), (7, "ebeam_energy_bc2"),
-    (8, "ebeam_pkcurr_bc1"), (9, "ebeam_energy_bc1"),
-    (10, "ebeam_und_posx"), (11, "ebeam_und_posy"),
-    (12, "ebeam_und_angx"), (13, "ebeam_und_angy"),
-    (16, "ebeam_dump_charge"), (17, "photon_energy_ev"),
-    (18, "ebeam_ltu250"), (19, "ebeam_ltu450"),
+    (0, "ebeam_charge_nc"),
+    (1, "ebeam_l3_mev"),
+    (6, "ebeam_pkcurr_bc2"),
+    (7, "ebeam_energy_bc2"),
+    (8, "ebeam_pkcurr_bc1"),
+    (9, "ebeam_energy_bc1"),
+    (10, "ebeam_und_posx"),
+    (11, "ebeam_und_posy"),
+    (12, "ebeam_und_angx"),
+    (13, "ebeam_und_angy"),
+    (16, "ebeam_dump_charge"),
+    (17, "photon_energy_ev"),
+    (18, "ebeam_ltu250"),
+    (19, "ebeam_ltu450"),
 ]
 IPMFEX_SRCS = (0x22, 0x23, 0x26, 0x28)
 IPMFEX_FIELDS = ("ch0", "ch1", "ch2", "ch3", "sum", "xpos", "ypos")
@@ -108,13 +115,12 @@ def main() -> int:
     t0 = time.time()
     index = []
     for si, p in enumerate(paths):
-        for off, total, sec, nsec, fid in scan_headers(p):
+        for off, _total, sec, nsec, fid in scan_headers(p):
             index.append((sec, nsec, fid, si, off))
     index.sort(key=lambda t: (t[0], t[1], t[2]))
     N = len(index)
-    if N != N_old:
-        print(f"event count {N} != shot_table rows {N_old} — rerun step 0 first",
-              file=sys.stderr)
+    if N_old != N:
+        print(f"event count {N} != shot_table rows {N_old} — rerun step 0 first", file=sys.stderr)
         return 1
 
     cols: dict[str, np.ndarray] = {}
@@ -135,44 +141,42 @@ def main() -> int:
         cols[f"bmmon4b_{f}"] = np.full(N, np.nan)
     bm4b_sum = np.full(N, np.nan)  # alignment check only, not stored
 
-    files = [open(p, "rb") for p in paths]
+    files = [open(p, "rb") for p in paths]  # noqa: SIM115 - closed together below
     try:
-        for i, (sec, nsec, fid, si, off) in enumerate(index):
+        for i, (_sec, _nsec, _fid, si, off) in enumerate(index):
             buf = read_dgram(files[si], off)
             leaves: list = []
             walk_leaves(buf, 20, leaves)
             for tid, sphy, poff, psize in leaves:
                 if tid == 14 and psize >= 48:
-                    v = struct.unpack("<6d", buf[poff:poff + 48])
+                    v = struct.unpack("<6d", buf[poff : poff + 48])
                     for j, f in enumerate(("f11", "f12", "f21", "f22", "f63", "f64")):
                         cols[f"gasdet_{f}"][i] = v[j]
                 elif tid == 15 and psize >= 164:
-                    (dmg,) = struct.unpack("<I", buf[poff:poff + 4])
-                    v = struct.unpack("<20d", buf[poff + 4:poff + 164])
+                    (dmg,) = struct.unpack("<I", buf[poff : poff + 4])
+                    v = struct.unpack("<20d", buf[poff + 4 : poff + 164])
                     cols["ebeam_damage"][i] = dmg
                     for j, name in EBEAM_FIELDS:
                         cols[name][i] = v[j]
                 elif tid == 16 and psize >= 32:
-                    v = struct.unpack("<4d", buf[poff:poff + 32])
+                    v = struct.unpack("<4d", buf[poff : poff + 32])
                     for j, f in enumerate(("t1_ps", "t2_ps", "q1_pc", "q2_pc")):
                         cols[f"pcav_{f}"][i] = v[j]
                 elif tid == 31 and sphy in IPMFEX_SRCS and psize >= 28:
-                    v = struct.unpack("<7f", buf[poff:poff + 28])
+                    v = struct.unpack("<7f", buf[poff : poff + 28])
                     for j, f in enumerate(IPMFEX_FIELDS):
                         cols[f"ipmfex{sphy:02x}_{f}"][i] = v[j]
                 elif tid == 98 and psize >= 24:
-                    v = struct.unpack("<3d", buf[poff:poff + 24])
+                    v = struct.unpack("<3d", buf[poff : poff + 24])
                     if sphy == 0x43:
-                        cols["bmmon43_sum"][i], cols["bmmon43_xpos"][i], \
-                            cols["bmmon43_ypos"][i] = v
+                        cols["bmmon43_sum"][i], cols["bmmon43_xpos"][i], cols["bmmon43_ypos"][i] = v
                     elif sphy == 0x4B:
                         bm4b_sum[i] = v[0]
                         cols["bmmon4b_xpos"][i], cols["bmmon4b_ypos"][i] = v[1], v[2]
                     elif sphy == 0x4C:
-                        cols["bmmon4c_sum"][i], cols["bmmon4c_xpos"][i], \
-                            cols["bmmon4c_ypos"][i] = v
+                        cols["bmmon4c_sum"][i], cols["bmmon4c_xpos"][i], cols["bmmon4c_ypos"][i] = v
             if (i + 1) % 800 == 0:
-                print(f"[decode] {i+1}/{N}  ({time.time()-t0:.0f}s)", flush=True)
+                print(f"[decode] {i + 1}/{N}  ({time.time() - t0:.0f}s)", flush=True)
     finally:
         for f in files:
             f.close()
@@ -197,9 +201,12 @@ def main() -> int:
         text = text[: text.index(README_MARKER)].rstrip() + "\n"
     readme.write_text(text.rstrip() + "\n" + README_SECTION)
 
-    print(f"[done] shot_table.npz: {len(old)} -> {len(merged)} columns "
-          f"({len(cols)} added), alignment max|diff| = {diff:.1e}, "
-          f"{time.time()-t0:.0f}s", flush=True)
+    print(
+        f"[done] shot_table.npz: {len(old)} -> {len(merged)} columns "
+        f"({len(cols)} added), alignment max|diff| = {diff:.1e}, "
+        f"{time.time() - t0:.0f}s",
+        flush=True,
+    )
     return 0
 
 

@@ -28,8 +28,19 @@ npy/frames_raw.npy  (N,2,512,1024) uint16 memmap      npy/shot_table.npz (per-sh
    ▼
 outputs/<run>/sum_calib.npy · sum_assembled.npy · sum.png · accumulate_log.json
    │
+   │  optional submodule · IMAGE-CENTER AGENT  (SDK phase "center")
+   │  gate: is the assembled-image center specified in current context?
+   │    yes → reuse it; no center estimation is activated
+   │    no  → assign ≥2 indexed rings; pyFAI supplies LaB6 order relationships
+   │          fit FREE radii + common center, then independently validate every
+   │          predicted in-field ring location against image pixels
+   │          accept | bounded revise | escalate to human researcher
+   │  367/531/734 px are unindexed diffuse anchors, never center constraints
+   │  → image_center.json + overlays + ring_validation.json + center_loop.jsonl
+   │    (+ center_human_review.md on escalation)
+   │
    │  step 3 · MASK AGENT  (SDK, phase "mask")
-   │  reads skills/masking + the summed image, draws layers
+   │  reads skills/masking + summed image + image_center.json, draws layers
    │  → writes mask_assembled.npy + mask_rationale.md, executes
    │  pipeline/step3_apply_mask.py
    ▼
@@ -72,6 +83,12 @@ python3 agent/entrypoint.py --run-id run475 --max-iters 3
 # verify an existing endpoint only
 python3 agent/entrypoint.py --run-id run475 --phase verify
 
+# run/resume only the compact center submodule on an existing reduced sum
+python3 agent/entrypoint.py --run-id run475 --phase center
+
+# when context already supplies an assembled (row, col), estimation stays off
+python3 agent/entrypoint.py --run-id run475 --image-center 992 35
+
 # mechanics-only baseline (no API calls, rule-based decisions + mask + verify)
 python3 agent/entrypoint.py --run-id smoke --no-llm
 
@@ -93,6 +110,11 @@ python3 test_stability.py --trials 3              # agent-decision stability
 - `verify_report.json` — verifier verdict, schema in `skills/verification/README.md`.
   `iq.npy` / `iq_metrics.json` — deterministic I(q) + metrics from `step4_iq.py`.
   Exit code 5 = pipeline ran but final verdict is FAIL.
+- `image_center.json` — optional-submodule decision plus center in assembled
+  `(row, col)` coordinates. `decision=reuse` means context supplied the center;
+  `decision=estimate` means the physics-grounded fit was accepted;
+  `decision=revise|escalate` deliberately leaves `center=null` and blocks downstream
+  masking/I(q). Exit code 6 = human review required; 7 = center revision required.
 - Agent skill sources: `skills/selection/01a_low_ipm_exclusion.md`,
   `skills/selection/01b_high_ipm_exclusion.md`,
   `skills/normalization/01_per_shot_flux_ipm2.md` +

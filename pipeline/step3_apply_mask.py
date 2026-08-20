@@ -35,8 +35,10 @@ def main() -> int:
     np.save(out / "masked_sum.npy", masked)
 
     import matplotlib
+
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+
     nz = img[(img != 0) & ~mask]
     vmax = np.percentile(nz, 99.5)
     fig, axes = plt.subplots(1, 2, figsize=(17, 8.5))
@@ -48,7 +50,8 @@ def main() -> int:
     axes[1].imshow(show, cmap=cmap, vmin=0, vmax=vmax, interpolation="nearest")
     axes[1].set_title("masked sum — PIPELINE ENDPOINT (red = masked)")
     for ax in axes:
-        ax.set_xticks([]); ax.set_yticks([])
+        ax.set_xticks([])
+        ax.set_yticks([])
     fig.savefig(out / "masked_sum.png", dpi=110, bbox_inches="tight")
 
     in_panel = img != 0  # gap rows are exactly 0 in the assembled image
@@ -59,8 +62,10 @@ def main() -> int:
         "unmasked_pixels": int((~mask & in_panel).sum()),
     }
     (out / "mask_log.json").write_text(json.dumps(log, indent=2))
-    print(f"[done] masked {log['mask_pixels']} px "
-          f"({log['mask_fraction_of_panels']*100:.1f}% of panel area)")
+    print(
+        f"[done] masked {log['mask_pixels']} px "
+        f"({log['mask_fraction_of_panels'] * 100:.1f}% of panel area)"
+    )
     return 0
 
 

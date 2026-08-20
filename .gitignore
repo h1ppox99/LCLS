@@ -1,20 +1,38 @@
-# Secrets — never commit
+# Secrets and local environment
 .env
+.env.*
+!.env.example
+.venv/
 
-# Raw XTC data (~1.4 GB each, exceeds GitHub limits)
+# Raw data and large intermediate arrays
 *.xtc
+/npy/frames_raw.npy
 
-# Large intermediate arrays
-npy/frames_raw.npy
+# Runtime products. Historical validation artifacts already tracked by Git remain
+# tracked; new runs stay local unless they are deliberately curated elsewhere.
+/outputs/
+/output/
 
-# Generated data arrays in outputs (reports/plots are kept)
-outputs/**/*.npy
-outputs/**/*.npz
-outputs/**/*.h5
+# Research scratch space and unrelated document-generation work
+/.tmp/
+/tmp/
+/work/
+/scripts/
+/papers/**/*.pdf
 
-# Python
+# Python caches and tooling
 __pycache__/
-*.pyc
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
 
-# macOS
+# Editors and operating systems
 .DS_Store
+.idea/
+.vscode/
+*~

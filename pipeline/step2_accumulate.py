@@ -26,7 +26,8 @@ decisions.json schema (all fields required; "rationale" free text):
 
 "monitor" may name any per-shot column of npy/shot_table.npz (see npy/README_npy.md;
 e.g. "ipmfex22_sum") — the skills/normalization/ monitor menu (one file per
-reference parameter) governs that choice. "offset" is always the ipm2 offset (selection thresholds act on ipm2c);
+reference parameter) governs that choice. "offset" is always the ipm2 offset
+(selection thresholds act on ipm2c);
 a non-ipm2 monitor gets its own zero offset from the optional "monitor_offset"
 field ("auto" = median over x-ray-off shots, the default, or a number).
 """
@@ -82,17 +83,18 @@ def main() -> int:
         if mono_name != "ipm2" and mono_name in t.files:
             raw = t[mono_name].astype(float)
             moff = norm.get("monitor_offset", "auto")
-            mono_offset = (float(np.nanmedian(raw[xray == 0])) if moff == "auto"
-                           else float(moff))
+            mono_offset = float(np.nanmedian(raw[xray == 0])) if moff == "auto" else float(moff)
             mono = raw - mono_offset
         else:
             if mono_name != "ipm2":
-                print(f"[warn] monitor {mono_name} not in shot_table; falling back to ipm2",
-                      file=sys.stderr)
+                print(
+                    f"[warn] monitor {mono_name} not in shot_table; falling back to ipm2",
+                    file=sys.stderr,
+                )
                 mono_name = "ipm2"
             mono = ipm2c.copy()
-        bad = keep & ~(mono > 0)          # also catches NaN (NaN > 0 is False)
-        if bad.any():                       # normalization must never divide by <=0
+        bad = keep & ~(mono > 0)  # also catches NaN (NaN > 0 is False)
+        if bad.any():  # normalization must never divide by <=0
             keep &= mono > 0
             print(f"[guard] dropped {int(bad.sum())} kept shots with monitor <= 0", file=sys.stderr)
         if norm.get("form", "per_shot") == "per_shot":
@@ -109,7 +111,7 @@ def main() -> int:
     for k, i in enumerate(kept_idx):
         s += weights[i] * calibrate(np.asarray(frames[i]), ped, gain)
         if (k + 1) % 500 == 0:
-            print(f"[accumulate] {k+1}/{len(kept_idx)} ({time.time()-t0:.0f}s)", flush=True)
+            print(f"[accumulate] {k + 1}/{len(kept_idx)} ({time.time() - t0:.0f}s)", flush=True)
 
     np.save(out / "sum_calib.npy", s)
     ix = np.load(ROOT / "calib/ix.npy").astype(np.intp)
@@ -119,14 +121,19 @@ def main() -> int:
     np.save(out / "sum_assembled.npy", img)
 
     import matplotlib
+
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+
     nz = img[img != 0]
     fig, ax = plt.subplots(figsize=(9, 9.5))
-    im = ax.imshow(img, cmap="viridis", vmin=0, vmax=np.percentile(nz, 99.5),
-                   interpolation="nearest")
-    ax.set_title(f"{out.name}: sum of {len(kept_idx)} kept shots"
-                 f" ({'normalized' if norm['run'] else 'plain'})")
+    im = ax.imshow(
+        img, cmap="viridis", vmin=0, vmax=np.percentile(nz, 99.5), interpolation="nearest"
+    )
+    ax.set_title(
+        f"{out.name}: sum of {len(kept_idx)} kept shots"
+        f" ({'normalized' if norm['run'] else 'plain'})"
+    )
     plt.colorbar(im, ax=ax, shrink=0.85, label="summed keV")
     fig.savefig(out / "sum.png", dpi=110, bbox_inches="tight")
 
@@ -138,9 +145,11 @@ def main() -> int:
         "monitor": mono_name if norm["run"] else None,
         "monitor_offset": mono_offset if norm["run"] else None,
         "weights_range": [float(weights[keep].min()), float(weights[keep].max())]
-        if keep.any() else None,
+        if keep.any()
+        else None,
         "ratio_of_sums_divisor": float(mono[keep].sum())
-        if norm["run"] and norm.get("form") == "ratio_of_sums" else None,
+        if norm["run"] and norm.get("form") == "ratio_of_sums"
+        else None,
         "sum_total_keV": float(s.sum()),
         "elapsed_s": round(time.time() - t0, 1),
         "decisions_echo": dec,

@@ -57,7 +57,7 @@ Tested on Run0475, agent_trial_02 sum:
 | ring policy | `off-ring` (margin 60 px) for parasitic cleanup | on-ring detections are Bragg/texture — a separate decision (see trade-offs) |
 | `r_min` | 100 px | components nearer the beam center are beamstop/direct-beam territory (layers 00/geometry/beamstop), not blobs — without this, Run0475 grows a spurious 779-px component at r ≈ 35 |
 | `refine_contour_eps` | 0.10 | mask the fitted-Gaussian ellipse out to excess = ε · background. **Rule: residual per-bin bias must stay below HALF the background noise floor; take the largest ε that satisfies it** — masking further buys nothing measurable. Run0475 sweep (bias vs the 1.2 % floor): envelope-only 1.5–1.9 % (ABOVE floor — invalid), ε=0.15 → 0.88 % (floor/1.4 — too close, invalid), **ε=0.10 → 0.52 % (floor/2.3, default, 2 066 px)**, ε=0.05 → 0.26 % (floor/4.7, 2 767 px), ε=0.02 → 0.11 % (3 715 px, precision work). Set `None` to disable |
-| beam center | (row 992, col 35), assembled coords | same geometry as the beamstop layer |
+| image center | load `image_center.json`, assembled `(row, col)` | shared run artifact; never a method default |
 | disjointness | `layer &= ~base_mask` | smoothing interpolates z across masked speckles, so grown components can leak a few px into already-masked area; subtracting keeps per-layer accounting exact |
 
 ## Implementation
@@ -68,7 +68,7 @@ Reference implementation (numpy/scipy only):
 import numpy as np
 from scipy import ndimage
 
-def azimuthal_residual_layer(img, base_mask, bc=(992.0, 35.0),
+def azimuthal_residual_layer(img, base_mask, bc,
                              sigma_smooth=8.0, z_seed=5.0, z_grow=3.0,
                              min_size=150, ring_radii=(367, 531, 734, 847, 1245),
                              ring_margin=60, off_ring_only=True, r_min=100.0,
@@ -212,7 +212,7 @@ extended stray-light patches. Run it on the *sum*, after selection + normalizati
 
 Signal-dependent — with `off_ring_only=False` it will also mask real anisotropic signal
 (Bragg spots from large grains, texture arcs); keep the off-ring policy unless the goal is a
-strictly isotropic background. Needs a beam center (~few-px accuracy is enough at these
+strictly isotropic background. Needs an image center (~few-px accuracy is enough at these
 radii). `σ_smooth` sets the sensitive size band — rescan it for targets much smaller/larger
 than ~30 px. Destriping assumes stripes are separable row/column structure (true for
 Jungfrau column noise); pathological large-area gradients would need a 2-D background model

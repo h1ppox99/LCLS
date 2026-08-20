@@ -90,7 +90,7 @@ Reference implementation (numpy/scipy only):
 import numpy as np
 from scipy import ndimage
 
-def itheta_sector_scan(resid, base_mask, bc=(992.0, 35.0), r0=120, r1=1100,
+def itheta_sector_scan(resid, base_mask, bc, r0=120, r1=1100,
                        th0=-100.0, th1=10.0, dr=15, dth=2.0, min_px=60,
                        z_seed=4.5, z_grow=2.5, min_cells=2,
                        ring_radii=(367, 531, 734, 847, 1245), ring_margin=25,

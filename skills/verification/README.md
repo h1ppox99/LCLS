@@ -61,3 +61,9 @@ iteration — write it for the agent that will have to act on it.
    neg_bin_fraction 0.31 > 0.02 — add the horizontal shadow band layer").
 4. **Do not weaken thresholds to pass a run.** Thresholds change only by editing the
    criterion file itself (a human-reviewed act), never inside a verifier run.
+5. **Judge the full valid q-range.** The endpoint plot and every metric/search window
+   must reach the last radial bin with sufficient statistics; a hard-coded display or
+   search cap silently hides real features exactly where nobody is looking (the
+   r ≈ 1245 px outer ring, q > 2 Å⁻¹, was invisible this way until 2026-07-28). If a
+   plotted or searched range is deliberately restricted, the restriction and its reason
+   must appear in the report.

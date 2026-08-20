@@ -91,6 +91,7 @@ fields to `qa_report.json`; the report is the union of what ran.
 | [methods/06_calib_lab6_drift.md](methods/06_calib_lab6_drift.md) | calibration (gated on run type) | per-ring Δq/q vs LaB6 prediction; residual-pattern diagnosis |
 | [methods/07_consistency_cross_curve.md](methods/07_consistency_cross_curve.md) | consistency (gated on ≥ 2 curves, LAST) | curves agree with each other — levels, centroids, quality |
 | [methods/08_pixel_photon_statistics.md](methods/08_pixel_photon_statistics.md) | detector-statistics (gated on per-shot frames) | per-pixel Poisson goodness-of-fit across shots — deviance (primary), Fano, JS divergence; hot/flicker/noisy/stuck pixels, global over/underdispersion |
+| [methods/09_known_material_expectation.md](methods/09_known_material_expectation.md) | material-expectation (gated on sample in registry) | endpoint I(q) vs first-principles expectations of the known material — reflection completeness over the FULL valid range, distance-free tan-ratio identity, D_eff geometry witness, anchors, parasitic extras (registry: LaB6 validated + Si/CeO2/AgBh/Al2O3) |
 
 ## Choosing
 
@@ -122,6 +123,14 @@ fields to `qa_report.json`; the report is the union of what ran.
    shots — never a pooled single-image histogram (Poisson-mixture
    pitfall, see the method file). Its flag list is evidence for the
    mask/calib stages, not a mask edit.
+7. **The material-expectation check runs only when the sample identity
+   is known and registered** (09). It judges the endpoint against the
+   material's physics — reflection completeness over the full valid
+   q-range (never a capped range), the distance-free ratio identity,
+   and validated anchors — and hands its geometry evidence (D_eff) to
+   the drift check rather than issuing q-scale hard verdicts itself.
+   Registry edits (new materials, ring ↔ anchor relabeling) are
+   human-reviewed acts backed by an indexing analysis.
 
 ## Procedure
 

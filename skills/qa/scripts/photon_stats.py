@@ -313,17 +313,17 @@ def _plots(out, lam, dev_dof, fano, js, flags, known_bad, monitor_cv, strata,
     fig, axes = plt.subplots(2, 3, figsize=(17, 9))
 
     ax = axes[0, 0]
-    img = np.concatenate([lam[0], lam[1]], axis=0)
+    img = np.concatenate([lam[1], lam[0]], axis=0)
     im = ax.imshow(img, vmin=0, vmax=np.nanpercentile(lam[lam > 0], 99), cmap="viridis",
                    interpolation="nearest", aspect="auto")
-    ax.set_title(r"$\hat\lambda$ [photons/shot] (panels stacked)")
+    ax.set_title(r"$\hat\lambda$ [photons/shot] (panels stacked, p1 top)")
     plt.colorbar(im, ax=ax, shrink=0.8)
 
     ax = axes[0, 1]
-    img = np.concatenate([dev_dof[0], dev_dof[1]], axis=0)
+    img = np.concatenate([dev_dof[1], dev_dof[0]], axis=0)
     im = ax.imshow(img, vmin=0, vmax=np.nanpercentile(dev_dof[ok], 99.5), cmap="magma",
                    interpolation="nearest", aspect="auto")
-    ax.set_title("Poisson deviance / dof")
+    ax.set_title("Poisson deviance / dof (p1 top)")
     plt.colorbar(im, ax=ax, shrink=0.8)
 
     ax = axes[0, 2]

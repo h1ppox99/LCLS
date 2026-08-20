@@ -36,9 +36,11 @@ Tested values, and why:
 | `correctSolidAngle` | True | Standard flat-detector correction (geometric corrections live in these pyFAI settings — see [normalization](../normalization/README.md)). |
 | `polarization_factor` | None | Off in this demo to avoid assuming detector orientation; ~0.99 for quantitative work. |
 
-**Geometry** (needed to build the q-map): dist 190 mm, λ 1.2915 Å (9.6 keV), beam center
-(35.51, −35.22) mm, 75 µm pixels, `rot1=rot2=rot3=0`. Verified against stored `matrix_q`
-to 4×10⁻¹² Å⁻¹.
+**Geometry** (needed to build the q-map): dist 190 mm, λ 1.2915 Å (9.6 keV),
+75 µm pixels, `rot1=rot2=rot3=0`. Load the assembled `(row, col)` image center
+from the run's `image_center.json`; the historical Run0475 q-map used the
+equivalent physical-coordinate center (35.51, −35.22) mm and was verified to
+4×10⁻¹² Å⁻¹.
 
 ## Evidence (Run0475)
 
@@ -53,7 +55,7 @@ dynamic outliers (cosmics, sporadic Bragg) that dark masks cannot.
 ## Trade-offs
 
 **Will remove real anisotropic signal** (single-crystal Bragg, texture). Requires correct
-geometry (dist, λ, beam center) to build the q-map.
+geometry (dist, λ, image center) to build the q-map.
 
 ## Outputs
 

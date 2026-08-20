@@ -1,6 +1,6 @@
 ---
 name: xray-agentic-skillset
-description: Skill set for an agent doing serial X-ray / Jungfrau1M scattering analysis directly from XTC (no psana). Five skill categories — masking, normalization, selection, verification, qa — each a folder with a README index and one md file per method, all following the same v3 method-file template. Grounded in the Run0475 (xppl1016922) workflow.
+description: Skill set for an agent doing serial X-ray / Jungfrau1M scattering analysis directly from XTC (no psana), with an optional image-center submodule. Grounded in the Run0475 (xppl1016922) workflow.
 category: index
 role: skill-set-index
 ---
@@ -16,20 +16,22 @@ follows the same template (see [Method-file template](#method-file-template-v3) 
 
 | Category (folder) | Question it answers | Acts on | Methods | Pipeline status |
 |---|---|---|---|---|
-| [masking/](masking/README.md) | *Which pixels are untrustworthy?* | pixels (spatial) | 7 files | wired (mask agent) |
+| [masking/](masking/README.md) | *Which pixels are untrustworthy?* | pixels (spatial + statistical) | 14 files (00–08 own methods, 09–13 literature) | wired (mask agent; 07/08 and the literature methods not wired) |
 | [normalization/](normalization/README.md) | *How do I put shots on a common scale?* | intensities (scale) | 4 files | wired (reduction agent) |
-| [selection/](selection/README.md) | *Which shots do I keep?* | whole shots | 2 files | wired (reduction agent) |
+| [selection/](selection/README.md) | *Which shots do I keep?* | whole shots | 3 files | wired (reduction agent; 02 not wired) |
+| [center/](center/01_lab6_concentric_rings.md) | *Is an image center already specified?* | optional assembled-image geometry | 1 file | wired (small gated submodule) |
 | [verification/](verification/README.md) | *Is the endpoint scientifically usable?* | I(q) metrics | 1 criterion | wired (verifier agent) |
-| [qa/](qa/README.md) | *Are the 1D curves physically reasonable?* | curves + frames | 10 methods | **not wired** (ported from the old manifest workflow) |
+| [qa/](qa/README.md) | *Are the 1D curves physically reasonable?* | curves + frames | 11 methods | **not wired** (ported from the old manifest workflow) |
 
 ```
 skills/
 ├── README.md                     ← you are here (skill-set index + template spec)
-├── masking/                      ← README + 00–06 (7 methods)
+├── masking/                      ← README + 00–08 (own methods) + 09–13 (literature) + scripts/
 ├── normalization/                ← README + 01–04 (monitor menu, 4 reference classes)
-├── selection/                    ← README + 01a/01b (2 agent-decided cuts)
+├── selection/                    ← README + 01a/01b/02 (agent-decided cuts) + scripts/
+├── center/                       ← one optional method, activated only if unspecified
 ├── verification/                 ← README + 01 (endpoint criteria, machine thresholds)
-└── qa/                           ← index + methods/ (10 checks) + scripts/
+└── qa/                           ← index + methods/ (11 checks) + scripts/
 ```
 
 ## Method-file template (v3)
@@ -40,7 +42,7 @@ Every method file has YAML frontmatter with exactly these fields:
 ---
 name: xray-<category>-<method-slug>   # globally unique; registrable as a standalone skill
 description: one line — what it does + when to use it + the key calibrated fact
-category: masking | normalization | selection | verification | qa
+category: masking | normalization | selection | center | verification | qa
 role: <role within the category>      # e.g. signal-independent, gate, agent-decided cut
 gate: <when it runs>                  # "always", or the concrete triggering condition
 status: wired | not-wired             # is it reachable from agent/entrypoint.py today
@@ -122,8 +124,9 @@ now parse any method file the same way.
 ## How the categories compose
 
 ```
-raw XTC ──▶ [SELECTION: shot quality]            ── drop dropouts / bright tail (01a/01b)
+raw XTC ──▶ [SELECTION: shot quality]            ── drop dropouts / bright tail / nonconforming shots (01a/01b/02)
         ──▶ [NORMALIZATION: per-shot flux]       ── divide each shot by its own I0
+        ──▶ [CENTER: optional context gate]       ── reuse specified center; otherwise fit/verify (100)/(110) or escalate
         ──▶ [MASKING: pixel masks]               ── exclude bad/outlier pixels
         ──▶ azimuthal integration                ── I(q) endpoint
         ──▶ [VERIFICATION: endpoint criteria]    ── pass / fail + feedback loop
@@ -143,6 +146,13 @@ raw XTC ──▶ [SELECTION: shot quality]            ── drop dropouts / br
    ordering is wrong and every downstream weight lands on the wrong frame.
 4. **Report what each method removed.** Log pixel/shot counts and percentages; silent
    truncation reads as "kept everything" when it did not.
+5. **Cover the full valid range — never hard-code a range cap.** Plots, ring lists,
+   background windows, and scans must extend to the last radial bin with sufficient
+   statistics (`n_valid ≥ MIN_BIN_PIXELS`), not to a fixed number. A hard-coded
+   `xlim(0, 1100)` hid the outer LaB6 ring at r ≈ 1245 px (q ≈ 2.2 Å⁻¹, contrast 4.2)
+   on Run0475 — the data was computed and valid, the figure and the metrics simply
+   never looked. Any deliberate range restriction must be stated and justified in the
+   output, never implied by an axis limit.
 
 ## Repo pointers
 

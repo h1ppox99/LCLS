@@ -3,7 +3,7 @@ name: xray-masking-rmm-dark-based
 description: RMM (Robust Mask Maker, Sadri 2022) dark-based mask — robustly models normal pixels per ASIC block from calibration constants and flags offset (Feature 2) and noise (Feature 3) outliers. Signal-independent, so it removes detector defects while preserving all diffraction signal. Preferred default defect mask.
 category: masking
 role: signal-independent
-gate: dark calibration constants available — preferred default defect mask
+gate: pedestal calibration available for F2; dark RMS optionally adds F3
 status: wired
 ---
 
@@ -25,6 +25,27 @@ the calibration constants:
 | **F3 — pixel STD** | dark rms (`rms[gain0]`) | noisy/flickering (high) or dead (near-zero) pixels |
 
 Final mask = offset-outliers ∪ std-outliers.
+
+### F2 must not be skipped when only `ped.npy` is available
+
+`calib/ped.npy` is sufficient to run the pedestal-offset (F2) branch. A missing
+dark-RMS product disables only F3; it is not a reason to skip pedestal inspection.
+Before Mask Step 2, assemble gain stage 0 with `calib/ix.npy`/`calib/iy.npy` and
+show it alongside the summed image in the same coordinates.
+
+In addition to the paper's single-pixel `|SNR| > λ` test, this pipeline prepares
+a **spatial-coherence probe** for low-amplitude two-dimensional defects:
+
+1. subtract a wide local median pedestal background;
+2. Gaussian-pool the residual so a coherent weak feature gains evidence;
+3. robustly normalize each 256×256 ASIC block;
+4. seed strong residuals, grow through adjacent moderate residuals, and measure
+   connected components;
+5. compare every compact candidate with the aligned sum before accepting it.
+
+The deterministic implementation is
+`pipeline/step2b_pedestal_diagnostics.py`. It is shape-agnostic and contains no
+sample-material or feature-coordinate assumptions.
 
 ## Parameters
 
@@ -50,8 +71,9 @@ signal-independent, so it never eats Bragg peaks. Preferred default defect mask.
 
 ## Trade-offs
 
-Needs dark calibration inputs; static between calibrations; won't catch pixels that only
-misbehave under illumination (→ [Feature-6](04_rmm_feature6_light.md)).
+F2 needs pedestal calibration; F3 additionally needs dark RMS. Static between
+calibrations; won't catch pixels that only misbehave under illumination
+(→ [Feature-6](04_rmm_feature6_light.md)).
 
 ## Outputs
 

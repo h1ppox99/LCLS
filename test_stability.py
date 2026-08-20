@@ -45,7 +45,7 @@ def flat(d: dict, prefix: str = "") -> dict:
         p = f"{prefix}.{key}" if prefix else key
         if isinstance(v, dict):
             out.update(flat(v, p))
-        elif key != "rationale":            # free text may differ legitimately
+        elif key != "rationale":  # free text may differ legitimately
             out[p] = v
     return out
 
@@ -63,8 +63,10 @@ def main() -> int:
     masks = [np.load(d / "mask_assembled.npy") for d in dirs]
     sums = [np.load(d / "masked_sum.npy") for d in dirs]
 
-    lines = [f"# Stability report — {len(dirs)} trials "
-             f"({'no-llm baseline' if args.no_llm else 'LLM agents'})\n"]
+    lines = [
+        f"# Stability report — {len(dirs)} trials "
+        f"({'no-llm baseline' if args.no_llm else 'LLM agents'})\n"
+    ]
 
     keys = sorted(set(itertools.chain(*[d.keys() for d in decisions])))
     diverging = [k for k in keys if len({json.dumps(d.get(k), default=str) for d in decisions}) > 1]
@@ -80,19 +82,22 @@ def main() -> int:
     lines.append("\n## Accumulation")
     kept = [lg["kept"] for lg in logs]
     tot = [lg["sum_total_keV"] for lg in logs]
-    lines.append(f"- kept shots per trial: {kept}"
-                 + (" ✓ identical" if len(set(kept)) == 1 else " **DIVERGES**"))
+    lines.append(
+        f"- kept shots per trial: {kept}"
+        + (" ✓ identical" if len(set(kept)) == 1 else " **DIVERGES**")
+    )
     rel = (max(tot) - min(tot)) / abs(np.mean(tot)) if np.mean(tot) else 0.0
-    lines.append(f"- sum_total_keV spread: {rel*100:.4f}% "
-                 + ("✓" if rel < 1e-9 else "(nonzero — weights or kept-set differ)"))
+    lines.append(
+        f"- sum_total_keV spread: {rel * 100:.4f}% "
+        + ("✓" if rel < 1e-9 else "(nonzero — weights or kept-set differ)")
+    )
 
     lines.append("\n## Mask")
     npx = [int(m.sum()) for m in masks]
     lines.append(f"- masked pixels per trial: {npx}")
     for (i, a), (j, b) in itertools.combinations(enumerate(masks, 1), 2):
         iou = (a & b).sum() / max((a | b).sum(), 1)
-        lines.append(f"- IoU(trial{i}, trial{j}) = {iou:.4f}"
-                     + (" ✓" if iou > 0.99 else ""))
+        lines.append(f"- IoU(trial{i}, trial{j}) = {iou:.4f}" + (" ✓" if iou > 0.99 else ""))
 
     lines.append("\n## Masked sum (endpoint)")
     for (i, a), (j, b) in itertools.combinations(enumerate(sums, 1), 2):
@@ -101,9 +106,16 @@ def main() -> int:
         d = np.abs(a[both] - b[both]).max() / denom if denom else 0.0
         lines.append(f"- max relative diff on shared pixels (t{i},t{j}): {d:.3e}")
 
-    verdict = "STABLE" if not diverging and len(set(kept)) == 1 and \
-        all((a & b).sum() / max((a | b).sum(), 1) > 0.99
-            for a, b in itertools.combinations(masks, 2)) else "UNSTABLE — see above"
+    verdict = (
+        "STABLE"
+        if not diverging
+        and len(set(kept)) == 1
+        and all(
+            (a & b).sum() / max((a | b).sum(), 1) > 0.99
+            for a, b in itertools.combinations(masks, 2)
+        )
+        else "UNSTABLE — see above"
+    )
     lines.append(f"\n## Verdict: **{verdict}**")
 
     report = OUT / "stability_report.md"

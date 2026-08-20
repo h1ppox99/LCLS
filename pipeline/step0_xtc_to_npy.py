@@ -47,13 +47,13 @@ def main() -> int:
     index = []  # (sec, nsec, fid, stream_idx, offset)
     for si, p in enumerate(paths):
         n = 0
-        for off, total, sec, nsec, fid in scan_headers(p):
+        for off, _total, sec, nsec, fid in scan_headers(p):
             index.append((sec, nsec, fid, si, off))
             n += 1
         print(f"[scan] {Path(p).name}: {n} events", flush=True)
     index.sort(key=lambda t: (t[0], t[1], t[2]))
     N = len(index)
-    print(f"[scan] total {N} events, {time.time()-t0:.0f}s", flush=True)
+    print(f"[scan] total {N} events, {time.time() - t0:.0f}s", flush=True)
 
     npy_dir = ROOT / "npy"
     npy_dir.mkdir(exist_ok=True)
@@ -65,13 +65,23 @@ def main() -> int:
     gain = np.load(ROOT / "calib/gain.npy")
     good = ~np.load(ROOT / "calib/status_bad.npy")
 
-    cols = {k: np.zeros(N, d) for k, d in [
-        ("fiducial", np.int64), ("sec", np.int64), ("nsec", np.int64), ("stream", np.int16),
-        ("ipm2", np.float64), ("xray", np.int8), ("laser", np.int8),
-        ("det_total", np.float64), ("photon_px", np.int32), ("nswitch", np.int32),
-    ]}
+    cols = {
+        k: np.zeros(N, d)
+        for k, d in [
+            ("fiducial", np.int64),
+            ("sec", np.int64),
+            ("nsec", np.int64),
+            ("stream", np.int16),
+            ("ipm2", np.float64),
+            ("xray", np.int8),
+            ("laser", np.int8),
+            ("det_total", np.float64),
+            ("photon_px", np.int32),
+            ("nswitch", np.int32),
+        ]
+    }
 
-    files = [open(p, "rb") for p in paths]
+    files = [open(p, "rb") for p in paths]  # noqa: SIM115 - closed together below
     try:
         for i, (sec, nsec, fid, si, off) in enumerate(index):
             ev = parse_event(read_dgram(files[si], off))
@@ -80,13 +90,18 @@ def main() -> int:
                 continue
             frames[i] = ev["frame_raw"]
             calib = calibrate(ev["frame_raw"], ped, gain)
-            cols["fiducial"][i], cols["sec"][i], cols["nsec"][i], cols["stream"][i] = fid, sec, nsec, si
+            cols["fiducial"][i], cols["sec"][i], cols["nsec"][i], cols["stream"][i] = (
+                fid,
+                sec,
+                nsec,
+                si,
+            )
             cols["ipm2"][i], cols["xray"][i], cols["laser"][i] = ev["ipm2"], ev["xray"], ev["laser"]
             cols["det_total"][i] = float(calib[good].sum())
             cols["photon_px"][i] = int(((calib >= 7) & (calib < 12) & good).sum())
             cols["nswitch"][i] = int((ev["frame_raw"] >> 14 != 0).sum())
             if (i + 1) % 500 == 0:
-                print(f"[convert] {i+1}/{N}  ({time.time()-t0:.0f}s)", flush=True)
+                print(f"[convert] {i + 1}/{N}  ({time.time() - t0:.0f}s)", flush=True)
     finally:
         for f in files:
             f.close()
@@ -106,10 +121,13 @@ def main() -> int:
         "  photon_px (# good pixels in 7-12 keV), nswitch (# non-G0 pixels, stuck-pixel proxy).\n"
         "- ipm2 zero offset: estimate as median ipm2 over xray==0 shots.\n"
     )
-    meta = {"n_events": N, "streams": [Path(p).name for p in paths],
-            "elapsed_s": round(time.time() - t0, 1)}
+    meta = {
+        "n_events": N,
+        "streams": [Path(p).name for p in paths],
+        "elapsed_s": round(time.time() - t0, 1),
+    }
     (npy_dir / "step0_meta.json").write_text(json.dumps(meta, indent=2))
-    print(f"[done] {N} events -> npy/ in {time.time()-t0:.0f}s", flush=True)
+    print(f"[done] {N} events -> npy/ in {time.time() - t0:.0f}s", flush=True)
     return 0
 
 
