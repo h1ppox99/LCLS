@@ -29,6 +29,7 @@ def doctor() -> int:
     for module_name, distribution in (
         ("automask", "automask"),
         ("claude_agent_sdk", "claude-agent-sdk"),
+        ("mcp", "mcp"),
         ("pytest", "pytest"),
     ):
         try:
@@ -90,6 +91,7 @@ def doctor() -> int:
         "python",
         "automask",
         "claude_agent_sdk",
+        "mcp",
         "pytest",
         "bundled Claude CLI",
     }

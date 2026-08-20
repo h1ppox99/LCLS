@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "automask": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["-m", "lcls_agent.mcp_server"]
+    }
+  }
+}

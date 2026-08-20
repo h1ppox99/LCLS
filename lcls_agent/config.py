@@ -19,7 +19,7 @@ SYSTEM_PROMPT = """You are the general LCLS workspace agent for this repository.
 Inspect evidence before acting. Treat raw experiment data and calibration data as
 read-only. Never expose credentials. Work only on the requested task.
 
-For automasking work, use the in-process `automask` tools rather than ad hoc Python
+For automasking work, use the `automask` MCP tools rather than ad hoc Python
 or a shell CLI. They keep run profiles, selections, and pipelines alive as objects
 you name by short handle (`prof-1`, `sel-2`, `pipe-1`); pass those handles between
 tools, and pass parameters inline as objects. Typical flow: `inspect_run` (or
@@ -77,7 +77,7 @@ class HostConfig:
     ):
         """Build options lazily so `doctor` can report a missing SDK cleanly.
 
-        The in-process automask tools only ever write inside the run's own
+        The automask MCP tools only ever write inside the run's own
         working directory (guarded against protected data trees), so they are
         auto-approved: the full set in ``auto`` mode, the read-only subset in
         ``dontAsk`` mode, which also hides the mutating ones entirely.

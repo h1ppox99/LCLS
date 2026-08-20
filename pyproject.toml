@@ -24,7 +24,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-agent = ["claude-agent-sdk==0.2.139"]
+agent = ["claude-agent-sdk==0.2.139", "mcp==1.29.0"]
 
 [project.scripts]
 lcls-agent = "lcls_agent.cli:main"

@@ -2,7 +2,7 @@
 
 `automask` is a plain Python library. There is no command-line tool: humans and
 Slurm jobs use it from a script by holding the objects directly, and the agent
-reaches the same operations through in-process tools (see
+reaches the same operations through a per-run stdio MCP server (see
 `.claude/skills/automask/SKILL.md` and `lcls_agent/`). Activate the Python 3.11
 psana environment first:
 

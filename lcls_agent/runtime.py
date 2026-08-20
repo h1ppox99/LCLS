@@ -62,18 +62,26 @@ async def run_agent(
     """Run one bounded agent task, streaming its answer to ``stream``."""
     from claude_agent_sdk import ResultMessage, query
 
-    from lcls_agent.session import Session
-    from lcls_agent.tools import build_automask_server
+    from lcls_agent.tools import SERVER_NAME, tool_names
 
     if not prompt.strip():
         raise ValueError("prompt must not be empty")
     workdir = (output_dir or _default_workdir(config.root)).expanduser().resolve()
-    session = Session(workdir / "automask")
-    server, tools, read_only = build_automask_server(session)
+    tools, read_only = tool_names()
+    server = {
+        "type": "stdio",
+        "command": sys.executable,
+        "args": [
+            "-m",
+            "lcls_agent.mcp_server",
+            "--workdir",
+            str(workdir / SERVER_NAME),
+        ],
+    }
     options = config.sdk_options(
         automask_server=server,
-        automask_tools=tuple(tools),
-        automask_read_only=tuple(read_only),
+        automask_tools=tools,
+        automask_read_only=read_only,
     )
 
     final = None

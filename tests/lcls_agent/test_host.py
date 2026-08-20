@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import sys
 
 import pytest
 from claude_agent_sdk import AssistantMessage, ResultMessage, TextBlock
@@ -18,20 +19,32 @@ from lcls_agent.runtime import run_agent
 
 
 def test_auto_mode_exposes_workspace_tools_but_only_preapproves_reads(tmp_path):
-    options = HostConfig(root=tmp_path, permission_mode="auto").sdk_options()
+    server = {"type": "stdio", "command": "python", "args": []}
+    options = HostConfig(root=tmp_path, permission_mode="auto").sdk_options(
+        automask_server=server,
+        automask_tools=("mcp__automask__write",),
+        automask_read_only=("mcp__automask__read",),
+    )
 
-    assert options.tools == [*WORKSPACE_TOOLS, "Skill"]
-    assert options.allowed_tools == list(READ_TOOLS)
+    assert options.tools == [*WORKSPACE_TOOLS, "Skill", "mcp__automask__write"]
+    assert options.allowed_tools == [*READ_TOOLS, "mcp__automask__write"]
+    assert options.mcp_servers == {"automask": server}
     assert options.permission_mode == "auto"
     assert options.setting_sources == ["project"]
     assert options.skills == list(SKILL_NAMES)
 
 
 def test_dont_ask_mode_is_read_only(tmp_path):
-    options = HostConfig(root=tmp_path, permission_mode="dontAsk").sdk_options()
+    server = {"type": "stdio", "command": "python", "args": []}
+    options = HostConfig(root=tmp_path, permission_mode="dontAsk").sdk_options(
+        automask_server=server,
+        automask_tools=("mcp__automask__write",),
+        automask_read_only=("mcp__automask__read",),
+    )
 
-    assert options.tools == [*READ_TOOLS, "Skill"]
-    assert options.allowed_tools == list(READ_TOOLS)
+    assert options.tools == [*READ_TOOLS, "Skill", "mcp__automask__read"]
+    assert options.allowed_tools == [*READ_TOOLS, "mcp__automask__read"]
+    assert options.mcp_servers == {"automask": server}
     assert options.permission_mode == "dontAsk"
 
 
@@ -88,6 +101,15 @@ def test_runtime_streams_answer_and_returns_result(tmp_path):
     async def fake_query(*, prompt, options):
         assert prompt == "summarize"
         assert options.permission_mode == "auto"
+        server = options.mcp_servers["automask"]
+        assert server["type"] == "stdio"
+        assert server["command"] == sys.executable
+        assert server["args"] == [
+            "-m",
+            "lcls_agent.mcp_server",
+            "--workdir",
+            str(tmp_path / "run/automask"),
+        ]
         yield AssistantMessage(content=[TextBlock("done")], model="test-model")
         yield ResultMessage(
             subtype="success",

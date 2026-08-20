@@ -1,4 +1,4 @@
-"""In-process automask tools backed by one live :class:`lcls_agent.session.Session`.
+"""Automask MCP tools backed by one live :class:`lcls_agent.session.Session`.
 
 These are the agent's door into automask. Each tool is a thin async wrapper that
 calls a ``Session`` method and returns its JSON summary; the ``Session`` holds the
@@ -19,6 +19,29 @@ from typing import Any
 from lcls_agent.session import Session
 
 SERVER_NAME = "automask"
+TOOL_NAMES = (
+    "automask_catalog",
+    "inspect_run",
+    "load_profile",
+    "define_selection",
+    "describe_selection",
+    "define_pipeline",
+    "preview_selection",
+    "build_mask",
+    "validate_mask",
+)
+READ_ONLY_TOOL_NAMES = (
+    "automask_catalog",
+    "load_profile",
+    "describe_selection",
+)
+
+
+def tool_names() -> tuple[tuple[str, ...], tuple[str, ...]]:
+    def qualify(name: str) -> str:
+        return f"mcp__{SERVER_NAME}__{name}"
+
+    return tuple(map(qualify, TOOL_NAMES)), tuple(map(qualify, READ_ONLY_TOOL_NAMES))
 
 
 def _text(payload: Any, *, is_error: bool = False) -> dict:
@@ -39,7 +62,7 @@ def _guard(call):
 
 
 def build_automask_server(session: Session):
-    """Build the in-process MCP server and its fully-qualified tool names."""
+    """Build the MCP implementation used by the standalone stdio process."""
     from claude_agent_sdk import create_sdk_mcp_server, tool
 
     _object = {"type": "object", "additionalProperties": True}
@@ -216,9 +239,5 @@ def build_automask_server(session: Session):
         validate_mask,
     ]
     server = create_sdk_mcp_server(SERVER_NAME, tools=tools)
-    names = [f"mcp__{SERVER_NAME}__{item.name}" for item in tools]
-    read_only = [
-        f"mcp__{SERVER_NAME}__{name}"
-        for name in ("automask_catalog", "load_profile", "describe_selection")
-    ]
+    names, read_only = tool_names()
     return server, names, read_only

@@ -96,8 +96,11 @@ from automask.run_inspection import inspect_run
 ```
 
 See [`docs/AUTOMASK.md`](docs/AUTOMASK.md) for the scripting workflow and
-conventions. The agent reaches the same operations through the in-process tools
-in `lcls_agent/`; there is no separate command-line tool.
+conventions. The agent reaches the same operations through the standalone stdio
+MCP server in `lcls_agent/`; there is no human-facing command-line tool.
+The checked-in `.mcp.json` registers that server for direct Claude Code use;
+activate `psana_env.sh` before launching Claude Code and approve the project
+server on first use. See [`lcls_agent/README.md`](lcls_agent/README.md).
 
 ## Build and run
 
