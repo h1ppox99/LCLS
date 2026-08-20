@@ -3,7 +3,7 @@
 A ``Sample`` is one run's masking context and nothing else: no ground truth, no
 frozen benchmark array. Every array in it is named exactly as it is asked for --
 a selected-shot reduction served by :class:`~automask.image_store.ImageStore`
-(``mean``, ``std``, ``median``, ``mad``) or a ``psana.Detector`` calibration
+(``mean``, ``std``, ``mad``) or a ``psana.Detector`` calibration
 accessor (``pedestals``, ``rms``, ``status_as_mask``, ...). A statistic declares
 those names in its ``needs`` and reads them as attributes.
 

@@ -407,7 +407,7 @@ def test_mean_std_are_co_computed_and_cache_hits_skip_compute(tmp_path, monkeypa
     assert store.counts(7, selection, "mean")["n_used"] == 2
 
 
-def test_median_mad_are_co_computed(tmp_path, monkeypatch):
+def test_mad_is_computed_without_exposing_median(tmp_path, monkeypatch):
     store = _small_store(tmp_path, monkeypatch)
     calls = []
 
@@ -420,11 +420,12 @@ def test_median_mad_are_co_computed(tmp_path, monkeypatch):
     monkeypatch.setattr(
         store,
         "_robust_reduce",
-        lambda path: (np.ones((1, 2, 2)), np.full((1, 2, 2), 2.0)),
+        lambda path: np.full((1, 2, 2), 2.0),
     )
     selection = ShotSelection()
     assert np.all(store.reduce(7, selection, "mad") == 2.0)
-    assert np.all(store.reduce(7, selection, "median", form="panel") == 1.0)
+    with pytest.raises(ValueError, match="reduction must be one of"):
+        store.reduce(7, selection, "median")
     assert len(calls) == 1
 
 
@@ -485,12 +486,12 @@ def test_image_store_builds_robust_fold_reductions(tmp_path, monkeypatch):
             np.array([[[0, 1], [0, 1]]]),
         ),
     )
-    folds = store.folds(7, ShotSelection(), "median", n_folds=5)
+    folds = store.folds(7, ShotSelection(), "mad", n_folds=5)
     chronological = store.folds(
         7, ShotSelection(), "mad", n_folds=5, strategy="chronological"
     )
 
-    np.testing.assert_allclose([fold[0, 0] for fold in folds], np.arange(5) + 7.5)
+    np.testing.assert_allclose([fold[0, 0] for fold in folds], 1.4826 * 5)
     np.testing.assert_allclose([fold[0, 0] for fold in chronological], 1.4826)
 
 

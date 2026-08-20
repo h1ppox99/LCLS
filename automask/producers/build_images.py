@@ -35,7 +35,7 @@ def main() -> None:
         "--reduction",
         nargs="*",
         default=list(default_reductions),
-        choices=("mean", "std", "median", "mad"),
+        choices=tuple(sorted(REDUCTIONS)),
         help=f"selected-shot reductions (default: {default_reductions})",
     )
     parser.add_argument(

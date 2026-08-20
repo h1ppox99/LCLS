@@ -216,7 +216,7 @@ def channel_panels(pipeline, sample, out=None, floor_row=True, store=None):
     store = store or ImageStore()
     fig, axes = plt.subplots(len(rows), 2, figsize=(11, 5.4 * len(rows)), squeeze=False)
     for (d, fname, img), (ax_l, ax_r) in zip(rows, axes):
-        if fname in ("mean", "std", "median", "mad"):
+        if fname in ("mean", "std", "mad"):
             label = f"{fname} — {_sel_label(sample.selection, _n_used(store, sample.run, sample.selection, fname))}"
         else:
             label = f"{fname} — psana calibration constant"

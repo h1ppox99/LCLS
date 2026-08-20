@@ -15,13 +15,13 @@ from automask.shot_selection import ShotSelection
 
 ROOT = Path(__file__).resolve().parents[1]
 
-Reduction = Literal["mean", "std", "median", "mad"]
+Reduction = Literal["mean", "std", "mad"]
 Form = Literal["asm", "panel"]
 FoldStrategy = Literal["round_robin", "chronological"]
 
 #: Reductions the store computes over selected shots. Anything a statistic needs
 #: that is not one of these is a psana calibration accessor name.
-REDUCTIONS = frozenset(("mean", "std", "median", "mad"))
+REDUCTIONS = frozenset(("mean", "std", "mad"))
 
 _FORMS = frozenset(("asm", "panel"))
 
@@ -171,7 +171,7 @@ class ImageStore:
             if reduction in ("mean", "std"):
                 self._materialize_mean_std(run, selection)
             else:
-                self._materialize_median_mad(run, selection)
+                self._materialize_mad(run, selection)
         else:
             counts = self.counts(run, selection, reduction)
             if counts is not None:
@@ -210,7 +210,7 @@ class ImageStore:
             if reduction in ("mean", "std"):
                 self._materialize_fold_mean_std(run, selection, n_folds, strategy)
             else:
-                self._materialize_fold_median_mad(run, selection, n_folds, strategy)
+                self._materialize_fold_mad(run, selection, n_folds, strategy)
         return tuple(np.load(path) for path in paths)
 
     def calibration(self, run: int, constant: str, gain: int = 0) -> np.ndarray:
@@ -308,22 +308,22 @@ class ImageStore:
             run, selection, (("mean", mean_panel), ("std", std_panel)), ix, iy, counts
         )
 
-    def _materialize_median_mad(self, run: int, selection: ShotSelection) -> None:
+    def _materialize_mad(self, run: int, selection: ShotSelection) -> None:
         from automask.io.read_xtc import panel_geometry
 
-        stub = _reduction_stub(run, selection, "median")
+        stub = _reduction_stub(run, selection, "mad")
         stage_path = self.cache_dir / f"{stub}_frames.h5"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         try:
             counts = self._stage_frames(run, selection, stage_path)
-            median_panel, mad_panel = self._robust_reduce(stage_path)
+            mad_panel = self._robust_reduce(stage_path)
         finally:
             stage_path.unlink(missing_ok=True)
         ix, iy = panel_geometry(run, source=self.profile(run).source)
         self._save_pair(
             run,
             selection,
-            (("median", median_panel), ("mad", mad_panel)),
+            (("mad", mad_panel),),
             ix,
             iy,
             counts,
@@ -348,10 +348,10 @@ class ImageStore:
             strategy,
         )
 
-    def _materialize_fold_median_mad(self, run, selection, n_folds, strategy) -> None:
+    def _materialize_fold_mad(self, run, selection, n_folds, strategy) -> None:
         from automask.io.read_xtc import panel_geometry
 
-        stub = _reduction_stub(run, selection, "median")
+        stub = _reduction_stub(run, selection, "mad")
         stage_path = self.cache_dir / f"{stub}_fold_frames.h5"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         try:
@@ -365,10 +365,7 @@ class ImageStore:
         self._save_folds(
             run,
             selection,
-            (
-                ("median", full[0], folds[0]),
-                ("mad", full[1], folds[1]),
-            ),
+            (("mad", full, folds),),
             ix,
             iy,
             counts,
@@ -473,16 +470,14 @@ class ImageStore:
         with h5py.File(stage_path, "r") as h5:
             frames = h5["frames"]
             _, modules, rows, cols = frames.shape
-            median = np.empty((modules, rows, cols), dtype=np.float32)
-            mad = np.empty_like(median)
+            mad = np.empty((modules, rows, cols), dtype=np.float32)
             for row0 in range(0, rows, row_block):
                 row1 = min(row0 + row_block, rows)
                 block = frames[:, :, row0:row1, :].astype(np.float32)
                 med = np.median(block, axis=0)
-                median[:, row0:row1, :] = med
                 mad[:, row0:row1, :] = 1.4826 * np.median(np.abs(block - med), axis=0)
                 print(f"[images] rows {row0}:{row1}/{rows}", flush=True)
-        return median, mad
+        return mad
 
     @staticmethod
     def _robust_reduce_folds(stage_path: Path, n_folds: int, row_block: int = 32):
@@ -498,24 +493,20 @@ class ImageStore:
                     "consistency evaluation needs at least two shots per fold"
                 )
             shape = (n_folds, *frames.shape[1:])
-            median = np.empty(shape, dtype=np.float32)
-            mad = np.empty_like(median)
-            full_median = np.empty(frames.shape[1:], dtype=np.float32)
-            full_mad = np.empty_like(full_median)
+            mad = np.empty(shape, dtype=np.float32)
+            full_mad = np.empty(frames.shape[1:], dtype=np.float32)
             for row0 in range(0, frames.shape[-2], row_block):
                 row1 = min(row0 + row_block, frames.shape[-2])
                 block = frames[:, :, row0:row1, :].astype(np.float32)
                 med = np.median(block, axis=0)
-                full_median[:, row0:row1] = med
                 full_mad[:, row0:row1] = 1.4826 * np.median(np.abs(block - med), axis=0)
                 for group, rows in enumerate(rows_by_group):
                     block = frames[rows, :, row0:row1, :].astype(np.float32)
                     med = np.median(block, axis=0)
-                    median[group, :, row0:row1] = med
                     mad[group, :, row0:row1] = 1.4826 * np.median(
                         np.abs(block - med), axis=0
                     )
-        return ((full_median, full_mad), (median, mad))
+        return full_mad, mad
 
     def _accumulate(
         self, run: int, selection: ShotSelection

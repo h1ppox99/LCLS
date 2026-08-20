@@ -77,7 +77,7 @@ BEAM_OFF = (Condition(BEAM, "==", 0),)
 # `'mean'`). Dead/zero pixels are shown neutral; scale is a robust 1–99th pct.
 
 # %%
-reductions = ["mean", "std", "median", "mad"]
+reductions = ["mean", "std", "mad"]
 
 selection = ShotSelection(
     where=BEAM_ON,

@@ -41,7 +41,7 @@ parameterised — exactly like every other one.
 Drop one file in `stats/` or `regularization/` that defines a compute
 function, a `Params` dataclass, and a `register_*` call; add it to that package's
 `__init__.py` import line and a matching `conf/<group>/<name>.yaml`. A stat's
-`needs` names the Sample arrays it reads — reductions (`mean`/`std`/`median`/`mad`)
+`needs` names the Sample arrays it reads — reductions (`mean`/`std`/`mad`)
 or psana calibration accessors (`pedestals`, `rms`, `status_as_mask`). It is then
 selectable by name everywhere (`Pipeline`, the registries, and the sweep driver).
 
