@@ -45,8 +45,13 @@ does **not** list a run's fields. Do not invent registry entries.
    [shot-selection.md](references/shot-selection.md).
 3. **Mask** — `define_pipeline` → `build_mask` (mask.npy + overview.png +
    per-channel explain panels). See [mask-design.md](references/mask-design.md).
-4. **Validate** — `validate_mask` (perturbations + fold consistency; returns the
-   recommended pipeline handle). See
+4. **Validate** — first cross the mask against the selection image: list the
+   anomalous structure visible in it (per-row/column intensity dips or spikes,
+   large anomalous components — dark or bright) and confirm each is masked or a
+   deliberate keep — judge the mask by what anomalous structure remains *unmasked*,
+   never only by whether the layers already present look plausible. Then
+   `validate_mask` (perturbations + fold consistency; returns the recommended
+   pipeline handle). See
    [evidence-and-decisions.md](references/evidence-and-decisions.md).
 
 The tools write only inside the run's working directory and never touch `xtc/`,

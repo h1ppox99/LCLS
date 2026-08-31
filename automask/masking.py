@@ -315,7 +315,7 @@ def production_pipeline(line_detector: bool = True) -> Pipeline:
     channels.append(
         Channel(
             "variance",
-            VarianceParams(k=8.0, mode="low"),
+            VarianceParams(k=4.0, mode="low"),
             field_reg="tv",
             field_reg_params=TVParams(4.0),
         )

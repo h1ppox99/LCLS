@@ -55,10 +55,33 @@ Look at the field histogram against its cut.
   will not separate, the artifact may not be maskable from this evidence —
   escalate rather than inventing a cut.
 
+## Null and near-null channels
+
+A channel masking 0 (or very few) px is **not** automatically clean — it is
+either correct (no such artifact on this run) or a threshold that overshot a real
+one. Distinguish them; never read a null as reassurance.
+
+- A **pick** (`hough_lines`) legitimately returns 0 when there is simply no line.
+  If this is what is observed, then it needs no action.
+- A **field** channel (`variance`, `asic_polish`, …) returning ~0 is a red flag
+  whenever the selection image shows structure it should catch — e.g. `variance`
+  (low) empty while a dark band/shadow is visible. The likely cause is `k`
+  landing just past the artifact, not an absent artifact.
+- **Test a suspicious field null:** temporarily loosen the threshold (lower `k`)
+  together with an `area_gate`, rebuild, and look at what appears. If a coherent
+  extended region emerges, the baseline `k` overshot a genuine artifact — keep the
+  looser cut. If only scattered specks appear, the null was correct.
+
 ## Reading validation and fold-consistency metrics
 
 Run `validate_mask` before recommending any candidate. Stability means
 robustness to the tested variations, **not** agreement with ground truth.
+
+The sensitivity analysis helps *improve* a mask when parameters are unclear and
+helps remove **false positives** (a layer that moves under perturbation is
+suspect). It **cannot identify false negatives**: an artifact that no channel
+caught cannot become unstable. An empty or near-empty mask is perfectly stable
+(fold IoU ≈ 1.0) yet may be badly incomplete — never read stability as coverage.
 
 - **A channel that is fold-inconsistent** → likely a fold artifact; drop it or
   make it more robust before keeping it.
@@ -71,8 +94,12 @@ robustness to the tested variations, **not** agreement with ground truth.
 
 The loop, one change per turn:
 
-1. **Detect** — compare the baseline `overview.png` and explain panels to the
-   selection image: under-masking, over-masking, or a missed artifact class.
+1. **Detect** — cross the selection image against the mask *first*: enumerate the
+   artifacts visible in the image (per-row/column intensity dips or spikes, large
+   anomalous components — dark or bright) and confirm each is masked or a
+   deliberate keep. Only then compare the explain panels for under-masking,
+   over-masking, or a missed artifact class. Judge by what artifacts remain
+   unmasked — not by whether present layers look plausible.
 2. **Diagnose** — which channel, and whether the cause is the threshold
    (`k`/`mode`), the field (wrong stat or needs aggregation), or the selection.
 3. **Change one thing** — retune, add/adjust a regularizer, add a channel, or fix
@@ -84,6 +111,10 @@ The loop, one change per turn:
 
 - **A larger mask is not a better mask** — judge by whether each layer sits on a
   real artifact, never by masked-pixel count.
+- **Layer-by-layer review is blind to misses** — checking that each masked region
+  sits on a real defect can only confirm what a channel already caught, never
+  reveal what none did. Always cross the image against the mask (its complement),
+  not just the mask against itself.
 - **Never certify by eye or a single score** — verify each layer's evidence, then
   confirm with `validate_mask` and (in development) labelled evaluation.
 - **Stability is not correctness**, and a sharp image does not prove the intended

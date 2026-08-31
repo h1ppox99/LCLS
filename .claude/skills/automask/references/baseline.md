@@ -32,7 +32,7 @@ mandatory and preserved in every candidate.
 |---|---|---|---|---|---|
 | `geometry` | floor | pad=2, frac=0.4 | — | — | unmapped canvas + ASIC/gap borders (100% precision) |
 | `status_as_mask` | floor | pad=2 | — | — | psana bad-pixel status, dilated |
-| `variance` | field, low | k=8.0, mode=low | tv(weight=4.0) | — | dead / shadowed pixels (low per-pixel std) |
+| `variance` | field, low | k=4, mode=low | tv(weight=4.0) | — | dead / shadowed pixels (low per-pixel std) |
 | `hough_lines` | pick | defaults | none | — | straight dark lines — shadows, scratches, ASIC seams |
 | `asic_polish` | field, high | asic=256, n_iter=3, k=15.0 | blob_scale(6,9,12,16) | fill_holes, area_gate(min_area=200) | extended / circular pedestal defects psana status misses |
 

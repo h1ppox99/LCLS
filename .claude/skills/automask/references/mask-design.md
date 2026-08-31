@@ -41,7 +41,7 @@ Match the operator to the artifact's morphology, then verify:
 
 | artifact | operator | notes |
 |---|---|---|
-| dead / shadowed | `variance` (low) | low per-pixel std |
+| dead / shadowed / large dark shadow (occluded band) | `variance` (low) | low per-pixel std |
 | hot / bad-status | `status_as_mask` (floor) | psana status |
 | extended / circular blob | `asic_polish` or `blackhat` + `blob_scale` | pedestal-domain vs image-domain |
 | persistently unstable | `mad_variance` | on the `mad` reduction |
