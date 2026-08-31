@@ -29,7 +29,7 @@ CLAUDE_BIN="$(python -c 'from pathlib import Path; import claude_agent_sdk; prin
 Approve the project-scoped `automask` server when Claude Code first prompts. If
 needed, use `/mcp` inside Claude Code to inspect or approve it. Each Claude Code
 server process gets a unique work directory under
-`outputs/claude_sessions/<timestamp>-<pid>/automask`; its handles last until that
+`outputs/claude_sessions/<YYYY-MM-DD>/<timestamp>-<pid>/automask`; its handles last until that
 server exits. `CLAUDE.md` imports the repository guidance from `AGENTS.md`.
 
 The `lcls-agent` command remains available for bounded, non-interactive SDK

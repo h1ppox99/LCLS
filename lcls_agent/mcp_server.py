@@ -14,9 +14,10 @@ from lcls_agent.tools import build_automask_server
 
 
 def default_workdir(root: str | Path = REPO_ROOT) -> Path:
-    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    session = f"{stamp}-{os.getpid()}"
-    return Path(root) / "outputs" / "claude_sessions" / session / "automask"
+    now = datetime.now(UTC)
+    day = now.strftime("%Y-%m-%d")
+    session = f"{now.strftime('%Y%m%dT%H%M%SZ')}-{os.getpid()}"
+    return Path(root) / "outputs" / "claude_sessions" / day / session / "automask"
 
 
 def build_server(workdir: str | Path):

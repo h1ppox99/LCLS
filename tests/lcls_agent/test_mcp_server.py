@@ -17,9 +17,12 @@ def test_direct_launch_gets_a_unique_project_workdir(tmp_path, monkeypatch):
 
     workdir = default_workdir(tmp_path)
 
+    sessions_root = tmp_path / "outputs" / "claude_sessions"
     assert workdir.name == "automask"
     assert workdir.parent.name.endswith("-1234")
-    assert workdir.parent.parent == tmp_path / "outputs" / "claude_sessions"
+    day = workdir.parent.parent
+    assert day.parent == sessions_root
+    assert day.name.replace("-", "") == workdir.parent.name[:8]
     assert build_parser().parse_args([]).workdir is None
 
 
