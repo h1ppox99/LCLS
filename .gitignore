@@ -44,3 +44,4 @@ dist/
 
 # machine-specific psana paths (see psana_env.sh header)
 psana_env.local
+experiment_logs/

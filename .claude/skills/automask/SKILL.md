@@ -10,70 +10,78 @@ description: >-
 
 # Automask
 
+Produce one boolean mask per run for the Jungfrau1M detector (`True == masked`),
+run-agnostic, to beat the lab's manual mask. Production is unsupervised — no
+ground truth at masking time.
+
+## The baseline contract
+
+The pipeline carries a strong, **low-variance baseline** (default selection and
+default channels; see [baseline.md](references/baseline.md)). Do not rebuild a
+recipe from scratch — that reintroduces the variance and uncertainty the baseline
+exists to remove.
+
+The agent's job is to **reduce the baseline's bias for this run**: read the
+evidence, notice where the baseline under-masks, over-masks, or misses an
+artifact, and make one attributable change at a time. Anchor on the baseline,
+deviate only on evidence, and ship the baseline when the evidence supports it.
+
+## The tool loop
+
 Use the in-process `automask` tools as the execution boundary. Each tool keeps
-its result alive in the host as an object you name by a short handle
-(`prof-1`, `sel-2`, `pipe-1`); pass those handles between tools and pass
-parameters inline as objects. Perform only the operations the request needs,
-reuse handles you already hold, and compare candidates without mutating them.
+its result alive as an object you name by a short handle (`prof-1`, `sel-2`,
+`pipe-1`); pass handles between tools and pass params inline as objects. Reuse
+handles you already hold; compare candidates as distinct handles without mutating
+them.
 
-## Establish the interface
+Call `automask_catalog` first — it defines the registered statistics,
+regularizers, selection operators, reductions, and exact parameter shapes. It
+does **not** list a run's fields. Do not invent registry entries.
 
-Call `automask_catalog` before authoring or changing a pipeline. It defines the
-registered masking capabilities, selection operators, reductions, default
-parameters, and the field-native parameter shapes that `define_selection` and
-`define_pipeline` accept. It does **not** define the fields present in a run.
-Do not invent registry entries or pass ad hoc Python around the tools.
+1. **Profile** — `inspect_run` (or `load_profile` to reuse a cache) → profile
+   handle + `report.md`. See [profiling.md](references/profiling.md).
+2. **Select** — `define_selection` → `describe_selection` (check every stage
+   count) → `preview_selection` (render the reduction the pipeline needs). See
+   [shot-selection.md](references/shot-selection.md).
+3. **Mask** — `define_pipeline` → `build_mask` (mask.npy + overview.png +
+   per-channel explain panels). See [mask-design.md](references/mask-design.md).
+4. **Validate** — `validate_mask` (perturbations + fold consistency; returns the
+   recommended pipeline handle). See
+   [evidence-and-decisions.md](references/evidence-and-decisions.md).
 
-The tools write only inside the current run's working directory and never touch
-`xtc/`, `calib/`, `hdf5/`, or `xpp_sharing/`; raw experiment and calibration
-data are inputs only. Profiles, previews, masks, and reports are persisted for
-you and their paths are returned in each tool's summary — reference those paths,
-do not re-derive them.
+The tools write only inside the run's working directory and never touch `xtc/`,
+`calib/`, `hdf5/`, or `xpp_sharing/` — those are read-only inputs. Artifact paths
+are returned in each summary; reference them, do not re-derive them.
 
-## Choose the next operation
+## When to deviate
 
-- Inspect unknown run contents with `inspect_run`; reuse a prior run with
-  `load_profile` on its cached `profile/` directory instead of re-reading psana.
-- Test a proposed selection with `describe_selection` before reading frames.
-- Render evidence with `preview_selection` when selection quality or visible
-  detector structure matters.
-- Build a candidate with `build_mask` once its selection and pipeline handles
-  are defined.
-- Evaluate sensitivity with `validate_mask` before recommending a candidate; it
-  returns a handle for the recommended pipeline.
-- Reuse a handle you already hold when it already satisfies the current
-  dependency, rather than recomputing it.
+Deviate only when the evidence in
+[evidence-and-decisions.md](references/evidence-and-decisions.md) shows the
+baseline under-masks, over-masks, or misses an artifact class — then change one
+understandable concern and re-check the same evidence. If the user asks for no
+modifications, keep selections and pipelines explicitly hypothetical, and do not
+call a selection checked unless `describe_selection` actually ran. Treat a
+`max_events` profile as development evidence, not a full-run result.
 
-## Inspect and select shots
+## Reference map
 
-Read [run-and-selection.md](references/run-and-selection.md) before interpreting
-fields, choosing conditions, normalization, trimming, or shot count. Use exact
-field names from the inspection `report.md`. Check the stage counts from
-`describe_selection` and stop if the selection is empty or contradicts the
-intended physical state. Treat a profile made with `max_events` as development
-evidence, not a full-run result. When the user requests no modifications, keep
-selections and pipelines explicitly hypothetical, and do not call a selection
-checked unless `describe_selection` actually ran.
+- [baseline.md](references/baseline.md) — the default selection + pipeline. Start here.
+- [profiling.md](references/profiling.md) — confirm calibration; name the run's variables.
+- [shot-selection.md](references/shot-selection.md) — the selection levers.
+- [mask-design.md](references/mask-design.md) — channels, the artifact→operator map, deliberate change.
+- [evidence-and-decisions.md](references/evidence-and-decisions.md) — read explain.png / distributions / metrics and choose the change.
 
-## Design and validate masks
+## Failure handling
 
-Read [mask-design.md](references/mask-design.md) before defining a pipeline or
-judging a mask. Start from the catalog's canonical pipeline example (or the
-default `define_pipeline` recipe), preserve the mandatory floor, and change one
-understandable concern at a time. Inspect the per-channel layer counts in the
-`build_mask` summary as well as the combined mask.
-
-Do not claim scientific correctness from visual plausibility or stability
-alone. State what evidence was checked, whether the run/profile was bounded, the
-chosen selection and pipeline, the returned handles and artifact paths, and any
-unresolved ambiguity.
-
-## Handle failures
-
-- On a missing field, return to the inspection report; do not guess aliases.
-- On a rejected selection or pipeline, correct the inline params against the
-  live `automask_catalog`; do not patch around the validation during a run.
-- On psana or truncated-data warnings, preserve the warning and assess the run
+- **Missing field** — return to the inspection `report.md`; do not guess aliases.
+- **Rejected selection/pipeline** — correct the inline params against the live
+  `automask_catalog`; do not patch around the validation.
+- **psana or truncated-data warnings** — preserve the warning and assess the run
   limitations before proceeding.
-- A tool error is returned as a JSON `error` payload, not a crash — read it,
-  fix the inputs, and retry with corrected handles or params.
+- **Tool error** — returned as a JSON `error` payload, not a crash; read it, fix
+  the inputs, retry with corrected handles or params.
+
+Do not claim scientific correctness from visual plausibility or stability alone.
+State what evidence was checked, whether the run/profile was bounded, the chosen
+selection and pipeline, the returned handles and artifact paths, and any
+unresolved ambiguity.
