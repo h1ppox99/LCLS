@@ -18,7 +18,8 @@ dict name -> spec, populated by importing the component packages:
 
     STATS         variance, mad_variance, blackhat, sigma_clipping,
                   hough_lines (pick), geometry (floor), status_as_mask (floor)
-    REGULARIZERS  tv (field), frangi (field), pad (mask)
+    REGULARIZERS  tv (field), pad (mask), blob_scale (field),
+                  fill_holes (mask), area_gate (mask)
 
 Combination is a single fixed step -- `combine_masks` ORs every thresholded pick
 onto the floor -- so there is no combiner registry to configure.
@@ -39,7 +40,7 @@ import numpy as np
 # Importing the component packages registers every method into the two dicts.
 from automask import stats  # noqa: F401
 from automask import regularization  # noqa: F401
-from automask.stats.base import STATS, threshold_stat, robust_z  # noqa: F401
+from automask.stats.base import STATS, Panel, threshold_stat, robust_z  # noqa: F401
 from automask.regularization.base import REGULARIZERS
 from automask.combine import combine_masks
 from automask.sample import Sample  # noqa: F401
@@ -140,6 +141,16 @@ class Channel:
         """Floor channels are the intensity-free, 100%-precision ones."""
         return STATS[self.stat].kind == "floor"
 
+    @property
+    def threshold(self) -> Optional[Tuple[float, str]]:
+        """The (k, mode) this channel cuts its field at, or None for a stat that
+        emits a mask directly and carries no threshold."""
+        spec = STATS[self.stat]
+        if spec.emits_mask:
+            return None
+        p = self._params()
+        return float(p.k), getattr(p, "mode", spec.mode)
+
     def _params(self):
         return self.params if self.params is not None else STATS[self.stat].params()
 
@@ -156,6 +167,23 @@ class Channel:
             z = REGULARIZERS[name].apply(z, params)
         return z
 
+    def explain(self, sample) -> dict:
+        """Named `Panel`s showing how this channel decides, for viz.explain_panels.
+
+        A stat that carries an `explain` hook (a pick, whose one boolean hides a
+        multi-stage decision) supplies its own panels, prefixed with the channel
+        label. A field channel has no hook: its regularized `field()` IS the
+        evidence, so the default is that field with its own (k, mode) cut. A floor
+        channel is 100%-precision and self-evident, so it contributes nothing.
+        """
+        spec = STATS[self.stat]
+        if spec.explain is not None:
+            panels = spec.explain(sample, self._params())
+            return {f"{self.label} — {name}": p for name, p in panels.items()}
+        if spec.emits_mask:
+            return {}
+        return {self.label: Panel(self.field(sample), threshold=self.threshold)}
+
     def pick(self, sample) -> np.ndarray:
         """Boolean pick, mask-regularized. A pick/floor stat supplies the mask
         directly; a field stat is thresholded at (k, mode) to get one.
@@ -169,8 +197,8 @@ class Channel:
         if spec.emits_mask:
             m = np.asarray(spec.compute(sample, p), dtype=bool)
         else:
-            mode = getattr(p, "mode", spec.mode)
-            m = threshold_stat(self.field(sample), p.k, mode)
+            k, mode = self.threshold
+            m = threshold_stat(self.field(sample), k, mode)
         gate = (
             (lambda mask: mask) if self.is_floor else (lambda mask: mask & sample.real)
         )
@@ -231,6 +259,18 @@ class Pipeline:
             floor = floor | channel.pick(sample)
         return floor
 
+    def explain(self, sample) -> dict:
+        """Every channel's diagnostic `Panel`s, merged (see Channel.explain).
+
+        The graded evidence each channel decides on, keyed by label: a field
+        channel's regularized score against its cut, a pick's internal stages.
+        What viz.explain_panels renders and build_mask persists.
+        """
+        panels = {}
+        for channel in self.channels:
+            panels.update(channel.explain(sample))
+        return panels
+
     def run(self, sample, floor=None) -> np.ndarray:
         """Final boolean mask (True == masked).
 
@@ -275,7 +315,7 @@ def production_pipeline(line_detector: bool = True) -> Pipeline:
     channels.append(
         Channel(
             "variance",
-            VarianceParams(k=3.5, mode="low"),
+            VarianceParams(k=8.0, mode="low"),
             field_reg="tv",
             field_reg_params=TVParams(4.0),
         )

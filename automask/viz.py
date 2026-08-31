@@ -241,6 +241,52 @@ def channel_panels(pipeline, sample, out=None, floor_row=True, store=None):
     return fig
 
 
+def explain_panels(pipeline, sample, out=None, panels=None):
+    """One row per diagnostic `Panel` (see Channel.explain), so each channel's
+    decision is legible -- a field channel's cut and a pick's hidden stages alike.
+
+    A graded panel is drawn as its score image left, its distribution over
+    ``real`` right with any ``threshold`` marked -- showing whether the cut
+    isolates a genuine tail or slices the bulk. A boolean panel (a pick's binary
+    input or segments) is drawn on its own. Cheap when ``panels`` (from
+    ``pipeline.explain(sample)``) is passed in already."""
+    from automask.stats.base import threshold_stat
+
+    panels = pipeline.explain(sample) if panels is None else panels
+    if not panels:
+        raise ValueError("pipeline exposes no explain panels")
+    real = np.asarray(sample.real, dtype=bool)
+
+    fig, axes = plt.subplots(
+        len(panels), 2, figsize=(11, 4.8 * len(panels)), squeeze=False
+    )
+    for (name, panel), (ax_img, ax_hist) in zip(panels.items(), axes):
+        if panel.mask:
+            m = np.asarray(panel.array, dtype=bool)
+            show_mask(m, ax=ax_img, title=f"{name} — {100 * m.mean():.2f}% of canvas")
+            ax_hist.axis("off")
+            continue
+        z = np.asarray(panel.array)
+        show(z, ax=ax_img, title=f"{name} — regularized score", cbar=True)
+        ax_hist.hist(z[real], bins=200, log=True, color="0.4")
+        title = name
+        if panel.threshold is not None:
+            k, mode = panel.threshold
+            cut = int((threshold_stat(z, k, mode) & real).sum())
+            for x, side in ((-k, "low"), (k, "high")):
+                if mode in (side, "both"):
+                    ax_hist.axvline(x, color="crimson", lw=1.3)
+            title = f"{name} — {cut} px beyond k={k:g} ({mode})"
+        ax_hist.set_title(title, fontsize=11)
+        ax_hist.set_xlabel("robust-z score")
+    fig.suptitle(f"run {sample.run:04d} — channel evidence vs decision", fontsize=13)
+    fig.tight_layout(rect=[0, 0, 1, 0.97])
+    if out:
+        fig.savefig(out, dpi=110, bbox_inches="tight")
+        plt.close(fig)
+    return fig
+
+
 # ── 3. mask evaluation ────────────────────────────────────────────────────────
 def agree_rgb(pred, truth):
     """RGB agreement map: green=TP, red=FP, blue=FN, white=TN."""

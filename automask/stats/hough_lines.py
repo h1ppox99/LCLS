@@ -10,9 +10,14 @@ bar but which are unmistakable as a line.
 
 Three steps:
 
-  1. darkness evidence -- the black-hat z-score of the run-sum image (same
-     construction as `stats/blackhat.py`, high == darker than the local
-     surroundings), because line defects on this detector are dark.
+  1. darkness evidence -- a black-hat z-score of the run-sum image (high == darker
+     than the local surroundings), because line defects on this detector are dark.
+     The excluded region (dead pixels, and the floor when hidden) is first
+     inpainted to its nearest live value: a black-hat over a flat fill leaves an
+     intensity step at a masked band edge and turns it into a bright straight RIM
+     just outside it, which Hough would connect as a false line. A nearest-value
+     fill removes the step, so the strongest straight responses left are the
+     genuine lines (see `darkness_z`).
   2. binarize -- z > `bin_k`, de-specked at `min_size`. Hough votes are counted,
      not weighted, so the input must be binary; the de-speck is deliberately
      gentle (a few px) so it removes isolated noise without breaking the sparse,
@@ -35,32 +40,39 @@ re-discovering the module gap. The stat cannot see the other detectors' picks
 (it runs beside them), so the floor is the only exclusion available -- and the
 one that matters.
 
-Tuned on runs 389/475 in `studies/line_detection.py`, which also measures the
-Radon alternative. `line_length` sits on a broad plateau (100-200 px) and the
-vote threshold barely matters; `width=1` gives the best precision on the added
-pixels at equal IoU.
+Dropping the floor pixels from the accumulator is necessary but not sufficient:
+the black-hat rim sits just OUTSIDE the floor and survives the `~floor` gate. It
+is killed at the source by the step-1 inpaint, not by dilating a margin off the
+floor -- so genuine lines that run close to a bad region are kept, not sacrificed.
+Before the inpaint the rim was 100% of Hough's output on the local runs; after it,
+the run-389 dark diagonal shadows are what Hough connects.
+
+Tuned on runs 389/475. With the rim gone the real lines are faint and broken, so
+connection is loose (`line_length` 40, `line_gap` 25, `bin_k` 3.5, de-speck 2): on
+389 this traces the dark diagonal shadows and on 475 -- which has no such lines --
+it adds nothing. `width=1` gives the best precision on the added pixels.
 """
 
 from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
+from scipy import ndimage as ndi
 from skimage.draw import line as draw_line
-from skimage.morphology import binary_dilation, disk, remove_small_objects
+from skimage.morphology import binary_dilation, black_tophat, disk, remove_small_objects
 from skimage.transform import probabilistic_hough_line
 
-from automask.stats.base import StatSpec, register_stat
-from automask.stats.blackhat import blackhat_stat
+from automask.stats.base import Panel, StatSpec, register_stat, robust_z
 
 
 @dataclass
 class HoughLinesParams:
     radius: int = 5  # black-hat structuring element, px
-    bin_k: float = 4.0  # robust-MAD z bar binarizing the darkness field
-    min_size: int = 4  # drop connected specks below this many px
+    bin_k: float = 3.5  # robust-MAD z bar binarizing the darkness field
+    min_size: int = 2  # drop connected specks below this many px
     threshold: int = 10  # Hough accumulator votes needed
-    line_length: int = 100  # shortest segment kept, px
-    line_gap: int = 5  # gap tolerated inside one segment, px
+    line_length: int = 40  # shortest segment kept, px
+    line_gap: int = 25  # gap tolerated inside one segment, px
     width: int = 1  # dilation radius applied to rasterized segments, px
     exclude_floor: bool = True  # hide geometry+calib from the accumulator
 
@@ -102,11 +114,24 @@ def floor_mask(sample, pad=2):
     return geometry_mask(sample.real, pad=pad) | status_mask(sample)
 
 
+def darkness_z(image, real, floor=None, radius=5):
+    """Black-hat darkness z-score with the excluded region inpainted first.
+
+    `live` is `real`, minus `floor` when given. Every non-live pixel is filled with
+    its nearest live value BEFORE `black_tophat`, so a masked band carries no
+    intensity step for the morphology to raise into a bright edge rim (a false
+    straight line Hough would connect); z is scaled over `live`."""
+    live = real if floor is None else (real & ~floor)
+    idx = ndi.distance_transform_edt(~live, return_indices=True, return_distances=False)
+    R = black_tophat(image[tuple(idx)], footprint=disk(radius))
+    return robust_z(R, live)
+
+
 def hough_lines_mask(image, real, p: HoughLinesParams, floor=None):
     """Boolean mask of the Hough segment pixels. Split out from `compute` so the
     study can drive it with an arbitrary domain."""
     domain = real if floor is None else (real & ~floor)
-    z = blackhat_stat(image, real, radius=p.radius)
+    z = darkness_z(image, real, floor, radius=p.radius)
     binary = anomaly_map(z, domain, bin_k=p.bin_k, min_size=p.min_size)
     segments = hough_segments(
         binary, threshold=p.threshold, line_length=p.line_length, line_gap=p.line_gap
@@ -120,6 +145,26 @@ def compute(sample, params: HoughLinesParams | None = None):
     return hough_lines_mask(sample.mean, sample.real, p, floor=floor)
 
 
+def explain(sample, params: HoughLinesParams | None = None) -> dict:
+    """The three stages a pick hides behind its one boolean output: the graded
+    darkness field with its `bin_k` binarizing cut, the binary map Hough votes
+    on, and the segments it returned. Mirrors `hough_lines_mask` step for step."""
+    p = params or HoughLinesParams()
+    floor = floor_mask(sample) if p.exclude_floor else None
+    domain = sample.real if floor is None else (sample.real & ~floor)
+    z = darkness_z(sample.mean, sample.real, floor, radius=p.radius)
+    binary = anomaly_map(z, domain, bin_k=p.bin_k, min_size=p.min_size)
+    segments = hough_segments(
+        binary, threshold=p.threshold, line_length=p.line_length, line_gap=p.line_gap
+    )
+    seg = segments_mask(segments, binary.shape, width=p.width) & domain
+    return {
+        "darkness z": Panel(z, threshold=(p.bin_k, "high")),
+        "binary input": Panel(binary, mask=True),
+        "segments": Panel(seg, mask=True),
+    }
+
+
 register_stat(
     StatSpec(
         name="hough_lines",
@@ -127,6 +172,7 @@ register_stat(
         params=HoughLinesParams,
         kind="pick",
         needs=("mean", "real", "status_as_mask"),
+        explain=explain,
         doc="probabilistic-Hough segments of the black-hat darkness map; "
         "emits a mask (kind='pick'), so field_reg must be None",
     )

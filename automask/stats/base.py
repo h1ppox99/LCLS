@@ -24,12 +24,28 @@ Three kinds:
 
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Callable, Dict, Tuple, Type
+from typing import Callable, Dict, Optional, Tuple, Type
 
 import numpy as np
 
 # name -> StatSpec. Populated at import time by each stat module via register_stat.
 STATS: Dict[str, "StatSpec"] = {}
+
+
+@dataclass
+class Panel:
+    """One diagnostic image for the explain views (viz.explain_panels).
+
+    ``mask=False`` is a graded field, shown as an image plus its distribution;
+    ``threshold`` (k, mode), if set, is marked on that distribution. ``mask=True``
+    is a boolean decision, shown on its own. This is what a stat's ``explain``
+    hook returns per panel -- the graded evidence a pick thresholds internally is
+    a `Panel`, so a pick gets the same field-vs-cut view a field channel does.
+    """
+
+    array: np.ndarray
+    threshold: Optional[Tuple[float, str]] = None
+    mask: bool = False
 
 
 @dataclass
@@ -41,6 +57,11 @@ class StatSpec:
     mode: str = "low"  # default defect side for field stats: low|high|both
     needs: Tuple[str, ...] = ()  # Sample attributes this stat reads (documentation)
     doc: str = ""
+    # (sample, params) -> {name: Panel}: the stat's internal evidence, for a stat
+    # whose one output does not tell the whole story (a pick's darkness field,
+    # binary input and segments). A field stat needs none -- its `field()` IS the
+    # evidence -- so Channel.explain builds the default from it.
+    explain: Optional[Callable] = None
 
     @property
     def swept(self) -> bool:

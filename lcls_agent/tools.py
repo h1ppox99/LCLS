@@ -156,7 +156,7 @@ def build_automask_server(session: Session):
 
     @tool(
         "preview_selection",
-        "Materialize and render one selected-shot reduction (mean/std/median/mad); "
+        "Materialize and render one selected-shot reduction (mean/std/mad); "
         "persists the array and a PNG, returns image statistics.",
         {
             "type": "object",
@@ -180,7 +180,10 @@ def build_automask_server(session: Session):
     @tool(
         "build_mask",
         "Run a profile + selection + pipeline into a final boolean mask "
-        "deliverable (mask.npy + overview.png) and return its statistics.",
+        "deliverable (mask.npy + overview.png, plus per-channel explain panels "
+        "showing how each channel decides -- a field channel's score vs its cut, "
+        "a pick's hidden stages: explain_<panel>.npy + explain.png) "
+        "and return its statistics.",
         {
             "type": "object",
             "properties": {

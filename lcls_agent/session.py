@@ -260,7 +260,7 @@ class Session:
         from automask.sample import Sample
         from automask.stats.base import STATS
         from automask.utils import configure_psana_environment
-        from automask.viz import show, show_mask
+        from automask.viz import explain_panels, show, show_mask
 
         configure_psana_environment()
         prof = self.profile(profile)
@@ -299,6 +299,22 @@ class Session:
         np.save(directory / "floor.npy", floor)
         figure.savefig(directory / "overview.png", dpi=120, bbox_inches="tight")
         plt.close(figure)
+
+        explain_records = []
+        panels = pipe.explain(sample)
+        if panels:
+            for name, panel in panels.items():
+                record = {"panel": name, "mask": bool(panel.mask)}
+                if not panel.mask:
+                    safe = name.replace(" — ", "_").replace(" ", "_")
+                    path = directory / f"explain_{safe}.npy"
+                    np.save(path, np.asarray(panel.array, dtype=np.float32))
+                    record["array"] = str(path)
+                explain_records.append(record)
+            fig_explain = explain_panels(pipe, sample, panels=panels)
+            fig_explain.savefig(directory / "explain.png", dpi=120, bbox_inches="tight")
+            plt.close(fig_explain)
+
         real = np.asarray(sample.real, dtype=bool)
         return {
             "mask": handle,
@@ -314,6 +330,10 @@ class Session:
             "layers": layer_records,
             "mask_array": str(directory / "mask.npy"),
             "overview": str(directory / "overview.png"),
+            "explain": explain_records,
+            "explain_overview": (
+                str(directory / "explain.png") if explain_records else None
+            ),
         }
 
     # -- validation ---------------------------------------------------------
