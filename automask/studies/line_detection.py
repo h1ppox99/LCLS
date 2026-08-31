@@ -9,8 +9,7 @@ decides pixel-by-pixel and knows nothing about shape. The defects it misses most
 visibly are extended STRAIGHT structures -- wire/edge shadows, scratches, the
 dark seams between ASIC groups, the beam-stop arm -- whose individual pixels sit
 too close to the bulk to clear a robust-z bar, but which are unmistakable as a
-line. Frangi (regularization/frangi.py) enhances such structure locally; the two
-classical *global* line detectors are tried here instead:
+line. Two classical *global* line detectors are tried here:
 
     RADON  a full sinogram of the anomaly map. Every (angle, offset) bin counts
            the flagged pixels along one whole line of the detector, so a line
@@ -399,7 +398,7 @@ def sweep_run(run: int, p: Params = None):
 
 
 def _base_display(sample):
-    """arcsinh-compressed sum image + robust display limits (as in the frangi study)."""
+    """arcsinh-compressed sum image + robust display limits."""
     base = np.arcsinh(
         sample.mean / (np.nanmedian(np.abs(sample.mean[sample.real])) + 1e-9)
     )
