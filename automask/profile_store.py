@@ -32,9 +32,7 @@ class ProfileStore:
 
     def __init__(self, cache_dir: Path | None = None):
         self.cache_dir = (
-            Path(cache_dir)
-            if cache_dir
-            else ROOT / "automask" / "outputs" / "cache" / "profiles"
+            Path(cache_dir) if cache_dir else ROOT / "automask" / "cache" / "profiles"
         )
 
     def path(self, run: int) -> Path:

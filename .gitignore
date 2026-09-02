@@ -10,6 +10,7 @@
 # every array a pipeline consumes is computed from XTC via ImageStore.
 automask/data/
 automask/outputs/
+automask/cache/
 /outputs/
 
 # --- bulk archives ---

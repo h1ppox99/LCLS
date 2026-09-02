@@ -92,9 +92,7 @@ class ImageStore:
         run_profile: RunProfile | None = None,
     ):
         self.cache_dir = (
-            Path(cache_dir)
-            if cache_dir
-            else (ROOT / "automask" / "outputs" / "cache" / "images")
+            Path(cache_dir) if cache_dir else (ROOT / "automask" / "cache" / "images")
         )
         self._profiles = {}
         if run_profile is not None:
