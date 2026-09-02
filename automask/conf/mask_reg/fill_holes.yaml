@@ -1,5 +1,0 @@
-# Fill pinholes left where a graded field dips below `k` inside a solid defect.
-# Grows nothing at the outer boundary (unlike pad).
-name: fill_holes
-params:
-  connectivity: 1

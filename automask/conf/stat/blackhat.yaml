@@ -1,5 +1,0 @@
-name: blackhat
-params:
-  radius: 5
-  k: 6.0
-  mode: high

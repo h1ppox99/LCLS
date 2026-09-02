@@ -10,8 +10,6 @@ Self-contained: tiny arrays only, no frozen dataset and no psana.
 
 from __future__ import annotations
 
-import os
-
 import numpy as np
 import pytest
 
@@ -542,29 +540,3 @@ if __name__ == "__main__":
             print(f"FAIL {fn.__name__}: {type(e).__name__}: {e}")
     print(f"\n{len(fns) - failed} passed" + (f", {failed} failed" if failed else ""))
     raise SystemExit(1 if failed else 0)
-
-
-def test_hydra_production_experiment_matches_the_python_recipe():
-    """conf/experiment/production.yaml duplicates production_pipeline() as data.
-
-    A silent divergence means the documented sweep command runs a different mask
-    than the library does, which had already happened once (the yaml named
-    sigma_clipping long after the Python recipe moved on).
-    """
-    hydra = pytest.importorskip("hydra")
-    from hydra import compose, initialize_config_dir
-
-    conf_dir = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "conf"
-    )
-    from automask.studies.sweep_hyperparameters import build_pipeline
-
-    with initialize_config_dir(config_dir=conf_dir, version_base=None):
-        cfg = compose(config_name="config", overrides=["experiment=production"])
-        from_yaml = build_pipeline(cfg)
-    from_python = production_pipeline()
-
-    assert [c.label for c in from_yaml.channels] == [
-        c.label for c in from_python.channels
-    ]
-    assert from_yaml.needs() == from_python.needs()

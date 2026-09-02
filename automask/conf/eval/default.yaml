@@ -1,5 +1,0 @@
-# Sweep only on fit. After choosing one configuration, run it once with
-# `eval.phase=validate`; validation runs must never drive parameter choices.
-phase: fit
-fit_runs: [378, 389]
-validation_runs: [396, 475]
