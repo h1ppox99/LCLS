@@ -3,6 +3,22 @@
 This is the masking project for the recovered LCLS experiment. Production run
 profiling, calibration, geometry, and selected-shot image materialization use psana/XTC.
 
+## Layout
+
+The package mirrors the four masking stages plus two seams:
+
+| dir | role |
+|---|---|
+| `profiling/` | stage 1 — one psana pass → per-shot `RunProfile` (+ disk cache, run report) |
+| `selection/` | stage 2 — field-native `ShotSelection` and presets |
+| `sample/` | the arrays a pipeline reads: `Sample`, the image cache, geometry |
+| `mask/` | stage 3 — the `Pipeline`/`Channel` model + `stats/` `regularization/` `combine/` registries |
+| `evaluation/` | stage 4 — labelled scoring, consistency, validation, reference masks |
+| `io/` | the psana seam (XTC readers, calibration) |
+| `interface/` | the agent surface: capability `catalog` + dict⇄object `recipes` |
+| `viz.py` | figures |
+| `research/` | dev/research tooling, off the runtime path (psdm setup, synthetic, hand-mask editor) |
+
 ## Image cache
 
 The ImageStore cache is intentionally gitignored. It can be prewarmed, or
@@ -17,49 +33,21 @@ evaluation loop otherwise fills on demand from raw XTC.
 
 ## Building a mask
 
-```python
-from automask.masking import Channel, Pipeline
-from automask.sample import Sample
-
-pipe = Pipeline(
-    channels=[
-        Channel("geometry", field_reg=None),  # floor: unmapped/ASIC lines
-        Channel("status_as_mask", field_reg=None),  # floor: psana pixel status, per run
-        Channel("variance", VarianceParams(k=3.5, mode="low"), field_reg="tv"),
-    ]
-)
-sample = Sample.from_store(475, selection, pipe.needs())
-mask = pipe.run(sample)  # bool, True == masked
-```
-
-One list of channels. Whether a channel belongs to the intensity-free floor is
-read from its stat's registered `kind`, so floor channels are configured — and
-parameterised — exactly like every other one.
+The end-to-end scripting workflow — inspect a run, select shots, build the mask,
+validate it — is in **[`docs/AUTOMASK.md`](../docs/AUTOMASK.md)**, the single
+usage guide. A pipeline is one list of `Channel`s; whether a channel belongs to
+the intensity-free floor is read from its stat's registered `kind`, so floor
+channels are configured exactly like every other one.
 
 ## Adding a method
 
-Drop one file in `stats/` or `regularization/` that defines a compute
-function, a `Params` dataclass, and a `register_*` call; add it to that package's
-`__init__.py` import line and a matching `conf/<group>/<name>.yaml`. A stat's
-`needs` names the Sample arrays it reads — reductions (`mean`/`std`/`mad`)
-or psana calibration accessors (`pedestals`, `rms`, `status_as_mask`). It is then
-selectable by name everywhere (`Pipeline`, the registries, and the sweep driver).
-
-## Sweeping hyperparameters
-
-```
-# Fit one detector on the tuning runs (writes results.csv):
-python -m automask.studies.sweep_hyperparameters -m stat=variance \
-    stat.params.k=2,2.5,3,3.5 regularization.params.weight=5,10,15
-
-# Validate the chosen configuration once, without a sweep:
-python -m automask.studies.sweep_hyperparameters experiment=production \
-    eval.phase=validate
-```
-
-`scripts/*.sh` are thin wrappers over the driver reproducing the old per-method sweeps.
-Synthetic injection is a separate stress test, not the parameter-selection target.
-The complete evaluation contract is in `docs/EVALUATION.md`.
+Drop one file in `mask/stats/` or `mask/regularization/` that defines a compute
+function, a `Params` dataclass, and a `register_*` call, then add it to that
+package's `__init__.py` import line. A stat's `needs` names the Sample arrays it
+reads — reductions (`mean`/`std`/`mad`) or psana calibration accessors
+(`pedestals`, `rms`, `status_as_mask`). It is then selectable by name everywhere
+(`Pipeline` and the registries). The evaluation contract is in
+`docs/EVALUATION.md`.
 
 ## Data (frozen, numpy-only)
 
@@ -87,33 +75,9 @@ Runtime dependencies are declared in the repository-root `pyproject.toml`.
 `psana` remains external and is needed for production XTC access; `h5py` is
 used only for bounded temporary staging during robust reductions.
 
-## Usage
+## Scoring against references
 
-```python
-# automask is an installed package (pip install -e . --no-deps) — import directly:
-from automask.dataset import load_mask, score
-from automask.image_store import ImageStore
-from automask.selection_presets import BEAM_ON_SELECTION
-
-img = ImageStore().reduce(475, BEAM_ON_SELECTION, "mean")  # (1064,1030), from XTC
-gt = load_mask("human_Mask")  # bool, True==masked
-
-# ... your auto-masking algorithm ...
-pred = img == 0  # trivial baseline
-
-print(score(pred, gt))  # {'iou':.., 'precision':.., 'recall':..}
-```
-
-`data/masks/` holds the hand-drawn references and is the only frozen input left;
-every array a pipeline consumes is computed from the run.
-
-## Prewarm production images
-
-```
-python -m automask.producers.build_images
-```
-
-## Baseline to beat
-
-The lab's original notebook workflow remains under `xpp_sharing/` as the
-read-only comparison point. Production automasking does not import it.
+Load a reference with `automask.evaluation.dataset.load_mask` and score a
+prediction with `score`; the full labelled/consistency contract is in
+[`docs/EVALUATION.md`](../docs/EVALUATION.md). `data/masks/` is the only frozen
+input left — every array a pipeline consumes is computed from the run.

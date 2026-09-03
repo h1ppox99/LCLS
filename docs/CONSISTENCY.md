@@ -29,6 +29,6 @@ For model perturbations, instability maps, channel ablations, and Markdown/image
 reporting, use `automask.evaluation.validate_mask`; `evaluate_consistency` remains
 the compact backward-compatible data-only interface.
 
-Mean/std and median/MAD are supported. A cold evaluation may need an XTC pass
+Mean/std and MAD reductions are supported. A cold evaluation may need an XTC pass
 because an existing pooled 2D cache has already lost shot identity; subsequent
 calls reuse the split cache.

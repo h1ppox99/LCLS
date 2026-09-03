@@ -1,6 +1,6 @@
 # Evaluation
 
-There are three evaluation workflows and they answer different questions.
+Three workflows answer different questions.
 
 ## 1. Validate one unlabelled run under perturbations
 
@@ -35,57 +35,46 @@ design = MaskValidationDesign(
 report = validate_mask(pipeline, run, selection, design, store=store)
 report.display()
 pipeline = report.recommended_pipeline
-# report.save("automask/outputs/validation/run0475")
 ```
 
 Supported paths are `<channel>.params.<field>`,
 `<channel>.field_reg.<regularizer>.<field>`, and
-`<channel>.mask_reg.<regularizer>.<field>`.
-Values and the one-line reason are explicit; validation does not infer what a
-scientifically reasonable perturbation is.
+`<channel>.mask_reg.<regularizer>.<field>`. Each perturbation's values and
+one-line reason are explicit; validation does not infer what a scientifically
+reasonable perturbation is.
 
 The report contains Markdown, baseline/channel/instability figures, structured
-metrics, and optional JSON/NumPy/PNG persistence. It is deliberately descriptive:
-stability is not ground truth, and v1 applies no confidence intervals or numeric
-pass/fail thresholds.
+metrics, and optional JSON/NumPy/PNG persistence (`report.save(<dir>)`). It is
+deliberately descriptive: stability is robustness to the tested variations, not
+agreement with ground truth, and v1 applies no pass/fail thresholds.
 
 ## 2. Choose default parameters with labels
 
-The XTC runs are split chronologically:
+The runs split chronologically — fit: 378, 389; validation: 396, 475. Tune only
+on the fit runs, rank candidates by residual IoU (pixels added beyond the shared
+floor), then measure the chosen configuration once on validation. Validation
+performance is the reported estimate and must not be used to revise parameters.
 
-- fit: runs 378 and 389;
-- validation: runs 396 and 475.
+```python
+from automask.evaluation import evaluate
 
-Sweep channels, regularizers, and their parameters only on the fit
-runs. Rank candidates primarily by residual IoU, which measures the pixels added
-beyond the shared geometry/calibration floor. After choosing one configuration,
-run it once on validation with `eval.phase=validate`. Validation performance is
-the reported estimate; it must not be used to revise parameters.
-
-```bash
-python -m automask.studies.sweep_hyperparameters -m \
-  stat=variance stat.params.k=2,2.5,3,3.5
-
-python -m automask.studies.sweep_hyperparameters \
-  experiment=production eval.phase=validate
+# Score a pipeline against reference masks. With no explicit runs it uses the
+# held-out validation set.
+result = evaluate(pipeline, runs=(378, 389))  # fit
+result = evaluate(pipeline)  # validation (held out)
 ```
-
-The labelled API is `automask.evaluation.evaluate(pipeline, runs)`. With no
-explicit runs it evaluates on the held-out validation set.
 
 ## 3. Check fold consistency only
 
-For the smaller legacy dictionary API, call
-`automask.evaluation.evaluate_consistency(pipeline, run, selection, store)` to report:
+`evaluate_consistency(pipeline, run, selection, store)` reports, for the
+requested number of real-shot folds:
 
-- all pairwise agreements between the requested number of real-shot folds;
+- all pairwise agreements between folds;
 - each fold's agreement with the full-shot mask;
-- the same diagnostics for round-robin and chronological folds;
+- both round-robin and chronological folds.
 
-These are diagnostics, not a substitute ground truth or a scalar score. See
-`CONSISTENCY.md` for the fixed procedure. Physical diagnostics remain separate
-because their scientific assumptions differ from reproducibility.
+These are reproducibility diagnostics, not a substitute ground truth or a scalar
+score. See [CONSISTENCY.md](CONSISTENCY.md) for the fixed procedure.
 
-Synthetic artifact injection remains an auxiliary stress test under
-`automask.synthetic`. It is not used to choose production defaults or to claim
-held-out performance.
+Synthetic artifact injection (`automask.research.synthetic`) is an auxiliary stress test;
+it is not used to choose production defaults or to claim held-out performance.
