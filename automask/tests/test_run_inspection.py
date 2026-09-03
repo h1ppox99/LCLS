@@ -1,7 +1,7 @@
 import numpy as np
 
-import automask.run_inspection as run_inspection
-from automask.run_profile import RunProfile
+import automask.profiling.run_inspection as run_inspection
+from automask.profiling.run_profile import RunProfile
 
 
 def _report():

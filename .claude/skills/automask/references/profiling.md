@@ -36,7 +36,7 @@ From `report.md` + experiment logs, name the fields the selection will use:
   irrelevant to masking but present.
 
 Do not use `lightStatus/laser` or EVR codes 90/91 as filters — there is no laser
-and those labels mean nothing here. See `DATA.md` for the full evidence.
+and those labels mean nothing here. See `docs/DATA_xppl1016922.md` for the full evidence.
 
 ## Bounded-profile caveats
 

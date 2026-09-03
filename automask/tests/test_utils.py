@@ -3,7 +3,7 @@ import sys
 
 import numpy as np
 
-import automask.utils as utils
+import automask.profiling.utils as utils
 
 
 def test_configure_psana_environment_adds_smalldata_to_running_kernel(

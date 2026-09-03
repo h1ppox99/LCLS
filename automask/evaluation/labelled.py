@@ -6,12 +6,12 @@ from typing import Optional, Sequence, Tuple
 
 import numpy as np
 
-from automask.dataset import load_mask, score
-from automask.image_store import ImageStore
+from automask.evaluation.dataset import load_mask, score
+from automask.sample.image_store import ImageStore
 from automask.io.read_xtc import available_xtc_runs
 from automask.sample import Sample
-from automask.selection_presets import BEAM_ON_SELECTION
-from automask.shot_selection import ShotSelection
+from automask.selection.presets import BEAM_ON_SELECTION
+from automask.selection.shot_selection import ShotSelection
 
 PACKAGE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 

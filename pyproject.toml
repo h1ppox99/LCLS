@@ -14,11 +14,8 @@ dependencies = [
     "numpy",
     "h5py",
     "scipy",
-    "ipykernel",
     "scikit-image",
     "matplotlib",
-    "tifffile",
-    "hydra-core",
     "pyFAI",
     "pytest"
 ]
@@ -35,4 +32,3 @@ namespaces = false
 
 [tool.ruff]
 target-version = "py311"
-extend-exclude = ["xpp_sharing"]

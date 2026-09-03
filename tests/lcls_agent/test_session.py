@@ -3,8 +3,8 @@
 import numpy as np
 import pytest
 
-from automask.recipes import require_run_floor
-from automask.run_profile import RunProfile
+from automask.interface.recipes import require_run_floor
+from automask.profiling.run_profile import RunProfile
 from lcls_agent.session import Session
 
 

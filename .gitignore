@@ -1,5 +1,5 @@
 # --- LCLS data mirror (large, not source) ---
-/calib/
+/calib
 /xtc
 /hdf5/
 /stats/

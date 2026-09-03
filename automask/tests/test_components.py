@@ -13,19 +13,19 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from automask.image_store import (
+from automask.sample.image_store import (
     ImageStore,
     _calibration_content_key,
     _content_key,
     _reduction_stub,
 )
-from automask.masking import Channel, Pipeline, production_pipeline
-from automask.regularization.area_gate import area_gate
-from automask.regularization.blob_scale import blob_scale
-from automask.regularization.fill_holes import fill_holes
-from automask.run_profile import RunProfile
-from automask.shot_selection import Condition, PercentileTrim, ShotSelection
-from automask.stats.asic_polish import median_polish
+from automask.mask import Channel, Pipeline, production_pipeline
+from automask.mask.regularization.area_gate import area_gate
+from automask.mask.regularization.blob_scale import blob_scale
+from automask.mask.regularization.fill_holes import fill_holes
+from automask.profiling.run_profile import RunProfile
+from automask.selection.shot_selection import Condition, PercentileTrim, ShotSelection
+from automask.mask.stats.asic_polish import median_polish
 
 
 # -- regularizers ----------------------------------------------------------
@@ -162,9 +162,9 @@ def test_pipeline_rejects_duplicate_channel_labels():
 def test_floor_channel_is_not_gated_by_real(monkeypatch):
     """A dead pixel reads zero, so gating the floor by `real` would erase exactly
     the pixels the floor exists to mask."""
-    import automask.stats.status_as_mask as status_stat
+    import automask.mask.stats.status_as_mask as status_stat
     from automask.sample import Sample
-    from automask.stats.status_as_mask import StatusAsMaskParams
+    from automask.mask.stats.status_as_mask import StatusAsMaskParams
 
     monkeypatch.setattr(status_stat, "panel_to_asm", lambda panel, run: panel[0])
     mean = np.ones((5, 5))
@@ -205,7 +205,7 @@ def test_image_store_reuses_injected_run_profile(tmp_path):
 
 
 def test_image_store_profiles_each_run_once(tmp_path, monkeypatch):
-    import automask.utils as utils
+    import automask.profiling.utils as utils
 
     calls = []
 
@@ -367,7 +367,7 @@ def test_image_store_validates_reduction_form_and_gain(tmp_path):
 
 
 def _small_store(tmp_path, monkeypatch):
-    import automask.image_store as image_store
+    import automask.sample.image_store as image_store
     import automask.io.read_xtc as read_xtc
 
     monkeypatch.setattr(

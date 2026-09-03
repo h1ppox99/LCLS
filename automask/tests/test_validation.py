@@ -13,9 +13,9 @@ from automask.evaluation.validation import (
     _set_parameter,
     validate_mask,
 )
-from automask.masking import Channel, Pipeline
-from automask.shot_selection import ShotSelection
-from automask.stats.base import STATS, StatSpec
+from automask.mask import Channel, Pipeline
+from automask.selection.shot_selection import ShotSelection
+from automask.mask.stats.base import STATS, StatSpec
 
 
 def test_mask_delta_distinguishes_additions_removals_and_relocation():
@@ -87,7 +87,7 @@ def test_parameter_paths_clone_without_mutating_pipeline(test_stat):
 
 
 def test_regularizer_parameter_paths():
-    from automask.masking import production_pipeline
+    from automask.mask import production_pipeline
 
     pipeline = production_pipeline()
     changed = _set_parameter(pipeline, "variance.field_reg.tv.weight", 3.0)

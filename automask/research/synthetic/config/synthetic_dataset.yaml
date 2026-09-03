@@ -1,0 +1,33 @@
+# Build the on-disk synthetic-artifact image collection (image mode, run 475).
+#
+#   python -m automask.synthetic.build_dataset --config automask/synthetic/config/synthetic_dataset.yaml --previews
+#
+# `image` points at the cached BEAM_ON selected-shot mean of run 475 (pure numpy,
+# no psana). Artifact params mirror synthetic_baseline.yaml.
+
+image: automask/outputs/synthetic_source/run0475.npy
+output_dir: automask/outputs/synthetic_dataset
+seed: 0
+n_per_artifact: 3
+rotations: [0, 90, 180, 270]
+
+artifacts:
+  streak:
+    angle_deg: [0.0, 180.0]
+    width: [1.5, 3.5]
+    amplitude_sigma: [6.0, 12.0]
+    band_sigmas: 1.0
+
+  beamstop:
+    shape: random
+    radius: [30.0, 100.0]
+    axis_ratio: [0.6, 1.6]
+    transmission: [0.05, 0.30]
+    softness: 0.15
+
+  beamstop_small:
+    shape: random
+    radius: [15.0, 50.0]
+    axis_ratio: [0.6, 1.6]
+    transmission: [0.05, 0.30]
+    softness: 0.15

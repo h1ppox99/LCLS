@@ -10,7 +10,7 @@ from typing import Dict, Tuple
 import numpy as np
 
 from automask.evaluation.metrics import MaskDelta
-from automask.recipes import pipeline_to_dict
+from automask.interface.recipes import pipeline_to_dict
 
 
 @dataclass(frozen=True)

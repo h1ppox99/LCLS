@@ -24,16 +24,16 @@ from typing import Any
 
 import numpy as np
 
-from automask.masking import Pipeline, production_pipeline
-from automask.profile_store import ProfileStore
-from automask.recipes import (
+from automask.mask import Pipeline, production_pipeline
+from automask.profiling.profile_store import ProfileStore
+from automask.interface.recipes import (
     pipeline_from_dict,
     require_run_floor,
     selection_from_dict,
     validation_design_from_dict,
 )
-from automask.run_profile import RunProfile
-from automask.shot_selection import ShotSelection
+from automask.profiling.run_profile import RunProfile
+from automask.selection.shot_selection import ShotSelection
 
 
 class Session:
@@ -109,7 +109,7 @@ class Session:
     # -- capabilities -------------------------------------------------------
     def catalog(self) -> dict:
         """Registered statistics, regularizers, and selection operators."""
-        from automask.catalog import capability_catalog
+        from automask.interface.catalog import capability_catalog
 
         return capability_catalog()
 
@@ -131,8 +131,8 @@ class Session:
             JUNGFRAU_NAME,
             JUNGFRAU_SOURCE,
         )
-        from automask.run_inspection import inspect_run
-        from automask.utils import configure_psana_environment
+        from automask.profiling.run_inspection import inspect_run
+        from automask.profiling.utils import configure_psana_environment
 
         configure_psana_environment()
         report = inspect_run(
@@ -215,8 +215,8 @@ class Session:
         """Materialize and render one selected-shot reduction; persist images."""
         import matplotlib.pyplot as plt
 
-        from automask.image_store import ImageStore
-        from automask.utils import configure_psana_environment
+        from automask.sample.image_store import ImageStore
+        from automask.profiling.utils import configure_psana_environment
         from automask.viz import show
 
         configure_psana_environment()
@@ -256,10 +256,10 @@ class Session:
         """Run a selection + pipeline into a final mask deliverable on disk."""
         import matplotlib.pyplot as plt
 
-        from automask.image_store import ImageStore
+        from automask.sample.image_store import ImageStore
         from automask.sample import Sample
-        from automask.stats.base import STATS
-        from automask.utils import configure_psana_environment
+        from automask.mask.stats.base import STATS
+        from automask.profiling.utils import configure_psana_environment
         from automask.viz import explain_panels, show, show_mask
 
         configure_psana_environment()
@@ -347,8 +347,8 @@ class Session:
     ) -> dict:
         """Run declared data/model perturbations; persist the report."""
         from automask.evaluation import MaskValidationDesign, validate_mask
-        from automask.image_store import ImageStore
-        from automask.utils import configure_psana_environment
+        from automask.sample.image_store import ImageStore
+        from automask.profiling.utils import configure_psana_environment
 
         configure_psana_environment()
         prof = self.profile(profile)

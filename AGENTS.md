@@ -17,7 +17,7 @@ recipe. The lab's current production method is the baseline we measure against a
 
 ## Repository map
 
-Read `docs/DATA_OVERVIEW.md` for the full data guide; this section is the orientation.
+Read `docs/DATA_xppl1016922.md` for the full data guide; this section is the orientation.
 
 The repo is a single installable Python package, **`automask`** (top-level, `pip install -e .`),
 sitting alongside the data mirror. There is no `src/` wrapper. Import project code as
@@ -30,7 +30,7 @@ sitting alongside the data mirror. There is no `src/` wrapper. Import project co
 | `automask/evaluation/` | **All evaluation code.** `labelled.py` scores against reference masks, `consistency.py` measures reproducibility on round-robin real-shot folds, and `azimuthal.py` contains the separate physical-consistency diagnostic. Fold reductions use `ImageStore`; see `docs/EVALUATION.md` and `docs/CONSISTENCY.md`. |
 | `xpp_sharing/` | **The lab's current production method** (CO2 delay-scan notebooks + `utils.py`). Reference/baseline to improve on — manual mask, diode normalization, delay binning. Read-only. |
 | `automask/io/` | psana readers (import as `automask.io.<name>`): `psana1.py` (`Psana1RunSource` — the local↔SLAC seam: `from_files` opens explicit streams, `from_experiment` uses the standard resolver), `read_xtc.py` (calibrated frames, calibration constants, panel index maps), `lcls1_adapters.py` (official `smalldata_tools` detector adapters for profiling). |
-| `docs/`, `psana_env.sh` | `DATA_OVERVIEW.md` (layout) + `PSANA_XTC.md` (how to open XTC) + `DATA.md` (what a single shot records) + `EVALUATION.md` and `CONSISTENCY.md`; and the env-activation script (repo root). |
+| `docs/`, `psana_env.sh` | `DATA_xppl1016922.md` (data layout + what a single shot records) + `PSANA_XTC.md` (how to open XTC) + `EVALUATION.md` and `CONSISTENCY.md`; and the env-activation script (repo root). |
 | `xtc/` | Raw per-event detector data (psana XTC format). |
 | `hdf5/smalldata/` | Reduced per-event HDF5 summaries. **Start data analysis here** — no psana needed. |
 | `calib/` | psana detector calibration constants. |
@@ -147,5 +147,4 @@ Conventions that bite if ignored:
   `lightStatus/xray` (EVR 137, `'Beam On'`) is genuine but says nothing about the branch.
   Likewise **ipm2 is upstream of the split** and is blind to it: normalize or rank shots on a
   downstream monitor (`sample_diode` = `diodeU/channels[:,0]`, `diodeU`, `lombpm`). Full
-  evidence in **`DATA.md`**; the code side is `automask/shot_selection.py`.
-- **`results/` is empty** — never assume analysis code or outputs live there.
+  evidence in **`docs/DATA_xppl1016922.md`**; the code side is `automask/selection/shot_selection.py`.

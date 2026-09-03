@@ -9,9 +9,9 @@ from __future__ import annotations
 
 import argparse
 
-from automask.image_store import REDUCTIONS, ImageStore
-from automask.masking import production_pipeline
-from automask.selection_presets import BEAM_ON_SELECTION
+from automask.sample.image_store import REDUCTIONS, ImageStore
+from automask.mask import production_pipeline
+from automask.selection.presets import BEAM_ON_SELECTION
 
 RUNS = (389, 475)
 

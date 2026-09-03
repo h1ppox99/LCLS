@@ -7,11 +7,11 @@ from typing import Optional
 
 import numpy as np
 
-from automask.image_store import REDUCTIONS, ImageStore
-from automask.masking import Pipeline
+from automask.sample.image_store import REDUCTIONS, ImageStore
+from automask.mask import Pipeline
 from automask.sample import DERIVED, Sample
-from automask.selection_presets import BEAM_ON_SELECTION
-from automask.shot_selection import ShotSelection
+from automask.selection.presets import BEAM_ON_SELECTION
+from automask.selection.shot_selection import ShotSelection
 
 
 def _iou(a, b) -> float:

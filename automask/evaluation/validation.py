@@ -16,13 +16,13 @@ from automask.evaluation.report import (
     EnsembleResult,
     MaskValidationReport,
 )
-from automask.image_store import REDUCTIONS, ImageStore
-from automask.masking import Channel, Pipeline
-from automask.regularization.base import REGULARIZERS
+from automask.sample.image_store import REDUCTIONS, ImageStore
+from automask.mask import Channel, Pipeline
+from automask.mask.regularization.base import REGULARIZERS
 from automask.sample import DERIVED, Sample
-from automask.selection_presets import BEAM_ON_SELECTION
-from automask.shot_selection import ShotSelection
-from automask.stats.base import STATS
+from automask.selection.presets import BEAM_ON_SELECTION
+from automask.selection.shot_selection import ShotSelection
+from automask.mask.stats.base import STATS
 
 
 @dataclass(frozen=True)

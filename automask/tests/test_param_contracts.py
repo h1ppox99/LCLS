@@ -1,9 +1,9 @@
 import pytest
 
-from automask.catalog import capability_catalog
+from automask.interface.catalog import capability_catalog
 from automask.evaluation import MaskValidationDesign, ParameterSweep
-from automask.masking import Pipeline, production_pipeline
-from automask.recipes import (
+from automask.mask import Pipeline, production_pipeline
+from automask.interface.recipes import (
     pipeline_from_dict,
     pipeline_to_dict,
     require_run_floor,
@@ -12,7 +12,7 @@ from automask.recipes import (
     validation_design_from_dict,
     validation_design_to_dict,
 )
-from automask.shot_selection import (
+from automask.selection.shot_selection import (
     CONDITION_OPERATORS,
     Condition,
     PercentileTrim,

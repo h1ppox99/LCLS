@@ -1,5 +1,5 @@
 """
-viz.py -- the project's figures, in four layers built on one rendering primitive.
+viz.py -- the project's figures, in three layers built on one rendering primitive.
 
 Plotting lives above ImageStore: rendering a selector's effect may resolve raw
 XTC frames, while ShotSelection itself remains numpy-only and psana-free.
@@ -8,7 +8,6 @@ XTC frames, while ShotSelection itself remains numpy-only and psana-free.
   2. selection views     ``show_image``         -- one reduction as an image.
                          ``compare_selections`` -- a grid to eyeball selector effects.
   3. mask evaluation     ``agree_rgb`` / ``save_agreement`` -- TP/FP/FN overlays.
-  4. sweeps              ``plot_results_heatmap`` -- 2-D IoU heatmap over two knobs.
 
 Every function takes an optional ``ax`` and returns its artist/figure, so the
 same code works inline (Jupyter/IDE) and headless -- the Agg guard below picks a
@@ -99,7 +98,7 @@ def _n_used(store, run, selection, reduction):
 
 def show_image(run, selection, reduction="mean", ax=None, store=None, out=None, **kw):
     """Render one selected-shot reduction, computing it on a cache miss."""
-    from automask.image_store import ImageStore
+    from automask.sample.image_store import ImageStore
 
     store = store or ImageStore()
     img = store.reduce(run, selection, reduction)
@@ -120,8 +119,8 @@ def compare_selections(
     (so brightness differences between selectors are real, not per-panel
     autoscaled) plus a single shared colourbar. Returns the Figure.
     """
-    from automask.image_store import ImageStore
-    from automask.shot_selection import ShotSelection
+    from automask.sample.image_store import ImageStore
+    from automask.selection.shot_selection import ShotSelection
 
     if not all(isinstance(selection, ShotSelection) for selection in selections):
         raise TypeError("selections must contain only ShotSelection objects")
@@ -180,8 +179,8 @@ def show_mask(mask, ax=None, color=(0.85, 0.1, 0.1), title=""):
 
 def _channel_input(channel, sample):
     """The image a channel reads, as (field name, assembled array), or None."""
-    from automask.stats.base import STATS
-    from automask.geometry import panel_to_asm
+    from automask.mask.stats.base import STATS
+    from automask.sample.geometry import panel_to_asm
 
     for name in STATS[channel.stat].needs:
         if name in ("real", "center"):
@@ -198,7 +197,7 @@ def _channel_input(channel, sample):
 
 def channel_panels(pipeline, sample, out=None, floor_row=True, store=None):
     """One row per masking channel: its input image left, the mask it gives right."""
-    from automask.image_store import ImageStore
+    from automask.sample.image_store import ImageStore
 
     base = pipeline.floor(sample)
     rows, skipped = [], []
@@ -250,7 +249,7 @@ def explain_panels(pipeline, sample, out=None, panels=None):
     isolates a genuine tail or slices the bulk. A boolean panel (a pick's binary
     input or segments) is drawn on its own. Cheap when ``panels`` (from
     ``pipeline.explain(sample)``) is passed in already."""
-    from automask.stats.base import threshold_stat
+    from automask.mask.stats.base import threshold_stat
 
     panels = pipeline.explain(sample) if panels is None else panels
     if not panels:
@@ -299,7 +298,7 @@ def agree_rgb(pred, truth):
 
 def save_agreement(pred, floor, human, run, out, title=""):
     """Two-panel residual figure: pick-vs-residual-target error map + full mask."""
-    from automask.dataset import score
+    from automask.evaluation.dataset import score
 
     target = human & ~floor
     resid = score(pred & ~floor, target)
@@ -324,53 +323,5 @@ def save_agreement(pred, floor, human, run, out, title=""):
     fig.suptitle(title or f"run {run} — masking result", fontsize=13)
     fig.tight_layout(rect=[0, 0, 1, 0.94])
     fig.savefig(out, dpi=100, bbox_inches="tight")
-    plt.close(fig)
-    return out
-
-
-# ── 4. sweeps ─────────────────────────────────────────────────────────────────
-def plot_results_heatmap(csv_path, xcol, ycol, out, metric="mean_iou"):
-    """2-D `metric` heatmap over two swept columns from a sweep results.csv."""
-    import csv
-
-    rows = list(csv.DictReader(open(csv_path)))
-    if not rows:
-        raise ValueError(f"empty results csv: {csv_path}")
-    xs = sorted({float(r[xcol]) for r in rows})
-    ys = sorted({float(r[ycol]) for r in rows})
-    H = np.full((len(ys), len(xs)), np.nan)
-    for r in rows:
-        i = ys.index(float(r[ycol]))
-        j = xs.index(float(r[xcol]))
-        H[i, j] = float(r[metric])
-    fig, ax = plt.subplots(figsize=(1.6 + 1.1 * len(xs), 1.6 + 1.0 * len(ys)))
-    im = ax.imshow(
-        H,
-        origin="lower",
-        aspect="auto",
-        cmap="viridis",
-        extent=[0, len(xs), 0, len(ys)],
-    )
-    bi, bj = np.unravel_index(np.nanargmax(H), H.shape)
-    ax.scatter(
-        [bj + 0.5],
-        [bi + 0.5],
-        marker="*",
-        s=220,
-        color="red",
-        edgecolor="w",
-        label=f"best {metric}={H[bi, bj]:.3f}",
-    )
-    ax.set_xticks(np.arange(len(xs)) + 0.5)
-    ax.set_xticklabels([f"{x:g}" for x in xs])
-    ax.set_yticks(np.arange(len(ys)) + 0.5)
-    ax.set_yticklabels([f"{y:g}" for y in ys])
-    ax.set_xlabel(xcol)
-    ax.set_ylabel(ycol)
-    ax.legend(loc="lower right", fontsize=9)
-    ax.set_title(f"{metric} over ({xcol}, {ycol})")
-    fig.colorbar(im, ax=ax, fraction=0.046, label=metric)
-    fig.tight_layout()
-    fig.savefig(out, dpi=110, bbox_inches="tight")
     plt.close(fig)
     return out

@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
 
-from automask.profile_store import ProfileStore
-from automask.run_profile import RunProfile
+from automask.profiling.profile_store import ProfileStore
+from automask.profiling.run_profile import RunProfile
 
 
 def _profile():
