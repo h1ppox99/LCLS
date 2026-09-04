@@ -19,6 +19,7 @@ the ``automask`` library.
 from __future__ import annotations
 
 from collections import defaultdict
+import os
 from pathlib import Path
 from typing import Any
 
@@ -44,13 +45,15 @@ class Session:
         workdir: str | Path,
         *,
         cache_dir: str | Path | None = None,
+        backend: str | None = None,
     ) -> None:
         # Created lazily by _artifact_dir, so a run that writes nothing (e.g. a
         # pure inspection question) leaves no empty directory behind.
         self.workdir = Path(workdir).expanduser().resolve()
         self.cache_dir = None if cache_dir is None else Path(cache_dir)
+        self.backend = backend or os.environ.get("AUTOMASK_BACKEND") or "auto"
         # Profiles are cached across sessions by run, like ImageStore's reductions.
-        self.profiles_store = ProfileStore()
+        self.profiles_store = ProfileStore(backend=self.backend)
         self._profiles: dict[str, RunProfile] = {}
         self._selections: dict[str, ShotSelection] = {}
         self._pipelines: dict[str, Pipeline] = {}
@@ -134,13 +137,17 @@ class Session:
         from automask.profiling.run_inspection import inspect_run
         from automask.profiling.utils import configure_psana_environment
 
-        configure_psana_environment()
+        configure_psana_environment(self.backend)
+        from automask.io.read_xtc import run_source
+
+        source = run_source(run, self.backend)
         report = inspect_run(
             experiment or EXPERIMENT,
             run,
             detector or JUNGFRAU_NAME,
             detector_source or JUNGFRAU_SOURCE,
             detector_calib_type or JUNGFRAU_CALIB_TYPE,
+            source=source,
             max_events=max_events,
         )
         handle = self.register_profile(report.profile)
@@ -162,7 +169,7 @@ class Session:
 
     def load_profile(self, run: int) -> dict:
         """Reuse a run profile cached by an earlier session, skipping psana."""
-        profile = self.profiles_store.load(int(run))
+        profile = self.profiles_store.load(int(run), backend=self.backend)
         handle = self.register_profile(profile)
         return {
             "profile": handle,
@@ -219,11 +226,13 @@ class Session:
         from automask.profiling.utils import configure_psana_environment
         from automask.viz import show
 
-        configure_psana_environment()
+        configure_psana_environment(self.backend)
         prof = self.profile(profile)
         sel = self.selection(selection)
         sel.resolve(prof)
-        store = ImageStore(cache_dir=self.cache_dir, run_profile=prof)
+        store = ImageStore(
+            cache_dir=self.cache_dir, run_profile=prof, backend=self.backend
+        )
         image = store.reduce(prof.run, sel, reduction)
         counts = store.counts(prof.run, sel, reduction) or sel.describe(prof)
 
@@ -262,13 +271,15 @@ class Session:
         from automask.profiling.utils import configure_psana_environment
         from automask.viz import explain_panels, show, show_mask
 
-        configure_psana_environment()
+        configure_psana_environment(self.backend)
         prof = self.profile(profile)
         sel = self.selection(selection)
         pipe = self.pipeline(pipeline)
         require_run_floor(pipe)
         sel.resolve(prof)
-        store = ImageStore(cache_dir=self.cache_dir, run_profile=prof)
+        store = ImageStore(
+            cache_dir=self.cache_dir, run_profile=prof, backend=self.backend
+        )
         sample = Sample.from_store(prof.run, sel, pipe.needs(), store=store, gain=gain)
         floor = np.asarray(pipe.floor(sample))
         mask = np.asarray(pipe.run(sample, floor=floor))
@@ -350,7 +361,7 @@ class Session:
         from automask.sample.image_store import ImageStore
         from automask.profiling.utils import configure_psana_environment
 
-        configure_psana_environment()
+        configure_psana_environment(self.backend)
         prof = self.profile(profile)
         sel = self.selection(selection)
         pipe = self.pipeline(pipeline)
@@ -361,7 +372,9 @@ class Session:
             else validation_design_from_dict(design)
         )
         sel.resolve(prof)
-        store = ImageStore(cache_dir=self.cache_dir, run_profile=prof)
+        store = ImageStore(
+            cache_dir=self.cache_dir, run_profile=prof, backend=self.backend
+        )
         report = validate_mask(pipe, prof.run, selection=sel, design=spec, store=store)
         handle = self._mint("validation")
         directory = self._artifact_dir(handle)

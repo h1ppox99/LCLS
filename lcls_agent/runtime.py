@@ -76,6 +76,8 @@ async def run_agent(
             "lcls_agent.mcp_server",
             "--workdir",
             str(workdir / SERVER_NAME),
+            "--backend",
+            config.backend,
         ],
     }
     options = config.sdk_options(

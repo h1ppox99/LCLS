@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Literal
 
 PermissionMode = Literal["auto", "dontAsk"]
+Backend = Literal["auto", "local", "slac"]
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 READ_TOOLS = ("Read", "Glob", "Grep")
@@ -42,6 +43,7 @@ class HostConfig:
     permission_mode: PermissionMode = "auto"
     max_turns: int = 20
     max_budget_usd: float = 2.0
+    backend: Backend = "auto"
 
     def __post_init__(self) -> None:
         root = Path(self.root).expanduser().resolve()
@@ -54,6 +56,8 @@ class HostConfig:
             raise ValueError("max_turns must be at least 1")
         if self.max_budget_usd <= 0:
             raise ValueError("max_budget_usd must be positive")
+        if self.backend not in ("auto", "local", "slac"):
+            raise ValueError(f"unsupported automask backend: {self.backend}")
 
     @property
     def resolved_model(self) -> str | None:

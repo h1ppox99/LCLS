@@ -28,13 +28,17 @@ def doctor() -> int:
     checks.append(("python", sys.version_info >= (3, 11), sys.version.split()[0]))
     for module_name, distribution in (
         ("automask", "automask"),
+        ("smalldata_tools", "smalldata_tools"),
         ("claude_agent_sdk", "claude-agent-sdk"),
         ("mcp", "mcp"),
         ("pytest", "pytest"),
     ):
         try:
-            importlib.import_module(module_name)
-            checks.append((module_name, True, _version(distribution)))
+            module = importlib.import_module(module_name)
+            detail = _version(distribution)
+            if detail == "not installed":
+                detail = f"source checkout: {Path(module.__file__).resolve()}"
+            checks.append((module_name, True, detail))
         except Exception as exc:
             checks.append((module_name, False, f"{type(exc).__name__}: {exc}"))
 
@@ -90,12 +94,29 @@ def doctor() -> int:
     required = {
         "python",
         "automask",
+        "psana",
+        "smalldata_tools",
         "claude_agent_sdk",
         "mcp",
         "pytest",
         "bundled Claude CLI",
     }
     required.update(f"skill {name}" for name in SKILL_NAMES)
+    backend = os.environ.get("AUTOMASK_BACKEND", "auto")
+    checks.append(("backend", backend in {"auto", "local", "slac"}, backend))
+    if backend == "local":
+        for name in ("AUTOMASK_XTC_DIR", "AUTOMASK_CALIB_DIR"):
+            value = os.environ.get(name)
+            checks.append(
+                (name, bool(value) and Path(value).is_dir(), value or "unset")
+            )
+            required.add(name)
+    elif backend == "slac":
+        for name in ("SIT_PSDM_DATA", "SIT_ROOT", "SIT_DATA"):
+            value = os.environ.get(name)
+            checks.append((name, bool(value), value or "unset"))
+            required.add(name)
+    required.add("backend")
     failed = False
     for name, ok, detail in checks:
         label = "ok" if ok else "warn"
@@ -139,6 +160,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=float(os.environ.get("LCLS_AGENT_MAX_BUDGET_USD", "2.0")),
     )
     run_parser.add_argument("--output-dir", type=Path, default=None)
+    run_parser.add_argument(
+        "--backend",
+        choices=("auto", "local", "slac"),
+        default=os.environ.get("AUTOMASK_BACKEND", "auto"),
+    )
     return parser
 
 
@@ -153,6 +179,7 @@ def main(argv: list[str] | None = None) -> int:
             permission_mode=args.permission_mode,
             max_turns=args.max_turns,
             max_budget_usd=args.max_budget_usd,
+            backend=args.backend,
         )
         completed = asyncio.run(
             run_agent(args.prompt, config, output_dir=args.output_dir)

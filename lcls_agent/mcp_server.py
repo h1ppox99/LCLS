@@ -20,17 +20,17 @@ def default_workdir(root: str | Path = REPO_ROOT) -> Path:
     return Path(root) / "outputs" / "claude_sessions" / day / session / "automask"
 
 
-def build_server(workdir: str | Path):
+def build_server(workdir: str | Path, backend: str | None = None):
     """Create the existing MCP tool implementation with a fresh Session."""
-    session = Session(workdir)
+    session = Session(workdir, backend=backend)
     server_config, _, _ = build_automask_server(session)
     return server_config["instance"]
 
 
-async def serve(workdir: str | Path) -> None:
+async def serve(workdir: str | Path, backend: str | None = None) -> None:
     from mcp.server.stdio import stdio_server
 
-    server = build_server(workdir)
+    server = build_server(workdir, backend)
     async with stdio_server() as (read_stream, write_stream):
         await server.run(
             read_stream,
@@ -42,13 +42,14 @@ async def serve(workdir: str | Path) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Automask MCP stdio server")
     parser.add_argument("--workdir", type=Path)
+    parser.add_argument("--backend", choices=("auto", "local", "slac"))
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     workdir = default_workdir() if args.workdir is None else args.workdir
-    asyncio.run(serve(workdir.expanduser().resolve()))
+    asyncio.run(serve(workdir.expanduser().resolve(), args.backend))
     return 0
 
 
