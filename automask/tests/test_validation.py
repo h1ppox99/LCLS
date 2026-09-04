@@ -91,9 +91,9 @@ def test_regularizer_parameter_paths():
 
     pipeline = production_pipeline()
     changed = _set_parameter(pipeline, "variance.field_reg.tv.weight", 3.0)
-    changed = _set_parameter(changed, "asic_polish.mask_reg.area_gate.min_area", 250)
+    changed = _set_parameter(changed, "pedestal_z.mask_reg.area_gate.min_area", 250)
     assert _get_parameter(changed, "variance.field_reg.tv.weight") == 3.0
-    assert _get_parameter(changed, "asic_polish.mask_reg.area_gate.min_area") == 250
+    assert _get_parameter(changed, "pedestal_z.mask_reg.area_gate.min_area") == 250
     assert _get_parameter(pipeline, "variance.field_reg.tv.weight") == 4.0
 
 

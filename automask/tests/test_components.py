@@ -25,7 +25,7 @@ from automask.mask.regularization.blob_scale import blob_scale
 from automask.mask.regularization.fill_holes import fill_holes
 from automask.profiling.run_profile import RunProfile
 from automask.selection.shot_selection import Condition, PercentileTrim, ShotSelection
-from automask.mask.stats.asic_polish import median_polish
+from automask.mask.stats.pedestal_z import masked_median_polish
 
 
 # -- regularizers ----------------------------------------------------------
@@ -88,7 +88,7 @@ def test_median_polish_removes_row_and_column_structure():
     rows = rng.normal(scale=50, size=(64, 1))
     cols = rng.normal(scale=50, size=(1, 64))
     block = rows + cols + rng.normal(size=(64, 64))
-    res = median_polish(block)
+    res = masked_median_polish(block, np.zeros(block.shape, bool))
     assert res.std() < 1.5  # striping gone, noise left
 
 
@@ -98,7 +98,7 @@ def test_median_polish_keeps_a_compact_anomaly():
     rng = np.random.default_rng(4)
     block = rng.normal(size=(64, 64)) + np.arange(64)[None, :] * 3.0
     block[20:28, 20:28] += 40.0
-    res = median_polish(block)
+    res = masked_median_polish(block, np.zeros(block.shape, bool))
     assert res[20:28, 20:28].mean() > 30.0
 
 
@@ -159,19 +159,23 @@ def test_pipeline_rejects_duplicate_channel_labels():
     assert [c.label for c in named.channels] == ["blackhat", "wide"]
 
 
-def test_floor_channel_is_not_gated_by_real(monkeypatch):
+def test_floor_channel_is_not_gated_by_real():
     """A dead pixel reads zero, so gating the floor by `real` would erase exactly
     the pixels the floor exists to mask."""
-    import automask.mask.stats.status_as_mask as status_stat
     from automask.sample import Sample
     from automask.mask.stats.status_as_mask import StatusAsMaskParams
 
-    monkeypatch.setattr(status_stat, "panel_to_asm", lambda panel, run: panel[0])
     mean = np.ones((5, 5))
     mean[2, 2] = 0.0  # dead pixel: no value, so not `real`
     status = np.ones((1, 5, 5), dtype=np.uint8)
     status[0, 2, 2] = 0  # psana: 0 == bad
-    sample = Sample(run=475, arrays={"mean": mean, "status_as_mask": status})
+    row, col = np.indices((5, 5))
+    sample = Sample(
+        run=475,
+        arrays={"mean": mean, "status_as_mask": status},
+        ix=row[None],
+        iy=col[None],
+    )
 
     assert not sample.real[2, 2]
     floor = Channel("status_as_mask", StatusAsMaskParams(pad=0), field_reg=None).pick(
@@ -209,9 +213,13 @@ def test_image_store_profiles_each_run_once(tmp_path, monkeypatch):
 
     calls = []
 
-    def profile_run(run):
+    def profile_run(run, source=None):
         calls.append(run)
         return RunProfile(run, 0, [], {}, {}, [])
+
+    monkeypatch.setattr(
+        "automask.io.read_xtc.run_source", lambda run, backend=None: object()
+    )
 
     monkeypatch.setattr(utils, "profile_run_values", profile_run)
     store = ImageStore(cache_dir=tmp_path)

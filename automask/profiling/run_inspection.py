@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict
 
-from automask.io.read_xtc import local_run_source
+from automask.io.read_xtc import run_source
 from automask.profiling.run_profile import RunProfile
 from automask.profiling.utils import (
     detector_geometry,
@@ -196,9 +196,14 @@ def inspect_run(
     detector_set=None,
     max_events=None,
 ):
-    source = source or local_run_source(run)
+    source = source or run_source(run)
     content = list_experiment_content(
-        experiment, run, detector, detector_source, detector_calib_type
+        experiment,
+        run,
+        detector,
+        detector_source,
+        detector_calib_type,
+        source=source,
     )
     profile = profile_run_values(
         run,

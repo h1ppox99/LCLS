@@ -109,6 +109,8 @@ def test_runtime_streams_answer_and_returns_result(tmp_path):
             "lcls_agent.mcp_server",
             "--workdir",
             str(tmp_path / "run/automask"),
+            "--backend",
+            "auto",
         ]
         yield AssistantMessage(content=[TextBlock("done")], model="test-model")
         yield ResultMessage(

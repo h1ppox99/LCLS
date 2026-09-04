@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from automask.io.psana1 import Psana1RunSource
-from automask.io.read_xtc import detector_calibration
+from automask.io.read_xtc import detector_calibration, run_source
 
 
 class FakeDetector:
@@ -118,3 +118,23 @@ def test_gain_stage_is_read_from_the_constant_not_assumed(tmp_path, monkeypatch)
     assert detector_calibration(12, "status_as_mask", source=source).shape == (2, 2, 2)
     with pytest.raises(ValueError, match="gain stages"):
         detector_calibration(12, "pedestals", gain=7, source=source)
+
+
+def test_run_source_selects_explicit_or_slac_backend(tmp_path, monkeypatch):
+    xtc = tmp_path / "xtc"
+    calib = tmp_path / "calib"
+    xtc.mkdir()
+    calib.mkdir()
+    stream = xtc / "xppl1016922-r0012-s00-c00.xtc"
+    stream.touch()
+    monkeypatch.setenv("AUTOMASK_XTC_DIR", str(xtc))
+    monkeypatch.setenv("AUTOMASK_CALIB_DIR", str(calib))
+
+    local = run_source(12, "local")
+    assert local.backend == "local"
+    assert local.files == (stream,)
+    assert local.calib_dir == calib
+
+    assert run_source(12, "auto").backend == "local"
+    assert run_source(13, "auto").backend == "slac"
+    assert run_source(12, "slac").dataset == "exp=xppl1016922:run=12:smd"

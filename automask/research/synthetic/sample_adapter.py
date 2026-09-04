@@ -111,16 +111,14 @@ def corrupt_sample(sample, name: str, rng, params: dict, region):
         # current region of sensor. Geometry is drawn in assembled space (so the
         # injected mask is comparable with the other artifacts and the reference)
         # and mapped into native panel geometry to corrupt the constant itself.
-        from automask.sample.geometry import asm_to_panel
-
         p.setdefault("shape_kind", p.pop("shape", "random"))
         amplitude_sigma = p.pop("amplitude_sigma", 8.0)
         profile, core = hot_patch_profile(grid, rng, **p)
         ped = np.array(sample.pedestals, dtype=np.float64, copy=True)
-        valid_panel = asm_to_panel(region, sample.run)
+        valid_panel = sample.asm_to_panel(region)
         _, sd = _robust_stats(ped[valid_panel])
         ped[valid_panel] += (
-            amplitude_sigma * sd * asm_to_panel(profile, sample.run)[valid_panel]
+            amplitude_sigma * sd * sample.asm_to_panel(profile)[valid_panel]
         )
         updates = {"pedestals": ped}
         injected = core & region

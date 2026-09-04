@@ -2,8 +2,17 @@ import os
 import sys
 
 import numpy as np
+import pytest
 
 import automask.profiling.utils as utils
+
+
+def test_slac_environment_requires_facility_resolver_variables(monkeypatch):
+    for name in ("SIT_PSDM_DATA", "SIT_ROOT", "SIT_DATA"):
+        monkeypatch.delenv(name, raising=False)
+
+    with pytest.raises(RuntimeError, match="standard LCLS psana environment"):
+        utils.configure_psana_environment("slac")
 
 
 def test_configure_psana_environment_adds_smalldata_to_running_kernel(

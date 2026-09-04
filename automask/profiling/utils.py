@@ -9,12 +9,11 @@ from pathlib import Path
 
 import numpy as np
 
-from automask.io.read_xtc import JUNGFRAU_NAME, XTC_DIR, calib_dir, local_run_source
+from automask.io.read_xtc import JUNGFRAU_NAME, calib_dir, run_source
 from automask.io.lcls1_adapters import Lcls1DetectorAdapters
 from automask.profiling.run_profile import RunProfile
 
-ROOT = Path(__file__).resolve().parent.parent
-COLON = chr(0xF022)
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 _PAYLOAD_ACCESSOR_VETO = {
     "TypeId",
@@ -38,10 +37,9 @@ def _payload_type_name(payload_type):
     return f"{module}.{payload_type.__name__}"
 
 
-def configure_psana_environment():
-    """Configure psana and optional SLAC tools in the current interpreter."""
-    repo_root = Path(__file__).resolve().parent.parent
-    local_config = repo_root / "psana_env.local"
+def configure_psana_environment(backend=None):
+    """Apply repo-local runtime paths without emulating the SLAC data tree."""
+    local_config = REPO_ROOT / "psana_env.local"
     config = {}
     if local_config.exists():
         for raw_line in local_config.read_text().splitlines():
@@ -51,20 +49,43 @@ def configure_psana_environment():
             key, value = line.split("=", 1)
             config[key.strip()] = value.strip().strip(chr(34) + chr(39))
 
-    psdm = os.environ.get("SIT_PSDM_DATA") or config.get("PSANA_PSDM")
-    if not psdm:
-        raise RuntimeError(
-            f"Cannot configure psana: SIT_PSDM_DATA is unset and {local_config} "
-            "does not define PSANA_PSDM. Configure psana_env.local as described "
-            "in docs/PSANA_XTC.md, then restart the kernel."
-        )
-    psdm = str(Path(psdm).expanduser().resolve())
-    os.environ["SIT_PSDM_DATA"] = psdm
-    os.environ.setdefault("SIT_ROOT", str(Path(psdm) / "sit_root"))
-    os.environ.setdefault("SIT_DATA", str(Path(psdm) / "data"))
-    environment = {
-        name: os.environ[name] for name in ("SIT_PSDM_DATA", "SIT_ROOT", "SIT_DATA")
-    }
+    for name in (
+        "AUTOMASK_BACKEND",
+        "AUTOMASK_XTC_DIR",
+        "AUTOMASK_CALIB_DIR",
+        "AUTOMASK_CACHE_DIR",
+    ):
+        if name not in os.environ and config.get(name):
+            os.environ[name] = config[name]
+
+    selected = (backend or os.environ.get("AUTOMASK_BACKEND") or "auto").lower()
+    if selected not in {"auto", "local", "slac"}:
+        raise ValueError(f"invalid automask backend {selected!r}")
+    if selected == "local":
+        calibration = os.environ.get("AUTOMASK_CALIB_DIR")
+        if not calibration:
+            raise RuntimeError("AUTOMASK_CALIB_DIR is required for the local backend")
+        data_root = str(Path(calibration).expanduser().resolve().parent)
+        os.environ.setdefault("SIT_ROOT", data_root)
+        os.environ.setdefault("SIT_PSDM_DATA", data_root)
+    elif selected == "slac":
+        missing = [
+            name
+            for name in ("SIT_PSDM_DATA", "SIT_ROOT", "SIT_DATA")
+            if not os.environ.get(name)
+        ]
+        if missing:
+            raise RuntimeError(
+                "SLAC backend requires the standard LCLS psana environment; "
+                f"missing {', '.join(missing)}"
+            )
+    environment = {"AUTOMASK_BACKEND": selected}
+    for name in ("AUTOMASK_XTC_DIR", "AUTOMASK_CALIB_DIR", "AUTOMASK_CACHE_DIR"):
+        if name in os.environ:
+            environment[name] = os.environ[name]
+    for name in ("SIT_PSDM_DATA", "SIT_ROOT", "SIT_DATA"):
+        if name in os.environ:
+            environment[name] = os.environ[name]
 
     checkout = os.environ.get("SMALLDATA_TOOLS") or config.get("SMALLDATA_TOOLS")
     if checkout:
@@ -95,9 +116,9 @@ def _human_bytes(n_bytes):
         value /= 1024
 
 
-def _xtc_inventory(experiment, run):
+def _xtc_inventory(experiment, run, source):
     pattern = re.compile(r"-r(?P<run>\d+)-s(?P<stream>\d+)-c(?P<chunk>\d+)\.xtc$")
-    files = sorted(Path(XTC_DIR).glob(f"{experiment}-r{run:04d}-s*-c*.xtc"))
+    files = sorted(source.files)
     rows = []
     for path in files:
         match = pattern.search(path.name)
@@ -118,13 +139,8 @@ def _xtc_inventory(experiment, run):
     }
 
 
-def _calibration_file_inventory(run, detector_type, detector_source):
-    source_dir = (
-        Path(ROOT)
-        / "calib"
-        / detector_type.replace(":", COLON)
-        / detector_source.replace(":", COLON)
-    )
+def _calibration_file_inventory(run, detector_type, detector_source, root):
+    source_dir = Path(root) / detector_type / detector_source
     rows = []
     if not source_dir.exists():
         return rows
@@ -154,10 +170,13 @@ def _calibration_file_inventory(run, detector_type, detector_source):
 
 
 def list_experiment_content(
-    experiment, run, detector, detector_source, detector_calib_type
+    experiment, run, detector, detector_source, detector_calib_type, source=None
 ):
-    xtc = _xtc_inventory(experiment, run)
-    calibration = _calibration_file_inventory(run, detector_calib_type, detector_source)
+    source = source or run_source(run)
+    xtc = _xtc_inventory(experiment, run, source)
+    calibration = _calibration_file_inventory(
+        run, detector_calib_type, detector_source, calib_dir(source)
+    )
     return {
         "experiment": experiment,
         "run": int(run),
@@ -332,7 +351,7 @@ def profile_run_values(
     max_events=None,
 ) -> RunProfile:
     """Profile one run through smalldata_tools and psana payload discovery."""
-    source = source or local_run_source(run)
+    source = source or run_source(run)
     data_source = source.open()
     detector_set = detector_set or Lcls1DetectorAdapters(data_source)
     payloads = {}
@@ -511,7 +530,7 @@ def profile_run_values(
 def detector_geometry(run, detector_name=JUNGFRAU_NAME, source=None):
     import psana
 
-    source = source or local_run_source(run)
+    source = source or run_source(run)
     data_source = source.open()
     event = next(data_source.events(), None)
     if event is None:
@@ -523,8 +542,8 @@ def detector_geometry(run, detector_name=JUNGFRAU_NAME, source=None):
     iy = detector.indexes_y(run)
     geometry = {
         "detector": detector_name,
-        "psana calibration path": calib_dir(),
-        "psana calibration path exists": os.path.isdir(calib_dir()),
+        "psana calibration path": calib_dir(source),
+        "psana calibration path exists": os.path.isdir(calib_dir(source)),
         "native shape": tuple(raw.shape) if raw is not None else None,
         "raw dtype": str(raw.dtype) if raw is not None else None,
         "calibrated frame available": calibrated is not None,

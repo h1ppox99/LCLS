@@ -18,7 +18,7 @@ combiner: union
 output_dir: automask/outputs/synthetic_pipeline
 seed: 0
 n_per_artifact: 3
-rotations: [0]                    # production pipeline now includes asic_polish,
+rotations: [0]                    # production pipeline now includes pedestal_z,
                                    # which needs `pedestals` (panel-form -- dropped
                                    # under any non-zero rotation, see rotate_sample)
 
@@ -49,7 +49,7 @@ artifacts:
 
   # 4. hot patch -- additive bright region injected into the PEDESTAL constants,
   #    the polarity of a high-dark-current sensor defect (the real one on run 475).
-  #    Only asic_polish reads `pedestals`, so this case scores that channel; the
+  #    Only pedestal_z reads `pedestals`, so this case scores that channel; the
   #    production intensity/dispersion detectors are out of polarity and will
   #    (correctly) score near zero on it, exactly as `streak` does for them.
   #    `axis_ratio` away from 1.0 is the point: it measures how much a compact-blob

@@ -65,6 +65,10 @@ class Psana1RunSource:
         suffix = ":smd" if self.smd else ""
         return f"exp={self.experiment}:run={self.run}{suffix}"
 
+    @property
+    def backend(self) -> str:
+        return "local" if self.files else "slac"
+
     def open(self):
         """Create the psana datasource described by this object."""
         import psana

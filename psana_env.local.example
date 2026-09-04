@@ -1,0 +1,12 @@
+# Off-site/local explicit-file backend
+PSANA_ENV=/path/to/software/envs/automask-py311
+PSANA_CONDA_SH=/path/to/software/miniforge/etc/profile.d/conda.sh
+SMALLDATA_TOOLS=/path/to/software/src/smalldata_tools
+AUTOMASK_BACKEND=local
+AUTOMASK_XTC_DIR=/path/to/xppl1016922/xtc
+AUTOMASK_CALIB_DIR=/path/to/xppl1016922/calib
+AUTOMASK_CACHE_DIR=/path/to/writable/cache
+
+# At SLAC, first source the standard LCLS psana setup, use
+# AUTOMASK_BACKEND=slac, and omit the three local data paths. Its SIT_* values
+# are used directly.

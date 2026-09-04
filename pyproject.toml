@@ -17,11 +17,12 @@ dependencies = [
     "scikit-image",
     "matplotlib",
     "pyFAI",
-    "pytest"
+    "hydra-core",
+    "tifffile",
+    "pytest",
+    "claude-agent-sdk==0.2.139",
+    "mcp==1.29.0",
 ]
-
-[project.optional-dependencies]
-agent = ["claude-agent-sdk==0.2.139", "mcp==1.29.0"]
 
 [project.scripts]
 lcls-agent = "lcls_agent.cli:main"
@@ -29,6 +30,9 @@ lcls-agent = "lcls_agent.cli:main"
 [tool.setuptools.packages.find]
 include = ["automask*", "lcls_agent*"]
 namespaces = false
+
+[tool.setuptools.package-data]
+automask = ["data/manifest.json", "data/masks/*.npy", "data/masks/*.md"]
 
 [tool.ruff]
 target-version = "py311"

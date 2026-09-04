@@ -51,6 +51,29 @@ def asm_shape(run: int) -> tuple[int, int]:
     return int(ix.max()) + 1, int(iy.max()) + 1
 
 
+def assemble_panel(
+    panel: np.ndarray, ix: np.ndarray, iy: np.ndarray, fill=0
+) -> np.ndarray:
+    """Scatter a native panel array with explicit psana index maps."""
+    if panel.shape != ix.shape or ix.shape != iy.shape:
+        raise ValueError(
+            f"panel and index-map shapes must match, got "
+            f"{panel.shape}, {ix.shape}, {iy.shape}"
+        )
+    shape = (int(ix.max()) + 1, int(iy.max()) + 1)
+    out = np.full(shape, fill, dtype=panel.dtype)
+    out[ix, iy] = panel
+    return out
+
+
+def gather_panel(asm: np.ndarray, ix: np.ndarray, iy: np.ndarray) -> np.ndarray:
+    """Gather an assembled canvas with explicit psana index maps."""
+    shape = (int(ix.max()) + 1, int(iy.max()) + 1)
+    if asm.shape != shape:
+        raise ValueError(f"expected assembled shape {shape}, got {asm.shape}")
+    return asm[ix, iy]
+
+
 def panel_to_asm(panel: np.ndarray, run: int, fill=0) -> np.ndarray:
     """Scatter a native `(2, 512, 1024)` array into this run's assembled canvas.
 
@@ -58,12 +81,7 @@ def panel_to_asm(panel: np.ndarray, run: int, fill=0) -> np.ndarray:
     uses (see the axis-order note above). Pixels no panel maps onto keep `fill`.
     """
     ix, iy = index_maps(run)
-    if panel.shape != ix.shape:
-        raise ValueError(f"expected panel shape {ix.shape}, got {panel.shape}")
-    shape = (int(ix.max()) + 1, int(iy.max()) + 1)
-    out = np.full(shape, fill, dtype=panel.dtype)
-    out[ix, iy] = panel
-    return out
+    return assemble_panel(panel, ix, iy, fill=fill)
 
 
 def asm_to_panel(asm: np.ndarray, run: int) -> np.ndarray:
@@ -73,10 +91,7 @@ def asm_to_panel(asm: np.ndarray, run: int) -> np.ndarray:
     pixels outside any panel are simply not read.
     """
     ix, iy = index_maps(run)
-    shape = (int(ix.max()) + 1, int(iy.max()) + 1)
-    if asm.shape != shape:
-        raise ValueError(f"expected assembled shape {shape}, got {asm.shape}")
-    return asm[ix, iy]
+    return gather_panel(asm, ix, iy)
 
 
 if __name__ == "__main__":

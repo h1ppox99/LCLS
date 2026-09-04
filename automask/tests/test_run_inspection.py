@@ -124,7 +124,7 @@ def test_inspect_run_builds_one_report(monkeypatch):
     monkeypatch.setattr(
         run_inspection,
         "list_experiment_content",
-        lambda *args: expected.content,
+        lambda *args, **kwargs: expected.content,
     )
 
     def profile(run, **kwargs):

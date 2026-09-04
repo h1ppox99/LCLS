@@ -1,0 +1,21 @@
+name: automask-py311
+channels:
+  - lcls-i
+  - conda-forge
+dependencies:
+  - python=3.11
+  - psana=4.0.66
+  - numpy=1.26.4
+  - h5py=3.13.0
+  - scipy=1.17.1
+  - scikit-image=0.26.0
+  - matplotlib=3.9.1
+  - pyfai=2026.5.0
+  - hydra-core=1.3.5
+  - tifffile=2025.12.12
+  - pytest=9.1.1
+  - ruff=0.16.0
+  - pip
+  - pip:
+      - claude-agent-sdk==0.2.139
+      - mcp==1.29.0

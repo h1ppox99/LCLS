@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from dataclasses import asdict
 from pathlib import Path
 from typing import Literal, Optional, Tuple
@@ -13,7 +14,7 @@ import numpy as np
 from automask.profiling.run_profile import RunProfile
 from automask.selection.shot_selection import ShotSelection
 
-ROOT = Path(__file__).resolve().parents[1]
+PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 
 Reduction = Literal["mean", "std", "mad"]
 Form = Literal["asm", "panel"]
@@ -90,21 +91,54 @@ class ImageStore:
         self,
         cache_dir: Path | None = None,
         run_profile: RunProfile | None = None,
+        source=None,
+        backend: str | None = None,
     ):
+        cache_root = Path(
+            os.environ.get("AUTOMASK_CACHE_DIR") or PACKAGE_ROOT / "cache"
+        )
+        self.backend = backend or os.environ.get("AUTOMASK_BACKEND") or "auto"
         self.cache_dir = (
-            Path(cache_dir) if cache_dir else (ROOT / "automask" / "cache" / "images")
+            Path(cache_dir) if cache_dir else cache_root / "images" / self.backend
         )
         self._profiles = {}
+        self._sources = {}
+        self._geometry = {}
         if run_profile is not None:
             self._profiles[run_profile.run] = run_profile
+        if source is not None:
+            self._sources[source.run] = source
+
+    def source(self, run: int):
+        """Resolve the data source used consistently for every operation on a run."""
+        if run in self._sources:
+            return self._sources[run]
+        profile = self._profiles.get(run)
+        if profile is not None and profile.source is not None:
+            self._sources[run] = profile.source
+        else:
+            from automask.io.read_xtc import run_source
+
+            self._sources[run] = run_source(run, self.backend)
+            if profile is not None:
+                profile.source = self._sources[run]
+        return self._sources[run]
 
     def profile(self, run: int) -> RunProfile:
         """Return one canonical profile, scanning each run at most once."""
         if run not in self._profiles:
             from automask.profiling.utils import profile_run_values
 
-            self._profiles[run] = profile_run_values(run)
+            self._profiles[run] = profile_run_values(run, source=self.source(run))
         return self._profiles[run]
+
+    def geometry(self, run: int) -> tuple[np.ndarray, np.ndarray]:
+        """Return source-bound panel index maps, cached for this store."""
+        if run not in self._geometry:
+            from automask.io.read_xtc import panel_geometry
+
+            self._geometry[run] = panel_geometry(run, source=self.source(run))
+        return self._geometry[run]
 
     @staticmethod
     def _validate_reduction(selection, reduction, form) -> None:
@@ -242,9 +276,7 @@ class ImageStore:
     def _materialize_calibration(self, run: int, constant: str, gain: int) -> None:
         from automask.io.read_xtc import detector_calibration
 
-        profile = self._profiles.get(run)
-        source = profile.source if profile is not None else None
-        panel = detector_calibration(run, constant, gain=gain, source=source)
+        panel = detector_calibration(run, constant, gain=gain, source=self.source(run))
         stub = _calibration_stub(run, constant, gain)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         np.save(self.cache_dir / f"{stub}_panel.npy", panel)
@@ -298,17 +330,13 @@ class ImageStore:
                 (self.cache_dir / f"{stub}_meta.json").write_text(json.dumps(metadata))
 
     def _materialize_mean_std(self, run: int, selection: ShotSelection) -> None:
-        from automask.io.read_xtc import panel_geometry
-
         mean_panel, std_panel, counts = self._accumulate(run, selection)
-        ix, iy = panel_geometry(run, source=self.profile(run).source)
+        ix, iy = self.geometry(run)
         self._save_pair(
             run, selection, (("mean", mean_panel), ("std", std_panel)), ix, iy, counts
         )
 
     def _materialize_mad(self, run: int, selection: ShotSelection) -> None:
-        from automask.io.read_xtc import panel_geometry
-
         stub = _reduction_stub(run, selection, "mad")
         stage_path = self.cache_dir / f"{stub}_frames.h5"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -317,7 +345,7 @@ class ImageStore:
             mad_panel = self._robust_reduce(stage_path)
         finally:
             stage_path.unlink(missing_ok=True)
-        ix, iy = panel_geometry(run, source=self.profile(run).source)
+        ix, iy = self.geometry(run)
         self._save_pair(
             run,
             selection,
@@ -328,10 +356,8 @@ class ImageStore:
         )
 
     def _materialize_fold_mean_std(self, run, selection, n_folds, strategy) -> None:
-        from automask.io.read_xtc import panel_geometry
-
         full, folds, counts = self._accumulate_folds(run, selection, n_folds, strategy)
-        ix, iy = panel_geometry(run, source=self.profile(run).source)
+        ix, iy = self.geometry(run)
         self._save_folds(
             run,
             selection,
@@ -347,8 +373,6 @@ class ImageStore:
         )
 
     def _materialize_fold_mad(self, run, selection, n_folds, strategy) -> None:
-        from automask.io.read_xtc import panel_geometry
-
         stub = _reduction_stub(run, selection, "mad")
         stage_path = self.cache_dir / f"{stub}_fold_frames.h5"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -359,7 +383,7 @@ class ImageStore:
             full, folds = self._robust_reduce_folds(stage_path, n_folds)
         finally:
             stage_path.unlink(missing_ok=True)
-        ix, iy = panel_geometry(run, source=self.profile(run).source)
+        ix, iy = self.geometry(run)
         self._save_folds(
             run,
             selection,

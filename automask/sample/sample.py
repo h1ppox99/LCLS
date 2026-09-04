@@ -39,6 +39,8 @@ class Sample:
     run: int
     arrays: Dict[str, np.ndarray] = field(default_factory=dict)
     selection: Optional[ShotSelection] = None
+    ix: Optional[np.ndarray] = field(default=None, repr=False, compare=False)
+    iy: Optional[np.ndarray] = field(default=None, repr=False, compare=False)
 
     def __getattr__(self, name: str) -> np.ndarray:
         arrays = self.__dict__.get("arrays") or {}
@@ -63,8 +65,31 @@ class Sample:
         this run's shots, so consistency folds must not perturb them.
         """
         return Sample(
-            run=self.run, arrays={**self.arrays, **arrays}, selection=self.selection
+            run=self.run,
+            arrays={**self.arrays, **arrays},
+            selection=self.selection,
+            ix=self.ix,
+            iy=self.iy,
         )
+
+    def _index_maps(self) -> tuple[np.ndarray, np.ndarray]:
+        if self.ix is not None and self.iy is not None:
+            return self.ix, self.iy
+        from automask.sample.geometry import index_maps
+
+        return index_maps(self.run)
+
+    def panel_to_asm(self, panel: np.ndarray, fill=0) -> np.ndarray:
+        """Scatter native data using this sample's source-bound geometry."""
+        from automask.sample.geometry import assemble_panel
+
+        return assemble_panel(panel, *self._index_maps(), fill=fill)
+
+    def asm_to_panel(self, asm: np.ndarray) -> np.ndarray:
+        """Gather assembled data using this sample's source-bound geometry."""
+        from automask.sample.geometry import gather_panel
+
+        return gather_panel(asm, *self._index_maps())
 
     @cached_property
     def center(self) -> Tuple[float, float]:
@@ -99,4 +124,11 @@ class Sample:
                 if name in REDUCTIONS
                 else store.calibration(run, name, gain=gain)
             )
-        return cls(run=int(run), arrays=arrays, selection=selection)
+        ix, iy = store.geometry(run) if hasattr(store, "geometry") else (None, None)
+        return cls(
+            run=int(run),
+            arrays=arrays,
+            selection=selection,
+            ix=ix,
+            iy=iy,
+        )

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -23,17 +24,23 @@ import numpy as np
 from automask.io.psana1 import Psana1RunSource
 from automask.profiling.run_profile import RunProfile
 
-ROOT = Path(__file__).resolve().parents[1]
+PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_VERSION = 2
 
 
 class ProfileStore:
     """Save-or-load run profiles, one content directory per run."""
 
-    def __init__(self, cache_dir: Path | None = None):
-        self.cache_dir = (
-            Path(cache_dir) if cache_dir else ROOT / "automask" / "cache" / "profiles"
+    def __init__(self, cache_dir: Path | None = None, *, backend: str | None = None):
+        cache_root = Path(
+            os.environ.get("AUTOMASK_CACHE_DIR") or PACKAGE_ROOT / "cache"
         )
+        self.backend = backend
+        if cache_dir is None:
+            self.backend = backend or os.environ.get("AUTOMASK_BACKEND") or "auto"
+            self.cache_dir = cache_root / "profiles" / self.backend
+        else:
+            self.cache_dir = Path(cache_dir)
 
     def path(self, run: int) -> Path:
         return self.cache_dir / f"run{int(run):04d}"
@@ -41,16 +48,31 @@ class ProfileStore:
     def has(self, run: int) -> bool:
         return (self.path(run) / "profile.json").is_file()
 
-    def load(self, run: int) -> RunProfile:
+    def load(self, run: int, *, source=None, backend: str | None = None) -> RunProfile:
         directory = self.path(run)
         if not (directory / "profile.json").is_file():
             raise FileNotFoundError(
                 f"no cached profile for run {int(run):04d} under {self.cache_dir}"
             )
-        return self._read(directory)
+        profile = self._read(directory)
+        stale_local = (
+            profile.source is not None
+            and profile.source.files
+            and not all(path.is_file() for path in profile.source.files)
+        )
+        selected_backend = backend or self.backend
+        if source is not None:
+            profile.source = source
+        elif selected_backend is not None or stale_local:
+            from automask.io.read_xtc import run_source
 
-    def try_load(self, run: int) -> RunProfile | None:
-        return self.load(run) if self.has(run) else None
+            profile.source = run_source(run, selected_backend)
+        return profile
+
+    def try_load(
+        self, run: int, *, source=None, backend: str | None = None
+    ) -> RunProfile | None:
+        return self.load(run, source=source, backend=backend) if self.has(run) else None
 
     def save(self, profile: RunProfile) -> Path:
         directory = self.path(profile.run)
