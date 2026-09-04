@@ -17,12 +17,12 @@ The package mirrors the four masking stages plus two seams:
 | `io/` | the psana seam (XTC readers, calibration) |
 | `interface/` | the agent surface: capability `catalog` + dict⇄object `recipes` |
 | `viz.py` | figures |
-| `research/` | dev/research tooling, off the runtime path (psdm setup, synthetic, hand-mask editor) |
+| `research/` | dev/research tooling, off the runtime path (synthetic studies, hand-mask editor) |
 
 ## Image cache
 
-The ImageStore cache is intentionally gitignored. It can be prewarmed, or
-populated on demand by the masking pipeline:
+The ImageStore cache is intentionally gitignored. Set `AUTOMASK_CACHE_DIR` to
+keep it on scratch/group storage. It can be prewarmed or populated on demand:
 
 ```bash
 python -m automask.producers.build_images
@@ -49,31 +49,20 @@ reads — reductions (`mean`/`std`/`mad`) or psana calibration accessors
 (`Pipeline` and the registries). The evaluation contract is in
 `docs/EVALUATION.md`.
 
-## Data (frozen, numpy-only)
+## Reference data
 
-All arrays come in two forms: **`_asm`** = assembled image `(1064, 1030)` (what
-`Mask.npy` is), and **`_panel`** = raw Jungfrau geometry `(2, 512, 1024)`.
-All masks are **bool with `True == masked (excluded)`**.
-
-### Reference masks (`data/masks/`)
-| name | %masked (asm) | what it is |
-|---|---|---|
-| `human_Mask` | 13.86% | **run-475 target only** — notebook dead-pixel + geometry mask |
-| `cmask_run{389,475}` | 1.90% | production combined bad-pixel mask |
-| `mask_run{389,475}`  | 1.98% | production bad-pixel mask |
-| `statusMask_run{389,475}` | 0.42% | historical freeze of `pixel_status`; the pipeline now reads this from psana per run (verified bit-identical) |
-
-Note the two families measure different things: `human_Mask` includes **geometry**
-regions; the `*mask*` family is **bad pixels only**. A full auto-masker must
-produce both components (bad-pixel detection **+** geometry/zero-region detection).
-There is no verified run-389 hand mask; evaluation currently falls back to the
-shared run-475 target, so run-389 real-mask scores are provisional.
+Human masks belong in `data/masks/` as boolean `_asm.npy` arrays with
+`True == masked`. The historical run-475 file is not present in this checkout
+and was never committed. Labelled evaluation therefore has no default runs
+until that original asset is recovered; consistency and perturbation validation
+remain available without it. See `data/masks/README.md`.
 
 ## Dependencies
 
-Runtime dependencies are declared in the repository-root `pyproject.toml`.
-`psana` remains external and is needed for production XTC access; `h5py` is
-used only for bounded temporary staging during robust reductions.
+Runtime dependencies, including the required Claude SDK/MCP host, are declared
+in the repository-root `pyproject.toml`. The validated psana/compiled stack is
+captured in `environment.yml`; `h5py` is used for bounded temporary staging
+during robust reductions.
 
 ## Scoring against references
 

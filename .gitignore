@@ -1,25 +1,23 @@
 # --- LCLS data mirror (large, not source) ---
 /calib
 /xtc
-/hdf5/
-/stats/
-/results/
+
+# caches
+.vscode/
+.ruff_cache/
+.pytest_cache/
 
 # --- automask reference masks & generated outputs ---
 # automask/data/ now holds only the hand-drawn reference masks (data/masks/);
 # every array a pipeline consumes is computed from XTC via ImageStore.
-automask/data/
-automask/outputs/
-automask/cache/
+automask/cache
+/automask/automask/cache/
 /outputs/
 
 # --- bulk archives ---
 *.tar
 *.tar.gz
 *.cxi
-
-# --- lab reference heavy assets ---
-xpp_sharing/Image_data/
 
 # --- harness / editor ---
 # Ignore local Claude state while keeping versioned project skills.
@@ -33,6 +31,7 @@ xpp_sharing/Image_data/
 *.hdf5
 *.npy
 *.npz
+!automask/data/masks/*.npy
 
 # --- python ---
 __pycache__/
@@ -45,4 +44,6 @@ dist/
 
 # machine-specific psana paths (see psana_env.sh header)
 psana_env.local
-experiment_logs/
+
+# --- other ---
+tmp/

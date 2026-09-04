@@ -55,6 +55,32 @@ Look at the field histogram against its cut.
   will not separate, the artifact may not be maskable from this evidence —
   escalate rather than inventing a cut.
 
+## Detecting a compact defect: the funnel
+
+A compact defect is found through stages: stat field → `blob_scale` aggregate →
+threshold → connected components → `area_gate`. `detection_funnel` (and the
+per-channel `explain.png`) show each stage. The rule: **a defect visible in the
+stat field but absent after a later stage means that stage is mis-parametrized —
+never that there is nothing to mask.**
+
+Adjust one knob at a time, coarse to fine, re-reading the funnel after each:
+
+- **`k`** — from the aggregated distribution's bulk/tail knee.
+- **`blob_scale.radii`** — if a defect visible in the stat field does not separate
+  in the aggregate, add a radius near its apparent size.
+- **`blob_scale.aspects` / `angles`** — only if an *elongated* defect (ellipse,
+  rectangle) still under-separates; the default is a disk. The whole bank is
+  applied at once (pixelwise `max` over every radius×aspect×angle, not one shape
+  per pixel), so it never hides a defect — but each added kernel raises the noise
+  floor and adds false positives. Use the smallest bank that works (e.g.
+  `aspects=(1,2)`, `angles=(0,90)`) and **re-read `k`** afterward: the bulk→tail
+  knee moves right as the bank widens.
+- **`area_gate.min_area`** — from the component-size gap; keep it **size-only**.
+
+Never gate this by shape: a circularity/eccentricity cut deletes irregular
+defects (measured worse here). Elongation is handled in the aggregation
+(`aspects`), not by rejecting components.
+
 ## Null and near-null channels
 
 A channel masking 0 (or very few) px is **not** automatically clean — it is
@@ -63,7 +89,7 @@ one. Distinguish them; never read a null as reassurance.
 
 - A **pick** (`hough_lines`) legitimately returns 0 when there is simply no line.
   If this is what is observed, then it needs no action.
-- A **field** channel (`variance`, `asic_polish`, …) returning ~0 is a red flag
+- A **field** channel (`variance`, `pedestal_z`, …) returning ~0 is a red flag
   whenever the selection image shows structure it should catch — e.g. `variance`
   (low) empty while a dark band/shadow is visible. The likely cause is `k`
   landing just past the artifact, not an absent artifact.

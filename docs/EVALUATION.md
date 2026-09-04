@@ -50,18 +50,25 @@ agreement with ground truth, and v1 applies no pass/fail thresholds.
 
 ## 2. Choose default parameters with labels
 
-The runs split chronologically — fit: 378, 389; validation: 396, 475. Tune only
-on the fit runs, rank candidates by residual IoU (pixels added beyond the shared
-floor), then measure the chosen configuration once on validation. Validation
-performance is the reported estimate and must not be used to revise parameters.
+Labelled evaluation uses only masks actually present in
+`automask/data/masks/`, split chronologically into fit and validation sets. Tune
+only on the fit runs, rank candidates by residual IoU (pixels added beyond the
+shared floor), then measure the chosen configuration once on validation.
+Validation performance is the reported estimate and must not be used to revise
+parameters.
+
+The historical run-475 human mask is not present in this checkout, so the
+default labelled sets are currently empty. Recover and package the original
+mask before using this workflow; do not substitute a generated mask as ground
+truth.
 
 ```python
-from automask.evaluation import evaluate
+from automask.evaluation import FIT_RUNS, evaluate
 
-# Score a pipeline against reference masks. With no explicit runs it uses the
-# held-out validation set.
-result = evaluate(pipeline, runs=(378, 389))  # fit
-result = evaluate(pipeline)  # validation (held out)
+# Once reference masks are packaged, explicit runs score the fit set and no
+# explicit runs use the held-out validation set.
+result = evaluate(pipeline, runs=FIT_RUNS)
+result = evaluate(pipeline)
 ```
 
 ## 3. Check fold consistency only

@@ -11,6 +11,10 @@ source psana_env.sh
 lcls-agent doctor
 ```
 
+The data backend is inherited from `psana_env.local`, or can be selected for a
+bounded run with `--backend local` or `--backend slac`. The MCP subprocess gets
+the same explicit backend.
+
 ## Direct Claude Code use
 
 The checked-in `.mcp.json` lets Claude Code act as the interactive LCLS agent

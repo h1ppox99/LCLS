@@ -1,112 +1,98 @@
 # Reading raw XTC with psana
 
-Raw XTC is the production source for run profiling and selected-shot reductions.
-For everyday use the environment is already built — just activate it.
+Raw XTC is the production source for profiling and selected-shot reductions.
+The repository supports one code path with two data-source backends; neither
+backend requires data symlinks inside the checkout.
 
-## Using the data
+## Select a backend
+
+| backend | intended location | run access | calibration |
+| --- | --- | --- | --- |
+| `slac` | LCLS/S3DF | standard experiment resolver | facility store |
+| `local` | copied data elsewhere | explicit files in `AUTOMASK_XTC_DIR` | `AUTOMASK_CALIB_DIR` |
+
+Use `scripts/create_environment.sh` as shown in the root README, or configure an
+existing environment by copying `psana_env.local.example` to
+`psana_env.local`. The local form is:
+
+```bash
+PSANA_ENV=/path/to/software/envs/automask-py311
+PSANA_CONDA_SH=/path/to/miniforge/etc/profile.d/conda.sh
+SMALLDATA_TOOLS=/path/to/software/src/smalldata_tools
+AUTOMASK_BACKEND=local
+AUTOMASK_XTC_DIR=/path/to/xppl1016922/xtc
+AUTOMASK_CALIB_DIR=/path/to/xppl1016922/calib
+AUTOMASK_CACHE_DIR=/path/to/writable/cache
+```
+
+For SLAC, first source the standard LCLS psana setup, then set
+`AUTOMASK_BACKEND=slac` and omit the three local data paths. The facility
+`SIT_PSDM_DATA`, `SIT_ROOT`, and `SIT_DATA` values are preserved and validated.
+For local psana1 imports, activation sets the minimum `SIT_ROOT` and
+`SIT_PSDM_DATA` values to the real data root; it does not create an experiment
+registry or a fake PSDM directory.
+
+Activate and open a run through the common resolver:
 
 ```bash
 source psana_env.sh
-# Optional: prewarm the ImageStore cache so evaluation stays numpy-only.
-python -m automask.producers.build_images --run 475
 ```
-
-`psana_env.sh` sets the `SIT_*` variables and activates the psana environment.
-Open a run with `automask.io.read_xtc.local_run_source()`, which names the
-explicit stream files and wires up calibration lookup:
 
 ```python
-from automask.io.read_xtc import local_run_source
+from automask.io.read_xtc import run_source
 
-source = local_run_source(475)
+source = run_source(475)
+print(source.backend)
 ```
 
-### Runs available locally
+Pass `backend="local"` or `backend="slac"` when a call must override the
+environment. `ImageStore`, run profiling, geometry, and calibration all retain
+the resolved source, so one operation cannot accidentally mix local geometry
+with SLAC calibration.
 
-Runs are present in `/home/groups/darve/hippowal/LCLS/xtc` and `/home/groups/darve/hippowal/LCLS/calib`, which are symlinked into the repo. Make sure to symlink to your own group storage if you copy the repo. The following table shows the runs available in the local layout:
+## Local data currently configured on the development machine
 
-| run | streams | note |
+The external data remains at `/home/groups/darve/hippowal/LCLS`; these paths are
+not part of a clone.
+
+| run | streams on this machine | state |
 | --- | --- | --- |
-| 475 | s00–s04, complete | decodes fully; use this run |
-| 389 | s03 only, truncated | open **by explicit path** — the run resolver rejects the incomplete layout |
-| 378 | s00 only | partial |
-| 396 | s00 only | partial |
+| 475 | s00–s04 | complete, 3,201 events |
+| 389 | s03 | truncated |
+| 378 | s00 | partial |
+| 396 | s00 | partial |
 
-For partial runs use `local_run_source(<run>)` (globs the present streams);
-`exp=xppl1016922:run=<run>` fails on the incomplete layout. A truncated run
-decodes cleanly up to its EOF, then warns without crashing.
+Partial and truncated local runs work because the local backend passes the
+actual stream files to psana. Never join run-389 XTC events to small-data rows by
+index.
 
----
+## Calibration names
 
-## First-time environment build (admin, once)
+The local calibration tree has been normalized for Linux and now uses literal
+colons, for example:
 
-Everything except the symlinks needs internet, so run it on the **login node** —
-Sherlock's compute nodes have no outbound network. Nothing here is CPU-heavy.
-**Do not put any of it in `$HOME`** (small quota); use group storage.
-
-```bash
-SW=/home/groups/darve/hippowal/sw          # conda + envs live here
-mkdir -p "$SW" && cd "$SW"
-
-# 1. conda + mamba, self-contained.
-curl -L -o miniforge.sh \
-  https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh
-bash miniforge.sh -b -p "$SW/miniforge"
-source "$SW/miniforge/etc/profile.d/conda.sh"
-command -v mamba || conda install -y -n base -c conda-forge mamba
-
-# 2. psana AND the compiled deps in ONE solve. Adding pyFAI/scikit-image after
-#    the fact lets the solver bump numpy under psana and break it (segfaults, not
-#    import errors), so pin them together.
-mamba create -y -p "$SW/envs/ana-4.0.66-py311" -c lcls-i -c conda-forge \
-    psana=4.0.66 python=3.11 \
-    numpy h5py scipy scikit-image matplotlib pyfai pytest
-
-# 3. the package, without letting pip touch the compiled stack
-conda activate "$SW/envs/ana-4.0.66-py311"
-cd /home/users/hippowal/LCLS
-pip install -e . --no-deps
-
-# 4. agent runtime, pinned to the validated version
-python -m pip install claude-agent-sdk==0.2.139
-
-# 5. official SLAC detector adapters used by run profiling
-mkdir -p "$SW/src"
-git clone https://github.com/slac-lcls/smalldata_tools.git "$SW/src/smalldata_tools"
-cd "$SW/src/smalldata_tools"
-git checkout 5cf5c0ab7830f93bbc6213f7480b7a59322008bf
+```text
+Jungfrau::CalibV1/XppEndstation.0:Jungfrau.0
 ```
 
-`mamba` and `conda` are interchangeable for `create`/`install`; prefer `mamba`
-for solving but keep `conda activate` for activation (it is the hook
-`psana_env.sh` sources).
+The former macOS private-use replacements and Finder metadata were removed.
+Do not translate colons in new code.
 
-Then point the repo at the data and record the machine paths:
-
-```bash
-cd /home/users/hippowal/LCLS
-ln -sfn /home/groups/darve/hippowal/LCLS/xtc   xtc
-ln -sfn /home/groups/darve/hippowal/LCLS/calib calib
-
-cat > psana_env.local <<'EOF'
-PSANA_ENV=/home/groups/darve/hippowal/sw/envs/ana-4.0.66-py311
-PSANA_PSDM=/home/groups/darve/hippowal/psdm
-PSANA_CONDA_SH=/home/groups/darve/hippowal/sw/miniforge/etc/profile.d/conda.sh
-SMALLDATA_TOOLS=/home/groups/darve/hippowal/sw/src/smalldata_tools
-EOF
-```
-
-`psana_env.local` is gitignored, so machine paths never reach a commit.
-`PSANA_PSDM` holds only symlinks (no space needed) but must be writable;
-`PSANA_CONDA_SH` matters because a batch job starts without `conda` on `PATH`.
-
-Finally, verify. A mis-wired calib directory makes psana return `None` or
-uncalibrated data **without raising**, so this checks a real frame:
+## Verify a setup
 
 ```bash
 source psana_env.sh
-python -m automask.research.dev.setup_psdm_layout
-python -m automask.research.dev.setup_psdm_layout --check --run 475
+lcls-agent doctor
+python - <<'PY'
+from automask.io.read_xtc import detector_calibration, panel_geometry, run_source
+
+source = run_source(475)
+print(source.backend)
+print(detector_calibration(475, "pedestals", source=source).shape)
+print([array.shape for array in panel_geometry(475, source=source)])
+PY
 ```
 
-If it prints `det.calib() -> shape (2, 512, 1024)`, the environment is good.
+The expected Jungfrau panel shape is `(2, 512, 1024)`. A local calibration
+failure must be treated as a setup error; raw frames alone are not enough for
+the production pipeline.

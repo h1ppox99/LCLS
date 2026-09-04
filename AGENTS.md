@@ -4,9 +4,9 @@ Guidance for Claude Code working in this repository.
 
 ## What this is
 
-A local copy of LCLS experiment **`xppl1016922`** (XPP instrument at SLAC), **plus an active
-research project built on top of it**. The data layout mirrors the SLAC path
-`/sdf/data/lcls/ds/xpp/xppl1016922/`, so relative paths from cluster scripts carry over.
+An active research project for LCLS experiment **`xppl1016922`** (XPP instrument at SLAC).
+Large experiment data is external: the local backend uses configured XTC/calibration paths,
+while the SLAC backend uses the standard facility resolver.
 
 The experiment spans runs ~1–481. A "run" is one contiguous acquisition, identified by a
 zero-padded number (e.g. run 475). Only a couple of runs are present locally (see below).
@@ -20,7 +20,7 @@ recipe. The lab's current production method is the baseline we measure against a
 Read `docs/DATA_xppl1016922.md` for the full data guide; this section is the orientation.
 
 The repo is a single installable Python package, **`automask`** (top-level, `pip install -e .`),
-sitting alongside the data mirror. There is no `src/` wrapper. Import project code as
+sitting alongside its required `lcls_agent` package. There is no `src/` wrapper. Import project code as
 `from automask.… import …` and run entry points with `python -m automask.<module>` — the old
 `sys.path.insert` hacks are gone.
 
@@ -28,28 +28,29 @@ sitting alongside the data mirror. There is no `src/` wrapper. Import project co
 |------|------|
 | **`automask/`** | **Main working area.** The auto-masking project, an installable package. Core: `masking.py` (STATS/REGULARIZERS/COMBINERS registries + `Channel`/`Pipeline`), `stats/` `regularization/` `combine/` (one file per method), `sample.py` (`Sample`, the per-run arrays a pipeline reads), `image_store.py` (selected-shot reductions + psana calibration constants, content-hashed cache), `run_profile.py` + `utils.py` (one XTC pass -> per-shot field table), `shot_selection.py` (field-native `Condition`/`ShotSelection`), `evaluation/` (all development and runtime evaluation), and `dataset.py` (loaders/score). Sweeps use Hydra through `conf/` + `studies/sweep_hyperparameters.py` + `scripts/*.sh`. `io/` are psana readers, `producers/` prewarm the cache, `studies/` contains only temporary research awaiting migration, `data/masks/` holds human references, and `outputs/` is generated and **gitignored**. Start here. |
 | `automask/evaluation/` | **All evaluation code.** `labelled.py` scores against reference masks, `consistency.py` measures reproducibility on round-robin real-shot folds, and `azimuthal.py` contains the separate physical-consistency diagnostic. Fold reductions use `ImageStore`; see `docs/EVALUATION.md` and `docs/CONSISTENCY.md`. |
-| `xpp_sharing/` | **The lab's current production method** (CO2 delay-scan notebooks + `utils.py`). Reference/baseline to improve on — manual mask, diode normalization, delay binning. Read-only. |
 | `automask/io/` | psana readers (import as `automask.io.<name>`): `psana1.py` (`Psana1RunSource` — the local↔SLAC seam: `from_files` opens explicit streams, `from_experiment` uses the standard resolver), `read_xtc.py` (calibrated frames, calibration constants, panel index maps), `lcls1_adapters.py` (official `smalldata_tools` detector adapters for profiling). |
+| `lcls_agent/` | Required Claude Agent SDK and MCP host. |
 | `docs/`, `psana_env.sh` | `DATA_xppl1016922.md` (data layout + what a single shot records) + `PSANA_XTC.md` (how to open XTC) + `EVALUATION.md` and `CONSISTENCY.md`; and the env-activation script (repo root). |
-| `xtc/` | Raw per-event detector data (psana XTC format). |
-| `hdf5/smalldata/` | Reduced per-event HDF5 summaries. **Start data analysis here** — no psana needed. |
-| `calib/` | psana detector calibration constants. |
-| `stats/summary/` | Per-run beamline summary output (most runs). |
-| `results/` | **Empty skeleton — ignore it.** No code or outputs were copied. |
+| `environment.yml`, `scripts/create_environment.sh` | Reproducible environment and the two-mode bootstrap. |
 
 ## Environment (psana)
 
-psana **is installed locally** and works. Activate it with:
+The validated psana, Claude SDK, and MCP environment is activated with:
 
 ```bash
-source psana_env.sh      # sets SIT_* vars, activates conda env ana-4.0.66-py311
+source psana_env.sh
 ```
 
 The Bash tool does not persist shell state between calls, so source it in the *same* command
 that runs python: `source psana_env.sh && python -m automask.masking`.
 
-- One-time setup: `pip install -e . --no-deps` makes `import automask` work from anywhere
-  (`--no-deps` so pip doesn't touch numpy/scipy in the ana env and break psana).
+- One-time setup: use instructions detailed in the `README.md`.
+- Before the SLAC setup, source the standard LCLS psana environment so its `SIT_*` resolver
+  configuration is available.
+- `AUTOMASK_BACKEND=slac` uses the facility resolver. `AUTOMASK_BACKEND=local` requires
+  `AUTOMASK_XTC_DIR` and `AUTOMASK_CALIB_DIR` and opens explicit files. Do not add repo symlinks.
+- `pip install -e . --no-deps` makes `import automask` work without allowing pip to replace
+  the compiled numpy/scipy stack.
 - Reading small-data HDF5 and `calib/` needs `numpy`/`h5py`; dependencies are declared in `pyproject.toml`.
 - Reading raw XTC frames needs psana (the env above). See `docs/PSANA_XTC.md`.
 
@@ -59,18 +60,17 @@ that runs python: `source psana_env.sh && python -m automask.masking`.
 
 ## Data on disk
 
-**`hdf5/smalldata/xppl1016922_Run<NNNN>.h5`** (4-digit run) — one row per event, loads fully
+**`<external>/hdf5/smalldata/xppl1016922_Run<NNNN>.h5`** (4-digit run) — one row per event, loads fully
 in memory. Useful information to validate claims about data content, conventions etc... It should 
 not be integrated in the masking pipeline, which directly uses `xtc`files.
 
-**`xtc/xppl1016922-r<RUN>-s<STREAM>-c00.xtc`** — full event stream, needs psana. A run is
+**`$AUTOMASK_XTC_DIR/xppl1016922-r<RUN>-s<STREAM>-c00.xtc`** — full event stream, needs psana. A run is
 split across parallel DAQ streams `s00…s04` that psana normally merges by timestamp. Present:
 - **Run 475** — all 5 streams (s00–s04) complete (~1.36 GB each). 3 201 events.
-- **Run 389** — **4 streams** present (s00, s01, s03, s04; s02 missing), all of them
-  **partially-downloaded and truncated**. psana merges what it can and yields **6 471
-  events**, versus 40 003 in the merged small-data file. See the gotcha below.
+- **Run 389** — the currently configured local copy has only truncated stream s03.
 
-**`calib/`** — psana calib store: `calib/<DetType::CalibV1>/<Source>/<constant>/<START>-end.data`.
+**`$AUTOMASK_CALIB_DIR`** — psana calib store:
+`<DetType::CalibV1>/<Source>/<constant>/<START>-end.data`.
 Each `<START>-end.data` applies from run `START` until superseded. Files are numpy-loadable
 ASCII arrays. Pedestals/darks were regenerated at runs 110, 150, 175, 187, 227, 362, 477. The
 small-data files already embed the applied calibration, so you rarely need `calib/` directly.
@@ -120,26 +120,20 @@ Conventions that bite if ignored:
 
 ## Gotchas
 
-- **Colons in filenames.** psana names contain `:` (e.g. `Epix100a::CalibV1`,
-  `XppGon.0:Epix100a.1`). This copy was made on macOS, which can't store `:`, so each `:` is
-  replaced by the private-use char **U+F022**. Typing a literal colon path fails ("No such
-  file or directory"). Use glob/tab-completion, `os.listdir`/`os.walk`,
-  or a `calib/Epix100a*` wildcard — never a hand-typed colon path. Note psana itself reads
-  the psdm tree (`$SIT_PSDM_DATA/xpp/xppl1016922/calib`, real colons), not the repo `calib/`.
-- **Truncated run 389.** All four present streams are truncated. psana reads them fine —
-  6 471 events decode cleanly (full Jungfrau raw frames included), then each stream stops at
-  its truncation with an `EOF while reading datagram payload` warning, no crash. But:
+- **Calibration names use literal colons.** The macOS private-use replacements and Finder
+  metadata were removed from the local calibration tree. Do not translate `:` in code.
+- **Truncated run 389.** The present local stream stops at its truncation with an
+  `EOF while reading datagram payload` warning, no crash. But:
   (a) **open it by explicit file path**, not `exp=xppl1016922:run=389` — the run-resolver
-  rejects the incomplete layout ("XTC file(s) is empty"); use
+  is for the complete facility copy; use
   `automask.io.read_xtc.local_run_source(389)`, which globs the streams into a
-  `Psana1RunSource`. `slac_run_source(389)` is the same thing via the standard resolver. (b) Those 6 471 events
-  are a **subset** of the 40 003 in small data, so **XTC event indices do not line up with
+  `Psana1RunSource`. (b) The surviving events are a **subset** of the 40 003 in small data,
+  so **XTC event indices do not line up with
   small-data row indices for run 389** — never join the two by index (run 475 is complete and
   does align). (c) The streams carry Jungfrau + beamline monitors (EBeam, gas detector,
   BMMONs, IPMs, the XPP-AIN-01 analog input) but **not** the Epix panels. (d) `.calib()`
   needs the calib dir wired into psana's search path (`Psana1RunSource` does this via
-  `psana.setOption`; `automask/dev/setup_psdm_layout.py` builds the psdm tree); `.raw()`
-  works regardless.
+  `psana.setOption`); `.raw()` works regardless.
 - **There is no laser, and `lightStatus/laser` is a lie.** One x-ray beam is split into two
   branches, **CC** and **VCC**, selected per shot by the analog voltages `ai/ch02` (CC) and
   `ai/ch03` (VCC), thresholded at 2 V. EVR codes 90/91 are labelled `'Laser on'`/`'Laser off'`

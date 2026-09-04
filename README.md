@@ -1,65 +1,87 @@
-# xppl1016922 — local copy + automatic detector masking
+# xppl1016922 automatic detector masking
 
-Recovered local copy of LCLS experiment **`xppl1016922`** (XPP) and its
-Jungfrau1M masking project. The verified notebook reference is available only
-for run 475; run 389 raw XTC is incomplete.
-
-## Layout
-
-```
-automask/          the masking project — an installable Python package;
-                   see automask/README.md for its layout and API
-lcls_agent/        the stdio MCP server the agent drives automask through
-docs/              experiment + psana background and guides
-                   (DATA_OVERVIEW, PSANA_XTC, DATA, AUTOMASK, EVALUATION, CONSISTENCY)
-psana_env.sh       activate the ana-4.0.66-py311 conda env (for XTC / psana)
-calib/ xtc/        the production data mirror (gitignored, symlinked — large)
-```
+This repository contains the installable `automask` package and its required
+Claude Agent SDK/MCP host. Raw experiment and calibration data are external and
+are never copied, moved, or committed by the setup.
 
 ## Setup
 
-### First time setup
+The checked-in `environment.yml` pins the validated psana/scientific stack and
+the required Claude/MCP dependencies. Run the bootstrap on a login node with
+`mamba` or `conda` available, using software storage with enough quota.
 
-The XTC readers need psana, which is intentionally not installed by this
-project's `pip` dependencies. Choose an environment path and set the same path
-as `PSANA_ENV` in `psana_env.local`.
+`SOFTWARE_ROOT` below is **not** experiment data. It is a writable directory
+with enough quota where the bootstrap installs the conda environment
+(`SOFTWARE_ROOT/envs/automask-py311`) and clones the pinned `smalldata_tools`
+(`SOFTWARE_ROOT/src/smalldata_tools`). On Sherlock put it on `$GROUP_HOME` or
+`$SCRATCH`, never `$HOME`.
 
-```bash
-ENVP=/Data/$USER/envs/ana-4.0.66-py311
-
-conda create -p "$ENVP" \
-  -c lcls-i -c conda-forge \
-  psana=4.0.66 python=3.11 numpy h5py pytest
-```
-
-Edit `psana_env.local` so its `PSANA_ENV` value matches the path above, then install
-this project from inside that environment. `--no-deps` preserves psana's pinned
-scientific packages.
+At SLAC, use the normal facility experiment resolver:
 
 ```bash
-source psana_env.sh
-python -m pip install -e . --no-deps
-```
-
-If an import reports a missing non-psana dependency, install it into this Conda
-environment (for example, `conda install -p "$ENVP" -c conda-forge pyfai`).
-
-### Everyday setup
-
-```bash
+# First source the standard LCLS psana setup for its SIT_* configuration.
+# arg 1: mode = slac (facility resolver, no local paths needed)
+# arg 2: SOFTWARE_ROOT = where the env and smalldata_tools are installed
+scripts/create_environment.sh slac /path/to/software
 source psana_env.sh
 ```
 
-For workflows that do not read XTC data or import psana, a normal Python
-environment can instead use `python -m pip install -e .`.
+On another machine, point directly at a local XTC directory and its real-colon
+calibration directory:
 
-## Using it
+```bash
+# arg 1: mode      = local (open explicit files instead of the resolver)
+# arg 2: SOFTWARE  = env + smalldata_tools install dir (needs quota, not data)
+# arg 3: XTC_DIR   = holds xppl1016922-r<RUN>-s<STREAM>-c00.xtc files
+# arg 4: CALIB_DIR = psana calib store (literal-colon dirs, e.g. Jungfrau.0)
+# arg 5: CACHE_DIR = optional writable cache for reductions/profiles
+scripts/create_environment.sh local /path/to/software \
+    /path/to/xppl1016922/xtc /path/to/xppl1016922/calib \
+    /path/to/writable/cache
+source psana_env.sh
 
-`automask` is a Python library — see [`automask/README.md`](automask/README.md)
-for the package layout and API, and [`docs/AUTOMASK.md`](docs/AUTOMASK.md) for the
-scripting workflow. The agent reaches the same operations through the stdio MCP
-server in [`lcls_agent/`](lcls_agent/README.md); the checked-in `.mcp.json`
-registers it for Claude Code — activate `psana_env.sh` first and approve the
-project server on first use.
+# e.g. on Sherlock, with the experiment files under $GROUP_HOME/lcls/ and the
+# cache pointed at $SCRATCH so it does not eat the 15 GB $HOME quota:
+scripts/create_environment.sh local "$GROUP_HOME/lcls/software" \
+    "$GROUP_HOME/lcls/xppl1016922/xtc" "$GROUP_HOME/lcls/xppl1016922/calib" \
+    "$SCRATCH/lcls_automask_cache"
+source psana_env.sh
+```
 
-[`docs/`](docs/) covers the local data and psana/XTC access.
+The bootstrap creates the conda environment, checks out the pinned
+`smalldata_tools` revision, installs this repository without altering the
+compiled stack, and writes the ignored `psana_env.local`. No repository data
+symlinks and no synthetic PSDM directory are required. For an existing
+environment, copy `psana_env.local.example` and edit the paths instead.
+
+Run the verification after activation:
+
+```bash
+lcls-agent doctor
+python -m pytest -q automask/tests tests/lcls_agent
+```
+
+## Data backends
+
+`AUTOMASK_BACKEND` has two explicit production values:
+
+- `slac` uses `exp=xppl1016922:run=<run>` and the facility calibration store.
+- `local` opens `AUTOMASK_XTC_DIR` streams explicitly and uses
+  `AUTOMASK_CALIB_DIR`.
+
+`auto` remains a convenience: it uses explicit files when the requested run is
+present locally and otherwise uses the SLAC resolver. Scripts and batch jobs
+should select `local` or `slac` explicitly.
+
+## Repository map
+
+| path | role |
+| --- | --- |
+| `automask/` | profiling, selection, masking, evaluation, and psana I/O |
+| `lcls_agent/` | required Claude SDK and MCP integration |
+| `docs/` | experiment, XTC, evaluation, and workflow documentation |
+| `environment.yml` | validated conda and pip dependency set |
+| `psana_env.sh` | activation and configuration validation |
+
+See [`docs/PSANA_XTC.md`](docs/PSANA_XTC.md) for data access and
+[`docs/AUTOMASK.md`](docs/AUTOMASK.md) for the masking workflow.

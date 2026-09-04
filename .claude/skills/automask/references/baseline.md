@@ -34,7 +34,7 @@ mandatory and preserved in every candidate.
 | `status_as_mask` | floor | pad=2 | — | — | psana bad-pixel status, dilated |
 | `variance` | field, low | k=4, mode=low | tv(weight=4.0) | — | dead / shadowed pixels (low per-pixel std) |
 | `hough_lines` | pick | defaults | none | — | straight dark lines — shadows, scratches, ASIC seams |
-| `asic_polish` | field, high | asic=256, n_iter=3, k=15.0 | blob_scale(6,9,12,16) | fill_holes, area_gate(min_area=200) | extended / circular pedestal defects psana status misses |
+| `pedestal_z` | field, high | asic=256, n_iter=3, k=15.0 | blob_scale(6,9,12,16) | fill_holes, area_gate(min_area=200) | extended / circular pedestal defects psana status misses (bad pixels excluded from the fit) |
 
 `Sample.needs()` for this recipe: `mean`, `std`, `pedestals`, `status_as_mask`,
 `real`. `hough_lines` emits its own boolean, so its `field_reg` must be `None`.
@@ -53,7 +53,7 @@ Where the default is expected to fall short — the starting map for adaptation:
   image before trusting it.
 - **No azimuthal channel by default.** Ring-anomaly detection (`sigma_clipping`)
   needs the beam center and must be added explicitly.
-- **`asic_polish` works in the pedestal domain** — it will not catch
+- **`pedestal_z` works in the pedestal domain** — it will not catch
   intensity-domain artifacts that only appear in the selected-shot image.
 - **The low-flux threshold and `n_shots` are starting candidates**, not fixed
   rules; branch (CC/VCC) is irrelevant to masking.

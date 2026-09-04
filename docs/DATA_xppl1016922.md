@@ -1,29 +1,30 @@
 # xppl1016922 — experiment data
 
-A local mirror of LCLS experiment `xppl1016922` (XPP instrument, SLAC) and a
-description of what a single shot records. The large data directories are
-gitignored and may be absent in a clone.
+A description of LCLS experiment `xppl1016922` (XPP instrument, SLAC) and what
+a single shot records. Large data lives outside this repository and is selected
+through the local or SLAC backend.
 
 ## Repository contents
 
 | path | contents |
 | --- | --- |
-| `xtc/` | Raw XTC streams for psana (runs below). |
-| `calib/` | Detector calibration constants; macOS-recovered colons stored as U+F022. |
-| `automask/data/masks/` | Hand-drawn reference masks — the only frozen input psana cannot recompute. |
-| `automask/cache/` | Regenerable image + profile cache built from XTC (gitignored). |
+| `AUTOMASK_XTC_DIR` | Raw XTC streams for the local backend. |
+| `AUTOMASK_CALIB_DIR` | Linux calibration tree with literal colons. |
+| `automask/data/masks/` | Non-regenerable hand references when available. |
+| `AUTOMASK_CACHE_DIR` | Regenerable image and profile cache. |
 
 ## Runs present locally
 
 | run | streams on disk | state |
 | --- | --- | --- |
-| 475 | s00–s04 (all 5) | complete — the reference run, 3 201 events |
-| 389 | s03 only | truncated; open by explicit path, not the run resolver |
+| 475 | s00–s04 (all 5) | complete — primary local validation run, 3 201 events |
+| 389 | s03 only | truncated in the currently configured local copy |
 | 378 | s00 only | partial |
 | 396 | s00 only | partial |
 
-Run 389's single truncated stream yields no complete sum or run-specific
-reference mask. See [PSANA_XTC.md](PSANA_XTC.md) for opening partial runs.
+Run 389's single truncated stream is only a subset of the acquisition and has
+no run-specific reference mask. See [PSANA_XTC.md](PSANA_XTC.md) for opening
+partial runs.
 
 ---
 

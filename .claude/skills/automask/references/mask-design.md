@@ -11,7 +11,7 @@ registry details from memory.
 
 A `Channel` is one statistic wrapped in the stages around it. Three stat kinds:
 
-- **field** (`variance`, `mad_variance`, `blackhat`, `asic_polish`,
+- **field** (`variance`, `mad_variance`, `blackhat`, `pedestal_z`,
   `sigma_clipping`) — emits a continuous robust-z field, optionally
   field-regularized (e.g. `tv`), then thresholded at `(k, mode)` to a mask.
   `mode` is `low` (below −k σ), `high` (above +k σ), or `both`.
@@ -43,7 +43,7 @@ Match the operator to the artifact's morphology, then verify:
 |---|---|---|
 | dead / shadowed / large dark shadow (occluded band) | `variance` (low) | low per-pixel std |
 | hot / bad-status | `status_as_mask` (floor) | psana status |
-| extended / circular blob | `asic_polish` or `blackhat` + `blob_scale` | pedestal-domain vs image-domain |
+| extended / circular blob | `pedestal_z` or `blackhat` + `blob_scale` | pedestal-domain vs image-domain |
 | persistently unstable | `mad_variance` | on the `mad` reduction |
 | straight dark lines | `hough_lines` | shadows, scratches, ASIC seams |
 | ring / azimuthal anomaly | `sigma_clipping` | needs beam center |
@@ -80,11 +80,16 @@ accept a list applied left-to-right.
 
 - **`tv`** — denoise a continuous field before thresholding.
 - **`blob_scale`** — multi-scale matched filter that aggregates weak coherent
-  evidence so a diffuse defect becomes separable (pairs with `asic_polish`).
+  evidence so a diffuse defect becomes separable (pairs with `pedestal_z`). The
+  default kernel is a disk; set `aspects`/`angles` to add elongated kernels for
+  ellipse/rectangle defects. The whole bank runs at once (pixelwise `max`), so it
+  improves recall for elongated shapes without risking a miss, but every added
+  kernel raises the noise floor — use the smallest bank that works and re-read `k`.
 - **`fill_holes`** — close holes left by thresholding a graded field.
 - **`pad`** — dilate sparse picks.
 - **`area_gate`** — drop connected components below `min_area` (extended defects
-  only); do not use it on a channel meant to catch single pixels.
+  only); do not use it on a channel meant to catch single pixels. Use it anytime a
+  method is detecting to much components instead of the single large defect you expect.
 
 ## Changing a channel deliberately
 
