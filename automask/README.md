@@ -51,11 +51,10 @@ reads — reductions (`mean`/`std`/`mad`) or psana calibration accessors
 
 ## Reference data
 
-Human masks belong in `data/masks/` as boolean `_asm.npy` arrays with
-`True == masked`. The historical run-475 file is not present in this checkout
-and was never committed. Labelled evaluation therefore has no default runs
-until that original asset is recovered; consistency and perturbation validation
-remain available without it. See `data/masks/README.md`.
+Human masks belong in `reference_masks/` as boolean assembled `.npy` arrays with
+`True == masked`, named `reference_mask_run<run>.npy`. Labelled evaluation runs
+against whichever runs have a mask there; consistency and perturbation
+validation remain available regardless. See `reference_masks/README.md`.
 
 ## Dependencies
 
@@ -66,7 +65,8 @@ during robust reductions.
 
 ## Scoring against references
 
-Load a reference with `automask.evaluation.dataset.load_mask` and score a
-prediction with `score`; the full labelled/consistency contract is in
-[`docs/EVALUATION.md`](../docs/EVALUATION.md). `data/masks/` is the only frozen
-input left — every array a pipeline consumes is computed from the run.
+Load a reference with `automask.evaluation.reference_mask(run)` and score a
+prediction with `automask.evaluation.dataset.score`; the full
+labelled/consistency contract is in
+[`docs/EVALUATION.md`](../docs/EVALUATION.md). `reference_masks/` is the only
+frozen input left — every array a pipeline consumes is computed from the run.

@@ -8,10 +8,7 @@
 .pytest_cache/
 
 # --- automask reference masks & generated outputs ---
-# automask/data/ now holds only the hand-drawn reference masks (data/masks/);
-# every array a pipeline consumes is computed from XTC via ImageStore.
 automask/cache
-/automask/automask/cache/
 /outputs/
 
 # --- bulk archives ---
@@ -31,7 +28,7 @@ automask/cache
 *.hdf5
 *.npy
 *.npz
-!automask/data/masks/*.npy
+!automask/reference_masks/*.npy
 
 # --- python ---
 __pycache__/
@@ -47,3 +44,4 @@ psana_env.local
 
 # --- other ---
 tmp/
+automask/research/

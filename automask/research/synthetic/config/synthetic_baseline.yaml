@@ -2,14 +2,15 @@
 #
 # Run:  python -m automask.synthetic.evaluate --config automask/synthetic/config/synthetic_baseline.yaml
 #
-# image / mask may be dataset names (resolved via automask.dataset) or .npy paths.
+# image / mask may be a run number (resolved via automask.evaluation) or .npy paths.
 # masker is a "module:function" single-image masker (True == masked).
 # A scalar artifact param is used as-is; a [lo, hi] pair is sampled uniformly per
 # example (ints stay ints). 'center' is a fractional [row, col] passed through.
 
 image: 475                       # run number -> its selected-shot mean
                                  # (a .npy path also works)
-mask: human_Mask                  # bool ground-truth, True == masked/invalid
+mask: 475                        # run's packaged reference mask (bool, True == masked)
+                                 # (a .npy path also works)
 masker: automask.masking:mask_image
 output_dir: automask/outputs/synthetic
 seed: 0

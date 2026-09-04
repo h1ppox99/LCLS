@@ -180,7 +180,6 @@ def show_mask(mask, ax=None, color=(0.85, 0.1, 0.1), title=""):
 def _channel_input(channel, sample):
     """The image a channel reads, as (field name, assembled array), or None."""
     from automask.mask.stats.base import STATS
-    from automask.sample.geometry import panel_to_asm
 
     for name in STATS[channel.stat].needs:
         if name in ("real", "center"):
@@ -189,7 +188,7 @@ def _channel_input(channel, sample):
         if not isinstance(arr, np.ndarray):
             continue
         if arr.ndim == 3:
-            arr = panel_to_asm(arr, sample.run)
+            arr = sample.panel_to_asm(arr)
         if arr.shape == sample.real.shape:
             return name, arr
     return None
@@ -244,10 +243,10 @@ def explain_panels(pipeline, sample, out=None, panels=None):
     """One row per diagnostic `Panel` (see Channel.explain), so each channel's
     decision is legible -- a field channel's cut and a pick's hidden stages alike.
 
-    A graded panel is drawn as its score image left, its distribution over
-    ``real`` right with any ``threshold`` marked -- showing whether the cut
-    isolates a genuine tail or slices the bulk. A boolean panel (a pick's binary
-    input or segments) is drawn on its own. Cheap when ``panels`` (from
+    A graded panel is drawn as its score image left; right, its distribution over
+    ``real`` split into masked vs kept at the ``threshold`` -- showing whether the
+    cut isolates a separated tail or slices the bulk. A boolean panel (a pick's
+    binary input or segments) is drawn on its own. Cheap when ``panels`` (from
     ``pipeline.explain(sample)``) is passed in already."""
     from automask.mask.stats.base import threshold_stat
 
@@ -267,18 +266,84 @@ def explain_panels(pipeline, sample, out=None, panels=None):
             continue
         z = np.asarray(panel.array)
         show(z, ax=ax_img, title=f"{name} — regularized score", cbar=True)
-        ax_hist.hist(z[real], bins=200, log=True, color="0.4")
+        vals = z[real]
+        bins = (
+            np.linspace(float(vals.min()), float(vals.max()), 200) if vals.size else 200
+        )
         title = name
         if panel.threshold is not None:
             k, mode = panel.threshold
-            cut = int((threshold_stat(z, k, mode) & real).sum())
+            sel = threshold_stat(z, k, mode) & real
+            ax_hist.hist(z[real & ~sel], bins=bins, log=True, color="0.6", label="kept")
+            ax_hist.hist(z[sel], bins=bins, log=True, color="crimson", label="masked")
             for x, side in ((-k, "low"), (k, "high")):
                 if mode in (side, "both"):
-                    ax_hist.axvline(x, color="crimson", lw=1.3)
-            title = f"{name} — {cut} px beyond k={k:g} ({mode})"
+                    ax_hist.axvline(x, color="crimson", lw=1.1)
+            ax_hist.legend(fontsize=8)
+            title = f"{name} — {int(sel.sum())} px beyond k={k:g} ({mode})"
+        else:
+            ax_hist.hist(vals, bins=bins, log=True, color="0.4")
         ax_hist.set_title(title, fontsize=11)
         ax_hist.set_xlabel("robust-z score")
     fig.suptitle(f"run {sample.run:04d} — channel evidence vs decision", fontsize=13)
+    fig.tight_layout(rect=[0, 0, 1, 0.97])
+    if out:
+        fig.savefig(out, dpi=110, bbox_inches="tight")
+        plt.close(fig)
+    return fig
+
+
+def detection_funnel(channel, sample, out=None):
+    """One field channel stage by stage: stat field -> aggregated field (+ its
+    distribution and cut) -> connected components kept vs dropped by the mask
+    regularizer. The point is to see a defect survive each stage: a defect visible
+    in the stat field but absent from the components means a stage is
+    mis-parametrized -- never that there is nothing to mask."""
+    from automask.mask.stats.base import STATS, threshold_stat
+
+    spec = STATS[channel.stat]
+    if spec.emits_mask:
+        raise ValueError("detection_funnel is for field channels")
+    real = np.asarray(sample.real, dtype=bool)
+    field0 = np.asarray(spec.compute(sample, channel._params()))
+    agg = np.asarray(channel.field(sample))
+    k, mode = channel.threshold
+    thresholded = threshold_stat(agg, k, mode) & real
+    pick = np.asarray(channel.pick(sample), dtype=bool)
+    dropped = thresholded & ~pick
+
+    fig, ax = plt.subplots(2, 2, figsize=(12, 12))
+    show(field0, ax=ax[0, 0], title=f"{channel.label} — stat field")
+    show(agg, ax=ax[0, 1], title=f"{channel.label} — aggregated (field_reg)")
+
+    ax_h = ax[1, 0]
+    vals = agg[real]
+    bins = np.linspace(float(vals.min()), float(vals.max()), 200) if vals.size else 200
+    sel = threshold_stat(agg, k, mode) & real
+    ax_h.hist(agg[real & ~sel], bins=bins, log=True, color="0.6", label="kept")
+    ax_h.hist(agg[sel], bins=bins, log=True, color="crimson", label="masked")
+    for x, side in ((-k, "low"), (k, "high")):
+        if mode in (side, "both"):
+            ax_h.axvline(x, color="crimson", lw=1.1)
+    ax_h.legend(fontsize=8)
+    ax_h.set_title(f"aggregated distribution — cut k={k:g} ({mode})", fontsize=11)
+    ax_h.set_xlabel("robust-z score")
+
+    rgb = np.full((*pick.shape, 3), 0.96)
+    rgb[dropped] = (0.9, 0.0, 0.0)
+    rgb[pick] = (0.0, 0.7, 0.0)
+    ax[1, 1].imshow(rgb)
+    ax[1, 1].set_title(
+        f"components — kept {int(pick.sum())} px (green), "
+        f"dropped {int(dropped.sum())} px (red)",
+        fontsize=11,
+    )
+    ax[1, 1].set_xticks([])
+    ax[1, 1].set_yticks([])
+
+    fig.suptitle(
+        f"run {sample.run:04d} — {channel.label} detection funnel", fontsize=13
+    )
     fig.tight_layout(rect=[0, 0, 1, 0.97])
     if out:
         fig.savefig(out, dpi=110, bbox_inches="tight")

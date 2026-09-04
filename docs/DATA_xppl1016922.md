@@ -10,7 +10,7 @@ through the local or SLAC backend.
 | --- | --- |
 | `AUTOMASK_XTC_DIR` | Raw XTC streams for the local backend. |
 | `AUTOMASK_CALIB_DIR` | Linux calibration tree with literal colons. |
-| `automask/data/masks/` | Non-regenerable hand references when available. |
+| `automask/reference_masks/` | Non-regenerable hand references when available. |
 | `AUTOMASK_CACHE_DIR` | Regenerable image and profile cache. |
 
 ## Runs present locally

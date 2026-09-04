@@ -6,43 +6,37 @@ are measurements someone made once, so they cannot be recomputed. Every array a
 pipeline consumes comes from `ImageStore` instead (see `automask.sample`).
 All masks follow one convention: bool, True == masked.
 
-    from automask.evaluation.dataset import load_mask, list_masks, score
+    from automask.evaluation.dataset import reference_mask_path, reference_runs, score
 
-    gt = load_mask("human_Mask")                  # (1064, 1030) bool, True==masked
+    gt = np.load(reference_mask_path(475))  # when a run's reference is packaged
 """
 
 from __future__ import annotations
-import os, json
+
+import re
+from pathlib import Path
+
 import numpy as np
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-_DATA = os.path.join(_HERE, "data")
-_MSK = os.path.join(_DATA, "masks")
+_MSK = Path(__file__).resolve().parents[1] / "reference_masks"
+_PATTERN = re.compile(r"^reference_mask_run(\d+)$")
 
 
-def _load(dirpath: str, name: str, form: str) -> np.ndarray:
-    if name.endswith(".npy"):
-        name = name[:-4]
-    if not name.endswith(("_asm", "_panel")):
-        name = f"{name}_{form}"
-    path = os.path.join(dirpath, name + ".npy")
-    if not os.path.exists(path):
-        raise FileNotFoundError(f"{path}\navailable: {sorted(os.listdir(dirpath))}")
-    return np.load(path)
-
-
-def load_mask(name: str, form: str = "asm") -> np.ndarray:
-    """Load a reference mask (bool, True==masked). form='asm' or 'panel'."""
-    return _load(_MSK, name, form).astype(bool)
+def reference_mask_path(run: int) -> Path:
+    """Path to the run's packaged reference mask (may not exist)."""
+    return _MSK / f"reference_mask_run{run}.npy"
 
 
 def list_masks() -> list[str]:
-    return sorted(n[:-4] for n in os.listdir(_MSK) if n.endswith(".npy"))
+    return sorted(path.stem for path in _MSK.glob("*.npy"))
 
 
-def manifest() -> dict:
-    with open(os.path.join(_DATA, "manifest.json")) as f:
-        return json.load(f)
+def reference_runs() -> tuple[int, ...]:
+    """Runs with a packaged run-specific hand mask."""
+    runs = {
+        int(match.group(1)) for name in list_masks() if (match := _PATTERN.match(name))
+    }
+    return tuple(sorted(runs))
 
 
 def score(pred: np.ndarray, truth: np.ndarray) -> dict:

@@ -17,7 +17,8 @@ The two registries below are the catalogue of everything available. Each is a
 dict name -> spec, populated by importing the component packages:
 
     STATS         variance, mad_variance, blackhat, sigma_clipping,
-                  hough_lines (pick), geometry (floor), status_as_mask (floor)
+                  pedestal_z (field), hough_lines (pick), geometry (floor),
+                  status_as_mask (floor)
     REGULARIZERS  tv (field), pad (mask), blob_scale (field),
                   fill_holes (mask), area_gate (mask)
 
@@ -69,7 +70,7 @@ class Channel:
     left to right, with `*_params` given in the same shape (a bare params object
     for a single name, a list aligned with the names otherwise; `None` anywhere
     means that stage's defaults). Composition is what several methods actually
-    need -- `asic_polish` wants `blob_scale` to aggregate before thresholding, and
+    need -- `pedestal_z` wants `blob_scale` to aggregate before thresholding, and
     a thresholded graded field wants `fill_holes` then `area_gate` after -- and
     keeping each step a registered, separately-parameterised stage keeps the
     composition explicit instead of hard-coded inside a stat.
@@ -300,12 +301,12 @@ def floor_channels() -> List[Channel]:
 
 
 def production_pipeline(line_detector: bool = True) -> Pipeline:
-    """The default recipe: TV variance + hough_lines + asic_polish on the
+    """The default recipe: TV variance + hough_lines + pedestal_z on the
     geometry + pixel-status floor, unioned together.
     """
     from automask.mask.stats.variance import VarianceParams
     from automask.mask.stats.hough_lines import HoughLinesParams
-    from automask.mask.stats.asic_polish import AsicPolishParams
+    from automask.mask.stats.pedestal_z import PedestalZParams
     from automask.mask.regularization.tv import TVParams
     from automask.mask.regularization.blob_scale import BlobScaleParams
     from automask.mask.regularization.fill_holes import FillHolesParams
@@ -324,10 +325,10 @@ def production_pipeline(line_detector: bool = True) -> Pipeline:
         channels.append(Channel("hough_lines", HoughLinesParams(), field_reg=None))
     channels.append(
         Channel(
-            "asic_polish",
-            AsicPolishParams(asic=256, n_iter=3, k=15.0, mode="high"),
-            field_reg=["blob_scale"],
-            field_reg_params=[BlobScaleParams()],
+            "pedestal_z",
+            PedestalZParams(k=15.0, mode="high"),
+            field_reg="blob_scale",
+            field_reg_params=BlobScaleParams(),
             mask_reg=["fill_holes", "area_gate"],
             mask_reg_params=[FillHolesParams(), AreaGateParams()],
         )

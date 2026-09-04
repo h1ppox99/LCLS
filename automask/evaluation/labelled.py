@@ -1,19 +1,16 @@
 """Reference-mask evaluation for fitting and held-out validation."""
 
 from __future__ import annotations
-import os
+
 from typing import Optional, Sequence, Tuple
 
 import numpy as np
 
-from automask.evaluation.dataset import load_mask, score
+from automask.evaluation.dataset import reference_mask_path, reference_runs, score
 from automask.sample.image_store import ImageStore
-from automask.io.read_xtc import available_xtc_runs
 from automask.sample import Sample
 from automask.selection.presets import BEAM_ON_SELECTION
 from automask.selection.shot_selection import ShotSelection
-
-PACKAGE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def _partition_runs(runs: Sequence[int]) -> Tuple[Tuple[int, ...], Tuple[int, ...]]:
@@ -22,19 +19,17 @@ def _partition_runs(runs: Sequence[int]) -> Tuple[Tuple[int, ...], Tuple[int, ..
     return runs[:split], runs[split:]
 
 
-ALL_RUNS: Tuple[int, ...] = available_xtc_runs()
+ALL_RUNS: Tuple[int, ...] = reference_runs()
 FIT_RUNS, VALIDATION_RUNS = _partition_runs(ALL_RUNS)
 
 
 def reference_mask(run: int) -> np.ndarray:
-    """The hand-drawn target mask for `run` (bool, True == masked).
-
-    Prefers a run-specific mask and falls back to the shared `human_Mask`.
-    """
-    per_run = os.path.join(PACKAGE, "data", "masks", f"human_Mask_run{run:04d}_asm.npy")
-    if os.path.exists(per_run):
-        return np.load(per_run).astype(bool)
-    return load_mask("human_Mask")
+    """The hand-drawn target mask for `run` (bool, True == masked)."""
+    path = reference_mask_path(run)
+    if not path.exists():
+        available = sorted(item.name for item in path.parent.glob("*.npy"))
+        raise FileNotFoundError(f"{path}\navailable: {available}")
+    return np.load(path).astype(bool)
 
 
 def evaluate(

@@ -15,7 +15,7 @@ mask, not only the injected artifacts.
     python -m automask.research.synthetic.evaluate --config automask/synthetic/config/synthetic_baseline.yaml
 
 Config keys (see the shipped synthetic_baseline.yaml):
-    image / mask   dataset names (automask.evaluation.dataset) OR paths to .npy files
+    image / mask   a run number (its cached mean / packaged reference mask) OR a .npy path
     masker         "module:function" single-image masker (default mask_image)
     output_dir     where results.csv + figures/ are written
     seed           base seed; per-example seeds are derived deterministically
@@ -45,7 +45,6 @@ if not os.environ.get("MPLBACKEND") and not (
     matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from automask.evaluation.dataset import load_mask
 from automask.research.synthetic.artifacts import ARTIFACTS
 from automask.research.synthetic.metrics import masking_metrics
 from automask.viz import agree_rgb
@@ -92,9 +91,19 @@ def _load_source_image(spec) -> tuple[np.ndarray, str]:
     return image, f"run{run:04d}"
 
 
-def _load_gt_mask(spec: str) -> np.ndarray:
-    arr = np.load(spec) if _is_path(spec) else load_mask(spec)
-    return arr.astype(bool)
+def _load_gt_mask(spec) -> np.ndarray:
+    """A `.npy` path, or a run number whose packaged reference mask to load."""
+    if isinstance(spec, str) and _is_path(spec):
+        return np.load(spec).astype(bool)
+    from automask.evaluation import reference_mask
+
+    try:
+        run = int(spec)
+    except (TypeError, ValueError):
+        raise ValueError(
+            f"mask source {spec!r} is neither a .npy path nor a run number"
+        ) from None
+    return reference_mask(run)
 
 
 def _resolve_masker(spec: str):

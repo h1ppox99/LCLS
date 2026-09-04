@@ -51,16 +51,15 @@ agreement with ground truth, and v1 applies no pass/fail thresholds.
 ## 2. Choose default parameters with labels
 
 Labelled evaluation uses only masks actually present in
-`automask/data/masks/`, split chronologically into fit and validation sets. Tune
-only on the fit runs, rank candidates by residual IoU (pixels added beyond the
-shared floor), then measure the chosen configuration once on validation.
-Validation performance is the reported estimate and must not be used to revise
-parameters.
+`automask/reference_masks/` (named `reference_mask_run<run>.npy`), split
+chronologically into fit and validation sets. Tune only on the fit runs, rank
+candidates by residual IoU (pixels added beyond the shared floor), then measure
+the chosen configuration once on validation. Validation performance is the
+reported estimate and must not be used to revise parameters.
 
-The historical run-475 human mask is not present in this checkout, so the
-default labelled sets are currently empty. Recover and package the original
-mask before using this workflow; do not substitute a generated mask as ground
-truth.
+Only runs with a packaged mask contribute; if none are present the default
+labelled sets are empty. Recover and package an original hand mask before using
+this workflow; do not substitute a generated mask as ground truth.
 
 ```python
 from automask.evaluation import FIT_RUNS, evaluate
