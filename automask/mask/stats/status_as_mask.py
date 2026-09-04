@@ -6,7 +6,6 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from automask.sample.geometry import panel_to_asm
 from automask.mask.regularization.pad import pad_mask
 from automask.mask.stats.base import StatSpec, register_stat
 
@@ -30,7 +29,7 @@ def compute(sample, params: StatusAsMaskParams | None = None):
     """
     p = params or StatusAsMaskParams()
     bad = np.asarray(sample.status_as_mask) == 0
-    return pad_mask(panel_to_asm(bad, sample.run), p.pad)
+    return pad_mask(sample.panel_to_asm(bad), p.pad)
 
 
 register_stat(
