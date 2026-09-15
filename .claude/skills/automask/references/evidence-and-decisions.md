@@ -44,16 +44,38 @@ Fixes by what the panel shows:
   channel matched to the artifact.
 - **`hough_lines` fires on a rim/edge** → normally the inpainted floor prevents
   this; if it persists, suspect a real line or a selection problem, not a knob.
+- **`hough_lines` masks a curved ring/arc** → it is running at
+  `polarity="bright"`/`"both"`; revert to `dark`. Bright ridges here are
+  diffraction rings (real signal), not line defects.
 
 ## Reading pixel distributions
 
-Look at the field histogram against its cut.
+Never accept a field `k` from the image or a documented default alone — read the
+channel's robust-z distribution *quantitatively*. `explain.png` plots it (kept
+grey vs masked crimson, log-scale, cut drawn); confirm the numbers by loading
+`explain_<stat>.npy` and measuring the masked fraction and where the cut sits
+relative to the bulk.
 
-- **Defect separable** (distinct tail or mode) → place the threshold in the gap.
-- **Not separable** → do not force a threshold. First add `blob_scale`
-  aggregation; then switch to the operator matched to the morphology; if it still
-  will not separate, the artifact may not be maskable from this evidence —
-  escalate rather than inventing a cut.
+Decide from the distribution, not the image alone:
+
+- **A clear separable outlier** (a gap or distinct second mode) → put the cut in
+  the gap. A good split leaves the kept side roughly symmetric with no outlier and
+  the masked side holding the whole outlier.
+- **No clear outlier in the raw field, but a defect is still visible on the panel**
+  → aggregate before thresholding (currently the `blob_scale` matched filter) and
+  re-read the *aggregated* distribution. Aggregation is the test of whether the visually-suspected region is
+  really an outlier: if it is, the aggregated distribution splits into two
+  sub-distributions — the kept side roughly symmetric with no outlier, the masked
+  side covering the entire outlier plus a small base reaching into the normal bulk.
+- **No separation even after aggregation** (the masked side just blends
+  continuously into the bulk; its area grows smoothly as `k` relaxes) → the cut
+  would select noise, not a defect. Raise `k` until the masked side is only the
+  outlier; if nothing separates at any `k`, there is nothing to mask here — escalate
+  rather than inventing a cut.
+
+Quantitative and visual reads must agree — a log-scale histogram can make a large
+masked bulk-fraction look like a thin tail — and both must agree with the
+fold-consistency check.
 
 ## Detecting a compact defect: the funnel
 
@@ -103,18 +125,26 @@ one. Distinguish them; never read a null as reassurance.
 Run `validate_mask` before recommending any candidate. Stability means
 robustness to the tested variations, **not** agreement with ground truth.
 
-The sensitivity analysis helps *improve* a mask when parameters are unclear and
-helps remove **false positives** (a layer that moves under perturbation is
-suspect). It **cannot identify false negatives**: an artifact that no channel
-caught cannot become unstable. An empty or near-empty mask is perfectly stable
+Read `report.md` — it gives mean **and** worst-case per metric (pairwise IoU
+mean/min, changed-area mean/max) and names the most-deviant fold per strategy.
+Open `metrics.json` only when you need the raw per-fold breakdown.
+
+- Fold consistency **cannot identify false negatives**: an artifact no channel caught cannot
+become unstable, and an empty or near-empty mask is perfectly stable
 (fold IoU ≈ 1.0) yet may be badly incomplete — never read stability as coverage.
 
-- **A channel that is fold-inconsistent** → likely a fold artifact; drop it or
-  make it more robust before keeping it.
-- **Consistency surfaces persistently unstable pixels** → add a `mad_variance`
-  channel on the `mad` reduction.
-- **Labelled evaluation** against a reference mask is development evidence only;
-  keep it separate from production inference.
+- Fold consistency is the primary **false-positive** detector, and this is decisive for
+threshold choice. Read the **fold IoU**: `1 − foldIoU` is (≈) the fraction of the masked
+set that is *not* reproducible across folds — the fraction that is noise — and it is 
+size-invariant. "Changed area %" grows with mask size and is only a secondary indicator.
+A genuine coherent defect jitters only on its boundary, so it should give fold IoU very 
+close to 1, the more so the larger it is.
+
+- **Low fold IoU (below ~0.9), especially on a large layer** → the cut is masking
+  noise (false positives). Raise `k` — or drop the channel — until the masked set
+  is fold-stable. This must corroborate the distribution read above: a cut biting
+  the bulk is exactly what shows up here as low fold IoU. If the two disagree,
+  re-check both rather than trusting either alone.
 
 ## Evidence to decision
 

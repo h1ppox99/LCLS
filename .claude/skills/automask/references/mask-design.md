@@ -63,13 +63,19 @@ stats miss. It emits a boolean directly — no `field_reg`/`k`/`mode`; its knobs
   status-band edge raising a false straight "rim" line.
 - It is **high-precision by design**: it fires only on genuine straight lines and
   deliberately does not chase faint or curved ones.
+- **Keep `polarity="dark"` (the default).** `hough_lines` keys on a *black-hat*
+  (dark ridges) for a reason: the brightest ridges on this detector are the
+  **diffraction rings**, so `polarity="bright"`/`"both"` usually mask real signal.
 
 ## Protecting real signal
 
 Bragg peaks and azimuthal rings are legitimate signal; streaks, shadows,
 saturated regions, and persistent detector artifacts are mask candidates. **Shape
 alone does not distinguish them** — relate every emitted layer to the
-selected-shot image, detector geometry, and run context before accepting it. A
+selected-shot image, detector geometry, and run context before accepting it.
+**Diffraction rings are real signal, never a defect:** any layer masking a ring
+or arc is a failure (the usual cause is a bright-ridge detector, e.g.
+`hough_lines` at `polarity="bright"`/`"both"` — revert it to `dark`). A
 hard `area_gate` also helps: single-pixel defects belong to the calibration
 mask, so run-specific artifacts are the larger connected components.
 
