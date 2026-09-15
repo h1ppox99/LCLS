@@ -135,18 +135,55 @@ class MaskValidationReport:
             "",
             "## Data perturbations",
             "",
-            "| strategy | folds | mean pairwise IoU | minimum vs-full IoU | "
-            "maximum changed area |",
+            "Pairwise IoU is the size-invariant reproducibility of the masked set across "
+            "folds (`1 − IoU` ≈ the fraction that is noise); read mean **and** worst case, "
+            "since one low-IoU fold can flag false positives the mean hides.",
+            "",
+            "| strategy | folds | pairwise IoU (mean / min) | vs-full IoU (mean / min) | "
+            "changed area (mean / max) |",
             "| --- | ---: | ---: | ---: | ---: |",
         ]
         for strategy, result in self.data.items():
             versus = [case.delta for case in result.cases]
+            pw = np.asarray(result.pairwise_iou, dtype=float)
+            vf = np.array([d.iou for d in versus], dtype=float)
+            ch = np.array([d.changed_fraction for d in versus], dtype=float)
+            pw_mean, pw_min = (
+                (float(pw.mean()), float(pw.min())) if pw.size else (1.0, 1.0)
+            )
+            vf_mean, vf_min = (
+                (float(vf.mean()), float(vf.min())) if vf.size else (1.0, 1.0)
+            )
+            ch_mean, ch_max = (
+                (float(ch.mean()), float(ch.max())) if ch.size else (0.0, 0.0)
+            )
             lines.append(
                 f"| {strategy} | {len(versus)} | "
-                f"{np.mean(result.pairwise_iou):.4f} | "
-                f"{min(delta.iou for delta in versus):.4f} | "
-                f"{100 * max(delta.changed_fraction for delta in versus):.4f}% |"
+                f"{pw_mean:.4f} / {pw_min:.4f} | "
+                f"{vf_mean:.4f} / {vf_min:.4f} | "
+                f"{100 * ch_mean:.4f}% / {100 * ch_max:.4f}% |"
             )
+        # Name the least-reproducible fold per strategy so a consistently-deviant fold
+        # is visible without opening metrics.json. Most meaningful for `chronological`,
+        # where a fold is a time window: a real transient worth excluding, not a random
+        # split as in `round_robin`.
+        worst = [
+            (strategy, min(result.cases, key=lambda c: c.delta.iou))
+            for strategy, result in self.data.items()
+            if result.cases
+        ]
+        if worst:
+            lines += [
+                "",
+                "Most-deviant fold (investigate for a transient, "
+                "especially `chronological`):",
+                "",
+            ]
+            lines += [
+                f"- **{strategy}**: `{case.label}` — vs-full IoU {case.delta.iou:.4f}, "
+                f"changed {100 * case.delta.changed_fraction:.4f}%"
+                for strategy, case in worst
+            ]
 
         lines += [
             "",
