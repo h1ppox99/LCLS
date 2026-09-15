@@ -16,6 +16,14 @@ WORKSPACE_TOOLS = READ_TOOLS + ("Edit", "Write", "Bash")
 SKILL_NAMES = ("automask",)
 SKILL_TOOL = "Skill"
 
+# The masking agent must be run-agnostic: no project/org auto-memory or recall may
+# leak run-specific findings into its context. These gate the CLI's entire
+# auto-memory subsystem (recall included); merged into the CLI subprocess env.
+MEMORY_ISOLATION_ENV = {
+    "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1",
+    "CLAUDE_CODE_DISABLE_ORG_MEMORY": "1",
+}
+
 SYSTEM_PROMPT = """You are the general LCLS workspace agent for this repository.
 Inspect evidence before acting. Treat raw experiment data and calibration data as
 read-only. Never expose credentials. Work only on the requested task.
@@ -110,4 +118,5 @@ class HostConfig:
             max_budget_usd=self.max_budget_usd,
             setting_sources=["project"],
             skills=list(SKILL_NAMES),
+            env=dict(MEMORY_ISOLATION_ENV),
         )
